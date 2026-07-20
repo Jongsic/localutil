@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
+    <title>Epoch / Unix Timestamp Converter — LocalUtil</title>
+    <!-- social / favicon -->
+    <meta name="description" content="Convert Unix timestamps (seconds or milliseconds) to human-readable dates, and dates back to timestamps. Runs 100% in your browser — nothing is uploaded.">
+    <link rel="canonical" href="https://jongsic.github.io/localutil/epoch.html">
+    <link rel="icon" href="favicon.ico" sizes="any">
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="LocalUtil">
+    <meta property="og:title" content="Epoch / Unix Timestamp Converter — LocalUtil">
+    <meta property="og:description" content="Convert Unix timestamps (seconds or milliseconds) to human-readable dates, and dates back to timestamps. Runs 100% in your browser — nothing is uploaded.">
+    <meta property="og:image" content="https://jongsic.github.io/localutil/og.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:url" content="https://jongsic.github.io/localutil/epoch.html">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:image" content="https://jongsic.github.io/localutil/og.png">
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebApplication","name":"Epoch / Unix Timestamp Converter","url":"https://jongsic.github.io/localutil/epoch.html","description":"Convert Unix timestamps (seconds or milliseconds) to human-readable dates, and dates back to timestamps. Runs 100% in your browser — nothing is uploaded.","applicationCategory":"DeveloperApplication","operatingSystem":"Any","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"isPartOf":{"@type":"WebSite","name":"LocalUtil","url":"https://jongsic.github.io/localutil/"}}</script>
+    <!-- /social -->
+    <script src="theme-init.js"></script>
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        /* Compact grid of date parts (year / month / day / hh / mm / ss) */
+        .time-fields {
+            display: grid;
+            grid-template-columns: repeat(6, 1fr);
+            gap: 12px;
+        }
+        .time-fields .field-group label { margin-bottom: 0; }
+        .time-fields input[type="text"],
+        .time-fields select { text-align: center; }
+
+        .result-box .result-row {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 3px 0;
+        }
+        .result-box .result-row .result-label {
+            color: var(--text-muted);
+            font-weight: 600;
+        }
+        .result-box.muted { color: var(--text-muted); }
+
+        .log-entry {
+            padding: 9px 12px;
+            background-color: var(--bg-subtle);
+            border: 1px solid var(--border-color);
+            border-radius: var(--r-sm);
+            font-family: var(--font-mono);
+            font-size: 0.8rem;
+            word-break: break-all;
+        }
+
+        @media (max-width: 560px) {
+            .time-fields { grid-template-columns: repeat(3, 1fr); }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar" id="app-sidebar"></aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <header class="topbar" id="app-topbar">
+                <div class="topbar-title">
+                    <h1 id="current-tool-title">Epoch Converter</h1>
+                    <p id="current-tool-desc" class="topbar-desc">Convert Unix timestamps and dates</p>
+                </div>
+            </header>
+
+            <div class="tools-container">
+                <section id="tool-epoch" class="tool-section active">
+                    <div class="tool-shell">
+                        <!-- Current time -->
+                        <div class="card">
+                            <div class="card-title">Right now</div>
+                            <div class="card-subtitle">The current Unix time, ticking live every second.</div>
+                            <label for="epoch-current">Current epoch (seconds)</label>
+                            <div class="input-group">
+                                <input type="text" id="epoch-current" class="mono" readonly>
+                                <button class="btn" id="epoch-refresh">Refresh</button>
+                            </div>
+                            <div class="result-box mt-2" id="current-time-display">
+                                <div class="result-row"><span class="result-label">UTC</span> <span id="current-utc"></span></div>
+                                <div class="result-row"><span class="result-label">Local</span> <span id="current-local"></span></div>
+                            </div>
+                        </div>
+
+                        <!-- Timestamp → Date -->
+                        <div class="card">
+                            <div class="card-title">Timestamp to date</div>
+                            <div class="card-subtitle">Paste a Unix timestamp and see the human-readable date.</div>
+
+                            <div class="form-group">
+                                <label for="ts-sec-input">From seconds</label>
+                                <input type="text" id="ts-sec-input" class="mono" placeholder="e.g. 1672531200" inputmode="numeric">
+                                <div class="result-box mt-1 muted" id="ts-sec-result">Enter a timestamp in seconds...</div>
+                            </div>
+
+                            <div class="form-group mt-2">
+                                <label for="ts-ms-input">From milliseconds</label>
+                                <input type="text" id="ts-ms-input" class="mono" placeholder="e.g. 1672531200000" inputmode="numeric">
+                                <div class="result-box mt-1 muted" id="ts-ms-result">Enter a timestamp in milliseconds...</div>
+                            </div>
+                        </div>
+
+                        <!-- Date → Timestamp -->
+                        <div class="card">
+                            <div class="card-title">Date to timestamp</div>
+                            <div class="card-subtitle">Build a date and convert it to a Unix timestamp. Values use your local time zone.</div>
+
+                            <div class="section-title">Type the values</div>
+                            <div class="field-hint mb-2">Prefilled with the current date — edit any field.</div>
+                            <div class="time-fields">
+                                <div class="field-group">
+                                    <label for="txt-year">Year</label>
+                                    <input type="text" id="txt-year" class="mono" inputmode="numeric" maxlength="4">
+                                </div>
+                                <div class="field-group">
+                                    <label for="txt-month">Month</label>
+                                    <input type="text" id="txt-month" class="mono" inputmode="numeric" maxlength="2">
+                                </div>
+                                <div class="field-group">
+                                    <label for="txt-day">Day</label>
+                                    <input type="text" id="txt-day" class="mono" inputmode="numeric" maxlength="2">
+                                </div>
+                                <div class="field-group">
+                                    <label for="txt-hour">Hour</label>
+                                    <input type="text" id="txt-hour" class="mono" inputmode="numeric" maxlength="2">
+                                </div>
+                                <div class="field-group">
+                                    <label for="txt-minute">Minute</label>
+                                    <input type="text" id="txt-minute" class="mono" inputmode="numeric" maxlength="2">
+                                </div>
+                                <div class="field-group">
+                                    <label for="txt-second">Second</label>
+                                    <input type="text" id="txt-second" class="mono" inputmode="numeric" maxlength="2">
+                                </div>
+                            </div>
+                            <div class="result-box mt-2 muted" id="txt-to-ts-result">Enter date values above...</div>
+                            <div class="mt-2">
+                                <button class="btn btn-primary" id="btn-txt-log">Save to log</button>
+                            </div>
+
+                            <hr>
+
+                            <div class="section-title">Or pick from menus</div>
+                            <div class="field-hint mb-2">Same result, chosen from dropdowns.</div>
+                            <div class="time-fields">
+                                <div class="field-group">
+                                    <label for="sel-year">Year</label>
+                                    <select id="sel-year"></select>
+                                </div>
+                                <div class="field-group">
+                                    <label for="sel-month">Month</label>
+                                    <select id="sel-month"></select>
+                                </div>
+                                <div class="field-group">
+                                    <label for="sel-day">Day</label>
+                                    <select id="sel-day"></select>
+                                </div>
+                                <div class="field-group">
+                                    <label for="sel-hour">Hour</label>
+                                    <select id="sel-hour"></select>
+                                </div>
+                                <div class="field-group">
+                                    <label for="sel-minute">Minute</label>
+                                    <select id="sel-minute"></select>
+                                </div>
+                                <div class="field-group">
+                                    <label for="sel-second">Second</label>
+                                    <select id="sel-second"></select>
+                                </div>
+                            </div>
+                            <div class="result-box mt-2 muted" id="sel-to-ts-result">Select date values above...</div>
+                            <div class="mt-2">
+                                <button class="btn btn-primary" id="btn-sel-log">Save to log</button>
+                            </div>
+                        </div>
+
+                        <!-- Conversion Log -->
+                        <div class="card">
+                            <div class="log-header mb-2">
+                                <div>
+                                    <div class="card-title" style="margin:0;">Saved conversions</div>
+                                    <div class="field-hint">Stored locally · last 10</div>
+                                </div>
+                                <button class="btn btn-small" id="btn-clear-log">Clear</button>
+                            </div>
+                            <div id="log-container" class="log-list">
+                                <div class="field-hint">No logs yet.</div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="toast">Copied to clipboard!</div>
+
+    <script src="app.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            var LOG_KEY = 'localutil-epoch-log';
+
+            // --- Current Epoch ---
+            var currentEpochEl = document.getElementById('epoch-current');
+            var currentUtcEl = document.getElementById('current-utc');
+            var currentLocalEl = document.getElementById('current-local');
+
+            function updateCurrent() {
+                var now = new Date();
+                currentEpochEl.value = Math.floor(now.getTime() / 1000);
+                currentUtcEl.textContent = now.toUTCString();
+                currentLocalEl.textContent = now.toLocaleString();
+            }
+            updateCurrent();
+            setInterval(updateCurrent, 1000);
+            document.getElementById('epoch-refresh').addEventListener('click', updateCurrent);
+
+            // --- Numeric-only filter for text inputs ---
+            function numericOnly(input) {
+                input.addEventListener('input', function () {
+                    this.value = this.value.replace(/[^0-9]/g, '');
+                });
+            }
+
+            // --- Timestamp (Seconds) to Human Date ---
+            var tsSecInput = document.getElementById('ts-sec-input');
+            var tsSecResult = document.getElementById('ts-sec-result');
+            numericOnly(tsSecInput);
+
+            tsSecInput.addEventListener('input', function () {
+                var val = parseInt(this.value);
+                if (isNaN(val) || this.value === '') {
+                    tsSecResult.innerHTML = 'Enter a timestamp in seconds...';
+                    return;
+                }
+                var date = new Date(val * 1000);
+                tsSecResult.innerHTML =
+                    '<div><strong>Local:</strong> ' + date.toLocaleString() + '</div>' +
+                    '<div><strong>UTC:</strong> ' + date.toUTCString() + '</div>' +
+                    '<div><strong>ISO:</strong> ' + date.toISOString() + '</div>';
+            });
+
+            // --- Timestamp (Milliseconds) to Human Date ---
+            var tsMsInput = document.getElementById('ts-ms-input');
+            var tsMsResult = document.getElementById('ts-ms-result');
+            numericOnly(tsMsInput);
+
+            tsMsInput.addEventListener('input', function () {
+                var val = parseInt(this.value);
+                if (isNaN(val) || this.value === '') {
+                    tsMsResult.innerHTML = 'Enter a timestamp in milliseconds...';
+                    return;
+                }
+                var date = new Date(val);
+                tsMsResult.innerHTML =
+                    '<div><strong>Local:</strong> ' + date.toLocaleString() + '</div>' +
+                    '<div><strong>UTC:</strong> ' + date.toUTCString() + '</div>' +
+                    '<div><strong>ISO:</strong> ' + date.toISOString() + '</div>';
+            });
+
+            // --- Human Date to Timestamp (Text Input) ---
+            var txtYear = document.getElementById('txt-year');
+            var txtMonth = document.getElementById('txt-month');
+            var txtDay = document.getElementById('txt-day');
+            var txtHour = document.getElementById('txt-hour');
+            var txtMinute = document.getElementById('txt-minute');
+            var txtSecond = document.getElementById('txt-second');
+            var txtResult = document.getElementById('txt-to-ts-result');
+            var txtFields = [txtYear, txtMonth, txtDay, txtHour, txtMinute, txtSecond];
+
+            // Apply numeric filter and set defaults
+            var now = new Date();
+            txtYear.value = now.getFullYear();
+            txtYear.placeholder = now.getFullYear();
+            txtMonth.value = String(now.getMonth() + 1).padStart(2, '0');
+            txtMonth.placeholder = String(now.getMonth() + 1).padStart(2, '0');
+            txtDay.value = String(now.getDate()).padStart(2, '0');
+            txtDay.placeholder = String(now.getDate()).padStart(2, '0');
+            txtHour.value = String(now.getHours()).padStart(2, '0');
+            txtHour.placeholder = String(now.getHours()).padStart(2, '0');
+            txtMinute.value = String(now.getMinutes()).padStart(2, '0');
+            txtMinute.placeholder = String(now.getMinutes()).padStart(2, '0');
+            txtSecond.value = String(now.getSeconds()).padStart(2, '0');
+            txtSecond.placeholder = String(now.getSeconds()).padStart(2, '0');
+
+            txtFields.forEach(function (f) { numericOnly(f); });
+
+            function convertTxtToTs() {
+                var y = parseInt(txtYear.value);
+                var mo = parseInt(txtMonth.value);
+                var d = parseInt(txtDay.value);
+                var h = parseInt(txtHour.value);
+                var mi = parseInt(txtMinute.value);
+                var s = parseInt(txtSecond.value);
+                if ([y, mo, d, h, mi, s].some(isNaN)) {
+                    txtResult.innerHTML = 'Enter date values above...';
+                    return;
+                }
+                var date = new Date(y, mo - 1, d, h, mi, s);
+                var ms = date.getTime();
+                var sec = Math.floor(ms / 1000);
+                txtResult.innerHTML =
+                    '<div><strong>Seconds:</strong> ' + sec + '</div>' +
+                    '<div><strong>Milliseconds:</strong> ' + ms + '</div>';
+            }
+
+            txtFields.forEach(function (f) {
+                f.addEventListener('input', convertTxtToTs);
+            });
+            convertTxtToTs();
+
+            // --- Human Date to Timestamp (Select Box) ---
+            var selYear = document.getElementById('sel-year');
+            var selMonth = document.getElementById('sel-month');
+            var selDay = document.getElementById('sel-day');
+            var selHour = document.getElementById('sel-hour');
+            var selMinute = document.getElementById('sel-minute');
+            var selSecond = document.getElementById('sel-second');
+            var selResult = document.getElementById('sel-to-ts-result');
+            var selFields = [selYear, selMonth, selDay, selHour, selMinute, selSecond];
+
+            // Populate selects
+            for (var yr = 1970; yr <= 2100; yr++) {
+                var opt = document.createElement('option');
+                opt.value = yr; opt.textContent = yr;
+                if (yr === now.getFullYear()) opt.selected = true;
+                selYear.appendChild(opt);
+            }
+            for (var m = 1; m <= 12; m++) {
+                var opt = document.createElement('option');
+                opt.value = m; opt.textContent = m;
+                if (m === now.getMonth() + 1) opt.selected = true;
+                selMonth.appendChild(opt);
+            }
+            for (var dd = 1; dd <= 31; dd++) {
+                var opt = document.createElement('option');
+                opt.value = dd; opt.textContent = dd;
+                if (dd === now.getDate()) opt.selected = true;
+                selDay.appendChild(opt);
+            }
+            for (var hh = 0; hh <= 23; hh++) {
+                var opt = document.createElement('option');
+                opt.value = hh; opt.textContent = String(hh).padStart(2, '0');
+                if (hh === now.getHours()) opt.selected = true;
+                selHour.appendChild(opt);
+            }
+            for (var mm = 0; mm <= 59; mm++) {
+                var opt = document.createElement('option');
+                opt.value = mm; opt.textContent = String(mm).padStart(2, '0');
+                if (mm === now.getMinutes()) opt.selected = true;
+                selMinute.appendChild(opt);
+            }
+            for (var ss = 0; ss <= 59; ss++) {
+                var opt = document.createElement('option');
+                opt.value = ss; opt.textContent = String(ss).padStart(2, '0');
+                if (ss === now.getSeconds()) opt.selected = true;
+                selSecond.appendChild(opt);
+            }
+
+            function convertSelToTs() {
+                var date = new Date(
+                    parseInt(selYear.value),
+                    parseInt(selMonth.value) - 1,
+                    parseInt(selDay.value),
+                    parseInt(selHour.value),
+                    parseInt(selMinute.value),
+                    parseInt(selSecond.value)
+                );
+                var ms = date.getTime();
+                var sec = Math.floor(ms / 1000);
+                selResult.innerHTML =
+                    '<div><strong>Seconds:</strong> ' + sec + '</div>' +
+                    '<div><strong>Milliseconds:</strong> ' + ms + '</div>';
+            }
+
+            selFields.forEach(function (f) {
+                f.addEventListener('change', convertSelToTs);
+            });
+            convertSelToTs();
+
+            // --- Conversion Log ---
+            var logContainer = document.getElementById('log-container');
+
+            function loadLogs() {
+                try {
+                    return JSON.parse(localStorage.getItem(LOG_KEY)) || [];
+                } catch (e) {
+                    return [];
+                }
+            }
+
+            function saveLogs(logs) {
+                localStorage.setItem(LOG_KEY, JSON.stringify(logs.slice(-10)));
+            }
+
+            function renderLogs() {
+                var logs = loadLogs();
+                if (logs.length === 0) {
+                    logContainer.innerHTML = '<div class="field-hint">No logs yet.</div>';
+                    return;
+                }
+                logContainer.innerHTML = '';
+                // Show newest first
+                for (var i = logs.length - 1; i >= 0; i--) {
+                    var entry = document.createElement('div');
+                    entry.className = 'log-entry';
+                    entry.textContent = logs[i];
+                    logContainer.appendChild(entry);
+                }
+            }
+
+            function addLog(text) {
+                var logs = loadLogs();
+                logs.push(text);
+                if (logs.length > 10) logs = logs.slice(-10);
+                saveLogs(logs);
+                renderLogs();
+            }
+
+            renderLogs();
+
+            // Log button for text input section
+            document.getElementById('btn-txt-log').addEventListener('click', function () {
+                var y = parseInt(txtYear.value);
+                var mo = parseInt(txtMonth.value);
+                var d = parseInt(txtDay.value);
+                var h = parseInt(txtHour.value);
+                var mi = parseInt(txtMinute.value);
+                var s = parseInt(txtSecond.value);
+                if ([y, mo, d, h, mi, s].some(isNaN)) return;
+                var date = new Date(y, mo - 1, d, h, mi, s);
+                var ms = date.getTime();
+                var sec = Math.floor(ms / 1000);
+                var dateStr = y + '-' + String(mo).padStart(2, '0') + '-' + String(d).padStart(2, '0') + ' ' +
+                    String(h).padStart(2, '0') + ':' + String(mi).padStart(2, '0') + ':' + String(s).padStart(2, '0');
+                addLog(dateStr + ' → ' + sec + ' (sec) / ' + ms + ' (ms)');
+            });
+
+            // Log button for select box section
+            document.getElementById('btn-sel-log').addEventListener('click', function () {
+                var y = parseInt(selYear.value);
+                var mo = parseInt(selMonth.value);
+                var d = parseInt(selDay.value);
+                var h = parseInt(selHour.value);
+                var mi = parseInt(selMinute.value);
+                var s = parseInt(selSecond.value);
+                var date = new Date(y, mo - 1, d, h, mi, s);
+                var ms = date.getTime();
+                var sec = Math.floor(ms / 1000);
+                var dateStr = y + '-' + String(mo).padStart(2, '0') + '-' + String(d).padStart(2, '0') + ' ' +
+                    String(h).padStart(2, '0') + ':' + String(mi).padStart(2, '0') + ':' + String(s).padStart(2, '0');
+                addLog(dateStr + ' → ' + sec + ' (sec) / ' + ms + ' (ms)');
+            });
+
+            // Clear log
+            document.getElementById('btn-clear-log').addEventListener('click', function () {
+                localStorage.removeItem(LOG_KEY);
+                renderLogs();
+            });
+        });
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,965 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
+    <title>Ethereum ABI Encoder / Calldata Decoder — LocalUtil</title>
+    <!-- social / favicon -->
+    <meta name="description" content="Encode Ethereum calldata and event topics, or decode calldata and logs — from a function signature or ABI. Runs 100% in your browser — nothing is uploaded.">
+    <link rel="canonical" href="https://jongsic.github.io/localutil/calldata.html">
+    <link rel="icon" href="favicon.ico" sizes="any">
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="LocalUtil">
+    <meta property="og:title" content="Ethereum ABI Encoder / Calldata Decoder — LocalUtil">
+    <meta property="og:description" content="Encode Ethereum calldata and event topics, or decode calldata and logs — from a function signature or ABI. Runs 100% in your browser — nothing is uploaded.">
+    <meta property="og:image" content="https://jongsic.github.io/localutil/og.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:url" content="https://jongsic.github.io/localutil/calldata.html">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:image" content="https://jongsic.github.io/localutil/og.png">
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebApplication","name":"Ethereum ABI Encoder / Calldata Decoder","url":"https://jongsic.github.io/localutil/calldata.html","description":"Encode Ethereum calldata and event topics, or decode calldata and logs — from a function signature or ABI. Runs 100% in your browser — nothing is uploaded.","applicationCategory":"DeveloperApplication","operatingSystem":"Any","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"isPartOf":{"@type":"WebSite","name":"LocalUtil","url":"https://jongsic.github.io/localutil/"}}</script>
+    <!-- /social -->
+    <script src="theme-init.js"></script>
+    <link rel="stylesheet" href="styles.css">
+    <script src="vendor/ethers.umd.min.js"></script>
+    <script src="abis.js"></script>
+    <style>
+        /* Two-column workspace: definition + members + decode on the left, log on the right */
+        #tool-calldata .tool-shell { max-width: 1360px; }
+        .cd-layout {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+            gap: 16px;
+            align-items: start;
+        }
+        .cd-col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+        .cd-col-right { position: sticky; top: 0; }
+        .cd-log-scroll { max-height: calc(100vh - 220px); overflow-y: auto; }
+        @media (max-width: 1024px) {
+            .cd-layout { grid-template-columns: 1fr; }
+            .cd-col-right { position: static; }
+            .cd-log-scroll { max-height: none; }
+        }
+
+        /* --- ABI editor with a highlight overlay ------------------------------- */
+        .cd-editor {
+            position: relative;
+            height: 320px;
+            min-height: 160px;
+            resize: vertical;
+            overflow: hidden;
+            border: 1px solid var(--border-color);
+            border-radius: var(--r-sm);
+            background: var(--bg-input);
+        }
+        .cd-editor:focus-within {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px var(--primary-ring);
+        }
+        .cd-editor pre,
+        .cd-editor textarea {
+            position: absolute;
+            inset: 0;
+            margin: 0;
+            padding: 10px 13px;
+            font-family: var(--font-mono);
+            font-size: 0.82rem;
+            line-height: 1.55;
+            white-space: pre-wrap;
+            word-break: break-all;
+            overflow-y: auto;
+            border: none;
+            border-radius: 0;
+            background: transparent;
+        }
+        .cd-editor pre { pointer-events: none; color: var(--text-main); }
+        .cd-editor textarea {
+            resize: none;
+            outline: none;
+            box-shadow: none;
+            color: transparent;
+            caret-color: var(--text-main);
+            min-height: 0;
+        }
+        .cd-editor textarea::placeholder { color: var(--text-faint); }
+        .cd-editor textarea::selection { background: var(--primary-ring); }
+        /* highlight token colors */
+        .tok-key { color: var(--primary); }
+        .tok-str { color: var(--success); }
+        .tok-num { color: var(--warning); }
+        .tok-lit { color: var(--danger); }
+
+        .cd-editor-tools { display: flex; gap: 8px; align-items: center; margin-top: 8px; flex-wrap: wrap; }
+
+        .cd-error {
+            padding: 11px 14px;
+            border-radius: var(--r-sm);
+            font-size: 0.85rem;
+            line-height: 1.5;
+            border: 1px solid var(--danger);
+            color: var(--danger);
+            background: color-mix(in srgb, var(--danger) 10%, transparent);
+        }
+        .cd-note {
+            padding: 11px 14px;
+            border-radius: var(--r-sm);
+            font-size: 0.85rem;
+            line-height: 1.5;
+            border: 1px solid var(--primary);
+            color: var(--primary);
+            background: color-mix(in srgb, var(--primary) 8%, transparent);
+        }
+
+        /* --- Members (functions & events) list --------------------------------- */
+        .cd-members { display: flex; flex-direction: column; gap: 6px; }
+        .cd-member {
+            border: 1px solid var(--border-color);
+            border-radius: var(--r-sm);
+            background: var(--bg-subtle);
+            overflow: hidden;
+        }
+        .cd-member-head {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            width: 100%;
+            padding: 9px 12px;
+            border: none;
+            background: transparent;
+            color: var(--text-main);
+            font-family: var(--font-mono);
+            font-size: 0.8rem;
+            text-align: left;
+            cursor: pointer;
+        }
+        .cd-member-head:hover { background: var(--bg-hover); }
+        .cd-member.open .cd-member-head { border-bottom: 1px solid var(--border-color); background: var(--bg-content); }
+        .cd-member-kind {
+            flex: 0 0 auto;
+            font-size: 0.68rem;
+            font-weight: 700;
+            padding: 1px 7px;
+            border-radius: var(--r-xs);
+        }
+        .cd-member-kind.fn { color: var(--primary); background: var(--primary-soft); }
+        .cd-member-kind.ev { color: var(--warning); background: color-mix(in srgb, var(--warning) 12%, transparent); }
+        .cd-member-sig { flex: 1; min-width: 0; word-break: break-all; }
+        .cd-member-hash { flex: 0 0 auto; color: var(--text-faint); font-size: 0.72rem; }
+        .cd-member-body { padding: 12px; display: flex; flex-direction: column; gap: 10px; background: var(--bg-content); }
+        .cd-member-meta {
+            display: flex;
+            gap: 8px;
+            align-items: baseline;
+            font-family: var(--font-mono);
+            font-size: 0.76rem;
+            word-break: break-all;
+        }
+        .cd-member-meta .k { flex: 0 0 86px; color: var(--text-muted); font-family: inherit; font-weight: 600; font-size: 0.72rem; }
+        .cd-member-meta .v { flex: 1; min-width: 0; }
+        .cd-members-empty { color: var(--text-faint); font-size: 0.85rem; padding: 6px 2px; }
+
+        .cd-arg-label { display: flex; align-items: baseline; gap: 8px; }
+        .cd-arg-type {
+            font-family: var(--font-mono);
+            font-size: 0.74rem;
+            font-weight: 500;
+            color: var(--primary);
+            background: var(--primary-soft);
+            border-radius: var(--r-xs);
+            padding: 1px 7px;
+        }
+        .cd-arg-indexed {
+            font-family: var(--font-mono);
+            font-size: 0.7rem;
+            font-weight: 700;
+            color: var(--warning);
+            background: color-mix(in srgb, var(--warning) 12%, transparent);
+            border-radius: var(--r-xs);
+            padding: 1px 7px;
+        }
+
+        /* --- Log entries (Remix-style, newest on top) --------------------------- */
+        .cd-log-item {
+            padding: 12px 14px;
+            background-color: var(--bg-subtle);
+            border: 1px solid var(--border-color);
+            border-radius: var(--r-sm);
+        }
+        .cd-log-head {
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-bottom: 6px;
+        }
+        .cd-log-sig { font-family: var(--font-mono); font-size: 0.8rem; font-weight: 600; word-break: break-all; }
+        .cd-log-time { font-size: 0.72rem; color: var(--text-faint); white-space: nowrap; }
+        .cd-log-args {
+            font-family: var(--font-mono);
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            word-break: break-all;
+            margin-bottom: 8px;
+        }
+        .cd-log-block-title {
+            font-size: 0.72rem;
+            font-weight: 700;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            color: var(--text-faint);
+            margin: 10px 0 4px;
+        }
+        .cd-log-data { display: flex; align-items: flex-start; gap: 8px; }
+        .cd-log-hex {
+            flex: 1;
+            min-width: 0;
+            font-family: var(--font-mono);
+            font-size: 0.78rem;
+            word-break: break-all;
+            white-space: pre-wrap;
+            background: var(--bg-input);
+            border: 1px solid var(--border-color);
+            border-radius: var(--r-xs);
+            padding: 8px 10px;
+        }
+        .cd-log-hex .cd-selector { color: var(--primary); font-weight: 700; }
+
+        /* Decode output */
+        .cd-decoded {
+            font-family: var(--font-mono);
+            font-size: 0.8rem;
+            white-space: pre-wrap;
+            word-break: break-all;
+            background: var(--bg-input);
+            border: 1px solid var(--border-color);
+            border-radius: var(--r-sm);
+            padding: 12px 14px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar" id="app-sidebar"></aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <header class="topbar" id="app-topbar">
+                <div class="topbar-title">
+                    <h1 id="current-tool-title">ABI / Calldata</h1>
+                    <p id="current-tool-desc" class="topbar-desc">Encode calldata &amp; event topics, decode calldata and logs — from a signature or ABI</p>
+                </div>
+            </header>
+
+            <div class="tools-container">
+                <section id="tool-calldata" class="tool-section active">
+                    <div class="tool-shell">
+                        <div class="cd-layout">
+                            <!-- ================= Left column ================= -->
+                            <div class="cd-col">
+                                <!-- Definition card: signature or ABI -->
+                                <div class="card">
+                                    <div class="card-title">Definition</div>
+                                    <div class="card-subtitle">Describe the contract — a single signature, or an ABI. Its functions and events appear below.</div>
+
+                                    <div class="segmented mb-2" id="cd-def-mode">
+                                        <button type="button" data-mode="sig" class="active">Signature</button>
+                                        <button type="button" data-mode="abi">Contract ABI</button>
+                                    </div>
+
+                                    <div id="cd-panel-sig">
+                                        <div class="field-group">
+                                            <label for="cd-sig">Signature</label>
+                                            <input type="text" id="cd-sig" class="mono"
+                                                placeholder="transfer(address to, uint256 amount)">
+                                            <div class="field-hint">A plain signature is listed as both a function and an event; <code>indexed</code> makes it event-only. Examples: <code>balanceOf(address)</code> · <code>Transfer(address indexed from, address indexed to, uint256 value)</code></div>
+                                        </div>
+                                    </div>
+
+                                    <div id="cd-panel-abi" style="display:none;">
+                                        <div class="field-group mb-2">
+                                            <label for="cd-wellknown">Well-known ABIs</label>
+                                            <select id="cd-wellknown">
+                                                <option value="">Custom — paste your own below</option>
+                                            </select>
+                                        </div>
+                                        <div class="field-group">
+                                            <label for="cd-abi">ABI (JSON array or human-readable lines)</label>
+                                            <div class="cd-editor" id="cd-editor">
+                                                <pre id="cd-abi-hl" aria-hidden="true"></pre>
+                                                <textarea id="cd-abi" spellcheck="false"
+                                                    placeholder='[{"type":"function","name":"transfer","inputs":[…]}, …]&#10;or&#10;["function transfer(address to, uint256 amount)", "event Transfer(address indexed from, address indexed to, uint256 value)"]'></textarea>
+                                            </div>
+                                            <div class="cd-editor-tools">
+                                                <button id="btn-cd-format" class="btn btn-small" type="button">Format</button>
+                                                <button id="btn-cd-minify" class="btn btn-small" type="button">Minify</button>
+                                                <span class="field-hint" style="margin-left:auto;">Drag the bottom edge to resize.</span>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div id="cd-sig-error" class="cd-error mt-2" style="display:none;"></div>
+                                </div>
+
+                                <!-- Members card: functions & events, Remix-style -->
+                                <div class="card" id="cd-members-card" style="display:none;">
+                                    <div class="card-title">Functions &amp; events</div>
+                                    <div class="card-subtitle">Click an item to fill its arguments and encode. Function calldata gets the 4-byte selector; events produce topics + data.</div>
+                                    <div class="field-group mb-2">
+                                        <input type="search" id="cd-member-filter" class="mono" placeholder="Filter by name or type…">
+                                    </div>
+                                    <div class="cd-members" id="cd-members"></div>
+                                    <div class="cd-members-empty" id="cd-members-empty" style="display:none;">No matches.</div>
+                                </div>
+
+                                <!-- Decode card -->
+                                <div class="card" id="cd-decode-card" style="display:none;">
+                                    <div class="card-title">Decode</div>
+                                    <div class="card-subtitle">Paste calldata to decode a function call, or topics + data to decode an event log. With an ABI, the matching fragment is found automatically.</div>
+                                    <div class="field-group">
+                                        <label for="cd-dec-data">Calldata / event data</label>
+                                        <textarea id="cd-dec-data" rows="4" class="mono"
+                                            placeholder="0xa9059cbb… (function calldata)&#10;or the log's data hex when decoding an event"></textarea>
+                                    </div>
+                                    <div class="field-group mt-2">
+                                        <label for="cd-dec-topics">Topics (event logs only)</label>
+                                        <textarea id="cd-dec-topics" rows="3" class="mono"
+                                            placeholder='Leave empty for function calldata.&#10;JSON array or one topic per line: ["0xddf2…", "0x0000…"]'></textarea>
+                                    </div>
+                                    <div id="cd-decode-error" class="cd-error mt-2" style="display:none;"></div>
+                                    <div id="cd-decode-note" class="cd-note mt-2" style="display:none;"></div>
+                                    <div class="flex-row gap-1 mt-2">
+                                        <button id="btn-cd-decode" class="btn btn-primary" style="margin-left:auto;">Decode</button>
+                                    </div>
+                                    <div class="field-group mt-2" id="cd-decoded-group" style="display:none;">
+                                        <label>Decoded</label>
+                                        <div class="cd-decoded" id="cd-decoded"></div>
+                                        <div class="flex-row gap-1 mt-1">
+                                            <button id="btn-cd-copy-decoded" class="btn btn-small" style="margin-left:auto;">Copy JSON</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- ================= Right column ================= -->
+                            <div class="cd-col cd-col-right">
+                                <div class="card">
+                                    <div class="log-header mb-2">
+                                        <div>
+                                            <div class="card-title" style="margin:0;">Generated</div>
+                                            <div class="field-hint">Newest first · stored locally · last 20</div>
+                                        </div>
+                                        <button id="btn-cd-clear-log" class="btn btn-small">Clear</button>
+                                    </div>
+                                    <div class="cd-log-scroll">
+                                        <div class="flex-col" id="cd-log" style="gap:10px;"></div>
+                                        <div id="cd-log-empty" class="field-hint">Nothing generated yet.</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="toast">Copied to clipboard!</div>
+
+    <script src="app.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const STORAGE_KEY = 'localutil-calldata-log-v2';
+            const MAX_LOG = 20;
+
+            const sigInput = document.getElementById('cd-sig');
+            const abiInput = document.getElementById('cd-abi');
+            const abiHl = document.getElementById('cd-abi-hl');
+            const wellknownPick = document.getElementById('cd-wellknown');
+            const sigError = document.getElementById('cd-sig-error');
+            const membersCard = document.getElementById('cd-members-card');
+            const membersEl = document.getElementById('cd-members');
+            const membersEmpty = document.getElementById('cd-members-empty');
+            const memberFilter = document.getElementById('cd-member-filter');
+            const decodeCard = document.getElementById('cd-decode-card');
+            const decData = document.getElementById('cd-dec-data');
+            const decTopics = document.getElementById('cd-dec-topics');
+            const decodeError = document.getElementById('cd-decode-error');
+            const decodeNote = document.getElementById('cd-decode-note');
+            const decodedGroup = document.getElementById('cd-decoded-group');
+            const decodedEl = document.getElementById('cd-decoded');
+            const logEl = document.getElementById('cd-log');
+            const logEmpty = document.getElementById('cd-log-empty');
+
+            let defMode = 'sig';
+            let abiIface = null;          // ethers.Interface (ABI mode)
+            let members = [];             // [{frag, kind: 'function'|'event'}]
+            const openKeys = new Set();   // expanded members, by canonical key
+            const savedArgs = new Map();  // "kind sighash#i" -> value, survives list rebuilds
+
+            // --- Mode switch -------------------------------------------------------
+            const defModeButtons = document.querySelectorAll('#cd-def-mode button');
+            const defPanels = { sig: document.getElementById('cd-panel-sig'), abi: document.getElementById('cd-panel-abi') };
+            defModeButtons.forEach(b => b.addEventListener('click', () => {
+                defMode = b.dataset.mode;
+                defModeButtons.forEach(x => x.classList.toggle('active', x === b));
+                Object.entries(defPanels).forEach(([m, el]) => el.style.display = m === defMode ? '' : 'none');
+                if (defMode === 'sig') parseSignature(); else parseAbi();
+            }));
+
+            // --- ABI editor: JSON highlight overlay ---------------------------------
+            function escapeHtml(s) {
+                return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            }
+            function highlight(src) {
+                // strings (keys get their own color), numbers, and literals
+                return escapeHtml(src).replace(
+                    /("(?:[^"\\]|\\.)*")(\s*:)?|\b(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)\b|\b(true|false|null)\b/g,
+                    (m, str, colon, num, lit) => {
+                        if (str) return '<span class="' + (colon ? 'tok-key' : 'tok-str') + '">' + str + '</span>' + (colon || '');
+                        if (num) return '<span class="tok-num">' + num + '</span>';
+                        return '<span class="tok-lit">' + lit + '</span>';
+                    });
+            }
+            function syncHighlight() {
+                // trailing newline keeps the pre's scroll height in step with the textarea
+                abiHl.innerHTML = highlight(abiInput.value) + '\n';
+                abiHl.scrollTop = abiInput.scrollTop;
+                abiHl.scrollLeft = abiInput.scrollLeft;
+            }
+            abiInput.addEventListener('scroll', () => {
+                abiHl.scrollTop = abiInput.scrollTop;
+                abiHl.scrollLeft = abiInput.scrollLeft;
+            });
+
+            // --- Format / minify ------------------------------------------------------
+            function reformat(pretty) {
+                const raw = abiInput.value.trim();
+                if (!raw) return;
+                try {
+                    const parsed = JSON.parse(raw);
+                    abiInput.value = pretty ? JSON.stringify(parsed, null, '\t') : JSON.stringify(parsed);
+                } catch (e) {
+                    // human-readable lines: normalize to a JSON array of strings
+                    const lines = raw.split('\n').map(s => s.trim().replace(/,$/, '').replace(/^"|"$/g, '')).filter(Boolean);
+                    abiInput.value = pretty ? JSON.stringify(lines, null, '\t') : JSON.stringify(lines);
+                }
+                syncHighlight();
+                parseAbi();
+            }
+            document.getElementById('btn-cd-format').addEventListener('click', () => reformat(true));
+            document.getElementById('btn-cd-minify').addEventListener('click', () => reformat(false));
+
+            // --- Log (localStorage-backed) ---------------------------------------
+            let logs = [];
+            try {
+                const stored = localStorage.getItem(STORAGE_KEY);
+                if (stored) logs = JSON.parse(stored);
+            } catch (e) { logs = []; }
+
+            function saveLogs() { localStorage.setItem(STORAGE_KEY, JSON.stringify(logs)); }
+
+            function copyBtn(text, label) {
+                const btn = document.createElement('button');
+                btn.className = 'btn btn-small';
+                btn.textContent = label || 'Copy';
+                btn.addEventListener('click', async () => {
+                    try {
+                        await navigator.clipboard.writeText(text);
+                        window.showToast && window.showToast('Copied to clipboard');
+                    } catch (e) {
+                        window.showToast && window.showToast('Copy failed', true);
+                    }
+                });
+                return btn;
+            }
+
+            function hexBlock(hex, highlightBytes) {
+                const el = document.createElement('div');
+                el.className = 'cd-log-hex';
+                if (highlightBytes) {
+                    const sel = document.createElement('span');
+                    sel.className = 'cd-selector';
+                    sel.textContent = hex.slice(0, 2 + highlightBytes * 2);
+                    el.appendChild(sel);
+                    el.appendChild(document.createTextNode(hex.slice(2 + highlightBytes * 2)));
+                } else {
+                    el.textContent = hex;
+                }
+                return el;
+            }
+
+            function renderLogs() {
+                logEl.innerHTML = '';
+                logEmpty.style.display = logs.length ? 'none' : 'block';
+                logs.forEach(entry => {
+                    const item = document.createElement('div');
+                    item.className = 'cd-log-item';
+
+                    const head = document.createElement('div');
+                    head.className = 'cd-log-head';
+                    const sig = document.createElement('span');
+                    sig.className = 'cd-log-sig';
+                    sig.textContent = entry.sig;
+                    const time = document.createElement('span');
+                    time.className = 'cd-log-time';
+                    time.textContent = entry.time;
+                    head.appendChild(sig);
+                    head.appendChild(time);
+                    item.appendChild(head);
+
+                    const args = document.createElement('div');
+                    args.className = 'cd-log-args';
+                    args.textContent = entry.args && entry.args.length ? 'args: ' + entry.args.join(' · ') : 'no arguments';
+                    item.appendChild(args);
+
+                    if (entry.calldata) {
+                        const t = document.createElement('div');
+                        t.className = 'cd-log-block-title';
+                        t.textContent = 'Function calldata';
+                        item.appendChild(t);
+                        const row = document.createElement('div');
+                        row.className = 'cd-log-data';
+                        row.appendChild(hexBlock(entry.calldata, 4));
+                        row.appendChild(copyBtn(entry.calldata));
+                        item.appendChild(row);
+                    }
+
+                    if (entry.event) {
+                        const t = document.createElement('div');
+                        t.className = 'cd-log-block-title';
+                        t.textContent = 'Event log (topics + data)';
+                        item.appendChild(t);
+                        const row = document.createElement('div');
+                        row.className = 'cd-log-data';
+                        const json = JSON.stringify(entry.event, null, 2);
+                        row.appendChild(hexBlock(json, 0));
+                        row.appendChild(copyBtn(json, 'Copy'));
+                        item.appendChild(row);
+                    }
+
+                    logEl.appendChild(item);
+                });
+            }
+
+            function addLog(sig, argSummaries, calldata, event) {
+                logs.unshift({ sig, args: argSummaries, calldata, event, time: new Date().toLocaleTimeString() });
+                if (logs.length > MAX_LOG) logs.length = MAX_LOG;
+                saveLogs();
+                renderLogs();
+            }
+
+            document.getElementById('btn-cd-clear-log').addEventListener('click', () => {
+                logs = [];
+                saveLogs();
+                renderLogs();
+            });
+
+            // --- Members list --------------------------------------------------------
+            function memberKey(m) { return m.kind + ' ' + m.frag.format('sighash'); }
+
+            function setMembers(next) {
+                members = next;
+                // drop stale expansion/arg state
+                const valid = new Set(members.map(memberKey));
+                [...openKeys].forEach(k => { if (!valid.has(k)) openKeys.delete(k); });
+                [...savedArgs.keys()].forEach(k => { if (!valid.has(k.split('#')[0])) savedArgs.delete(k); });
+                renderMembers();
+                membersCard.style.display = members.length ? 'block' : 'none';
+                decodeCard.style.display = members.length ? 'block' : 'none';
+            }
+
+            function placeholderFor(type) {
+                if (type.endsWith(']')) return 'JSON array, e.g. ["0x…", "0x…"]';
+                if (type.startsWith('tuple')) return 'JSON array matching the tuple, e.g. ["0x…", 1000]';
+                if (type === 'address') return '0x0000000000000000000000000000000000000000';
+                if (type === 'bool') return 'true / false';
+                if (type === 'string') return 'any text';
+                if (type.startsWith('bytes')) return '0x-prefixed hex';
+                if (type.startsWith('uint') || type.startsWith('int')) return 'e.g. 1000000000000000000';
+                return type;
+            }
+
+            function memberBody(m) {
+                const key = memberKey(m);
+                const body = document.createElement('div');
+                body.className = 'cd-member-body';
+
+                const metaRows = [['Canonical', m.frag.format('sighash')]];
+                if (m.kind === 'function') metaRows.push(['Selector', m.frag.selector]);
+                else metaRows.push(['Topic0', m.frag.topicHash]);
+                metaRows.forEach(([k, v]) => {
+                    const row = document.createElement('div');
+                    row.className = 'cd-member-meta';
+                    const kEl = document.createElement('span');
+                    kEl.className = 'k';
+                    kEl.textContent = k;
+                    const vEl = document.createElement('span');
+                    vEl.className = 'v';
+                    vEl.textContent = v;
+                    row.appendChild(kEl);
+                    row.appendChild(vEl);
+                    row.appendChild(copyBtn(v));
+                    body.appendChild(row);
+                });
+
+                const fields = [];
+                m.frag.inputs.forEach((input, i) => {
+                    const group = document.createElement('div');
+                    group.className = 'field-group';
+
+                    const label = document.createElement('div');
+                    label.className = 'cd-arg-label';
+                    const name = document.createElement('label');
+                    name.textContent = input.name || 'arg' + i;
+                    name.style.margin = '0';
+                    const type = document.createElement('span');
+                    type.className = 'cd-arg-type';
+                    type.textContent = input.type;
+                    label.appendChild(name);
+                    label.appendChild(type);
+                    if (input.indexed) {
+                        const ix = document.createElement('span');
+                        ix.className = 'cd-arg-indexed';
+                        ix.textContent = 'indexed';
+                        label.appendChild(ix);
+                    }
+
+                    const field = document.createElement('input');
+                    field.type = 'text';
+                    field.className = 'mono';
+                    field.dataset.type = input.type;
+                    field.placeholder = placeholderFor(input.type);
+                    field.value = savedArgs.get(key + '#' + i) || '';
+                    field.addEventListener('input', () => savedArgs.set(key + '#' + i, field.value));
+                    field.addEventListener('keydown', e => { if (e.key === 'Enter') doEncode(); });
+                    fields.push(field);
+
+                    group.appendChild(label);
+                    group.appendChild(field);
+                    body.appendChild(group);
+                });
+
+                const err = document.createElement('div');
+                err.className = 'cd-error';
+                err.style.display = 'none';
+                body.appendChild(err);
+
+                const btnRow = document.createElement('div');
+                btnRow.className = 'flex-row gap-1';
+                const btn = document.createElement('button');
+                btn.className = 'btn btn-primary btn-small';
+                btn.style.marginLeft = 'auto';
+                btn.textContent = m.kind === 'function' ? 'Encode calldata' : 'Encode event log';
+                btn.addEventListener('click', doEncode);
+                btnRow.appendChild(btn);
+                body.appendChild(btnRow);
+
+                function doEncode() {
+                    err.style.display = 'none';
+                    const summaries = [];
+                    let values;
+                    try {
+                        values = m.frag.inputs.map((input, i) => {
+                            const label = input.name || 'arg' + i;
+                            const val = coerceValue(input.type, fields[i].value, label);
+                            summaries.push(label + '=' + fields[i].value.trim());
+                            return val;
+                        });
+                        if (m.kind === 'function') {
+                            const data = new ethers.Interface([m.frag]).encodeFunctionData(m.frag, values);
+                            addLog(m.frag.format('sighash'), summaries, data, null);
+                        } else {
+                            const enc = new ethers.Interface([m.frag]).encodeEventLog(m.frag, values);
+                            addLog(m.frag.format('sighash'), summaries, null, { topics: enc.topics, data: enc.data });
+                        }
+                    } catch (e) {
+                        err.textContent = (e && e.shortMessage) || (e && e.message) || String(e);
+                        err.style.display = 'block';
+                    }
+                }
+
+                return body;
+            }
+
+            function renderMembers() {
+                membersEl.innerHTML = '';
+                members.forEach(m => {
+                    const key = memberKey(m);
+                    const wrap = document.createElement('div');
+                    wrap.className = 'cd-member' + (openKeys.has(key) ? ' open' : '');
+                    wrap.dataset.search = (m.kind + ' ' + m.frag.format('sighash')).toLowerCase();
+
+                    const head = document.createElement('button');
+                    head.type = 'button';
+                    head.className = 'cd-member-head';
+                    const kind = document.createElement('span');
+                    kind.className = 'cd-member-kind ' + (m.kind === 'function' ? 'fn' : 'ev');
+                    kind.textContent = m.kind === 'function' ? 'fn' : 'event';
+                    const sig = document.createElement('span');
+                    sig.className = 'cd-member-sig';
+                    sig.textContent = m.frag.format('sighash');
+                    const hash = document.createElement('span');
+                    hash.className = 'cd-member-hash';
+                    hash.textContent = m.kind === 'function' ? m.frag.selector : m.frag.topicHash.slice(0, 10) + '…';
+                    head.appendChild(kind);
+                    head.appendChild(sig);
+                    head.appendChild(hash);
+                    wrap.appendChild(head);
+
+                    let body = null;
+                    if (openKeys.has(key)) {
+                        body = memberBody(m);
+                        wrap.appendChild(body);
+                    }
+
+                    head.addEventListener('click', () => {
+                        if (openKeys.has(key)) {
+                            openKeys.delete(key);
+                            wrap.classList.remove('open');
+                            if (body) { body.remove(); body = null; }
+                        } else {
+                            openKeys.add(key);
+                            wrap.classList.add('open');
+                            body = memberBody(m);
+                            wrap.appendChild(body);
+                        }
+                    });
+
+                    membersEl.appendChild(wrap);
+                });
+                applyMemberFilter();
+            }
+
+            function applyMemberFilter() {
+                const q = memberFilter.value.trim().toLowerCase();
+                let visible = 0;
+                membersEl.querySelectorAll('.cd-member').forEach(el => {
+                    const hit = !q || el.dataset.search.includes(q);
+                    el.style.display = hit ? '' : 'none';
+                    if (hit) visible++;
+                });
+                membersEmpty.style.display = (members.length && !visible) ? 'block' : 'none';
+            }
+            memberFilter.addEventListener('input', applyMemberFilter);
+
+            // --- Signature parsing ------------------------------------------------------
+            function parseSignature() {
+                abiIface = null;
+                const rawInput = sigInput.value.trim().replace(/;$/, '');
+                if (!rawInput) { sigError.style.display = 'none'; setMembers([]); return; }
+
+                let hint = null;
+                let raw = rawInput;
+                if (/^function\s+/.test(raw)) { hint = 'function'; raw = raw.replace(/^function\s+/, ''); }
+                else if (/^event\s+/.test(raw)) { hint = 'event'; raw = raw.replace(/^event\s+/, ''); }
+
+                const next = [];
+                let fErr = null, eErr = null;
+                if (hint !== 'event') {
+                    try { next.push({ kind: 'function', frag: ethers.FunctionFragment.from('function ' + raw) }); }
+                    catch (e) { fErr = e; }
+                }
+                if (hint !== 'function') {
+                    try { next.push({ kind: 'event', frag: ethers.EventFragment.from('event ' + raw) }); }
+                    catch (e) { eErr = e; }
+                }
+
+                if (!next.length) {
+                    const err = fErr || eErr;
+                    sigError.textContent = 'Cannot parse signature: ' + ((err && err.shortMessage) || (err && err.message) || err);
+                    sigError.style.display = 'block';
+                    setMembers([]);
+                    return;
+                }
+                sigError.style.display = 'none';
+                setMembers(next);
+            }
+            sigInput.addEventListener('input', parseSignature);
+
+            // --- ABI parsing ----------------------------------------------------------
+            function parseAbi() {
+                syncHighlight();
+                abiIface = null;
+                const raw = abiInput.value.trim();
+                if (!raw) { sigError.style.display = 'none'; setMembers([]); return; }
+
+                let abi;
+                try { abi = JSON.parse(raw); }
+                catch (e) {
+                    // maybe human-readable lines without brackets
+                    abi = raw.split('\n').map(s => s.trim().replace(/,$/, '').replace(/^"|"$/g, '')).filter(Boolean);
+                }
+                try {
+                    abiIface = new ethers.Interface(Array.isArray(abi) ? abi : [abi]);
+                } catch (e) {
+                    sigError.textContent = 'Cannot parse ABI: ' + ((e && e.shortMessage) || (e && e.message) || e);
+                    sigError.style.display = 'block';
+                    setMembers([]);
+                    return;
+                }
+
+                const next = abiIface.fragments
+                    .filter(f => f.type === 'function' || f.type === 'event')
+                    .map(f => ({ kind: f.type, frag: f }));
+                if (!next.length) {
+                    sigError.textContent = 'No functions or events found in this ABI.';
+                    sigError.style.display = 'block';
+                    setMembers([]);
+                    return;
+                }
+                sigError.style.display = 'none';
+                setMembers(next);
+            }
+            abiInput.addEventListener('input', parseAbi);
+
+            // --- Well-known ABI picker --------------------------------------------
+            (window.WELLKNOWN_ABIS || []).forEach(entry => {
+                const opt = document.createElement('option');
+                opt.value = entry.key;
+                opt.textContent = entry.name;
+                wellknownPick.appendChild(opt);
+            });
+            wellknownPick.addEventListener('change', () => {
+                const entry = (window.WELLKNOWN_ABIS || []).find(e => e.key === wellknownPick.value);
+                if (!entry) return; // "Custom" — keep whatever is pasted
+                abiInput.value = JSON.stringify(entry.abi, null, '\t');
+                parseAbi();
+            });
+            // Editing the textarea by hand means it's custom now.
+            abiInput.addEventListener('input', () => { wellknownPick.value = ''; });
+
+            // --- Value coercion ------------------------------------------------------
+            function coerceValue(type, raw, label) {
+                const v = raw.trim();
+                if (!v) throw new Error('Argument "' + label + '" is empty.');
+                if (type.endsWith(']') || type.startsWith('tuple')) {
+                    try { return JSON.parse(v); }
+                    catch (e) { throw new Error('Argument "' + label + '" must be valid JSON (' + e.message + ').'); }
+                }
+                if (type === 'bool') {
+                    if (/^(true|1)$/i.test(v)) return true;
+                    if (/^(false|0)$/i.test(v)) return false;
+                    throw new Error('Argument "' + label + '" must be true or false.');
+                }
+                return v; // ethers coerces numbers, addresses, bytes and strings from strings
+            }
+
+            // --- Decoding ---------------------------------------------------------------
+            function plainValue(v) {
+                if (typeof v === 'bigint') return v.toString();
+                if (v && ethers.Indexed.isIndexed && ethers.Indexed.isIndexed(v)) {
+                    return { indexed: true, hash: v.hash };
+                }
+                if (Array.isArray(v)) return [...v].map(plainValue);
+                return v;
+            }
+
+            function namedArgs(frag, result) {
+                const out = {};
+                frag.inputs.forEach((input, i) => {
+                    out[input.name || 'arg' + i] = plainValue(result[i]);
+                });
+                return out;
+            }
+
+            function parseTopics(raw) {
+                const v = raw.trim();
+                if (!v) return null;
+                try {
+                    const arr = JSON.parse(v);
+                    if (Array.isArray(arr)) return arr.map(String);
+                } catch (e) { /* fall through to line/space splitting */ }
+                return v.split(/[\s,]+/).map(s => s.replace(/^["']|["'],?$/g, '')).filter(Boolean);
+            }
+
+            function findMember(kind) {
+                return members.find(m => m.kind === kind) || null;
+            }
+
+            function decode() {
+                decodeError.style.display = 'none';
+                decodeNote.style.display = 'none';
+                decodedGroup.style.display = 'none';
+
+                const data = decData.value.trim() || '0x';
+                const topics = parseTopics(decTopics.value);
+
+                try {
+                    let result;
+                    if (topics) {
+                        // ---- event log decode ----
+                        let frag = null;
+                        let note = '';
+                        if (abiIface) {
+                            let found = null;
+                            try { found = abiIface.getEvent(topics[0]); } catch (e) { /* not in this ABI */ }
+                            if (found) { frag = found; note = 'Matched event ' + found.format('sighash') + ' from the ABI by topic0.'; }
+                        }
+                        if (!frag) { const m = findMember('event'); frag = m && m.frag; }
+                        if (!frag) throw new Error('No event definition — provide an event signature or an ABI containing this event.');
+                        if (frag.topicHash !== topics[0]) {
+                            note = 'Warning: topic0 (' + topics[0].slice(0, 12) + '…) does not match this event (' + frag.topicHash.slice(0, 12) + '…). Decoding anyway.';
+                            const decoded = new ethers.Interface([frag]).decodeEventLog(frag, data, [frag.topicHash, ...topics.slice(1)]);
+                            result = { type: 'event', name: frag.name, signature: frag.format('sighash'), topic0: frag.topicHash, args: namedArgs(frag, decoded) };
+                        } else {
+                            const decoded = new ethers.Interface([frag]).decodeEventLog(frag, data, topics);
+                            result = { type: 'event', name: frag.name, signature: frag.format('sighash'), topic0: frag.topicHash, args: namedArgs(frag, decoded) };
+                        }
+                        if (note) { decodeNote.textContent = note; decodeNote.style.display = 'block'; }
+                    } else {
+                        // ---- function calldata decode ----
+                        if (!data || data === '0x') throw new Error('Paste the calldata to decode.');
+                        const selector = data.slice(0, 10);
+                        let frag = null;
+                        let note = '';
+                        if (abiIface) {
+                            let found = null;
+                            try { found = abiIface.getFunction(selector); } catch (e) { /* not in this ABI */ }
+                            if (found) { frag = found; note = 'Matched function ' + found.format('sighash') + ' from the ABI by selector.'; }
+                        }
+                        if (!frag) { const m = findMember('function'); frag = m && m.frag; }
+                        if (!frag) throw new Error('No function definition — provide a function signature or an ABI containing this function.');
+                        let payload = data;
+                        if (frag.selector !== selector) {
+                            note = 'Warning: selector ' + selector + ' does not match this function (' + frag.selector + '). Decoding anyway.';
+                            payload = frag.selector + data.slice(10);
+                        }
+                        const decoded = new ethers.Interface([frag]).decodeFunctionData(frag, payload);
+                        result = { type: 'function', name: frag.name, signature: frag.format('sighash'), selector: frag.selector, args: namedArgs(frag, decoded) };
+                        if (note) { decodeNote.textContent = note; decodeNote.style.display = 'block'; }
+                    }
+
+                    decodedEl.textContent = JSON.stringify(result, null, 2);
+                    decodedGroup.style.display = '';
+                } catch (e) {
+                    decodeError.textContent = 'Decoding failed: ' + ((e && e.shortMessage) || (e && e.message) || e);
+                    decodeError.style.display = 'block';
+                }
+            }
+
+            document.getElementById('btn-cd-decode').addEventListener('click', decode);
+            document.getElementById('btn-cd-copy-decoded').addEventListener('click', async () => {
+                try {
+                    await navigator.clipboard.writeText(decodedEl.textContent);
+                    window.showToast && window.showToast('Copied to clipboard');
+                } catch (e) {
+                    window.showToast && window.showToast('Copy failed', true);
+                }
+            });
+
+            syncHighlight();
+            renderLogs();
+        });
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
+    <title>CSV to Markdown Table Converter — LocalUtil</title>
+    <!-- social / favicon -->
+    <meta name="description" content="Convert CSV to a Markdown table, and Markdown tables back to CSV. Runs 100% in your browser — nothing is uploaded.">
+    <link rel="canonical" href="https://jongsic.github.io/localutil/csv-md.html">
+    <link rel="icon" href="favicon.ico" sizes="any">
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="LocalUtil">
+    <meta property="og:title" content="CSV to Markdown Table Converter — LocalUtil">
+    <meta property="og:description" content="Convert CSV to a Markdown table, and Markdown tables back to CSV. Runs 100% in your browser — nothing is uploaded.">
+    <meta property="og:image" content="https://jongsic.github.io/localutil/og.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:url" content="https://jongsic.github.io/localutil/csv-md.html">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:image" content="https://jongsic.github.io/localutil/og.png">
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebApplication","name":"CSV to Markdown Table Converter","url":"https://jongsic.github.io/localutil/csv-md.html","description":"Convert CSV to a Markdown table, and Markdown tables back to CSV. Runs 100% in your browser — nothing is uploaded.","applicationCategory":"DeveloperApplication","operatingSystem":"Any","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"isPartOf":{"@type":"WebSite","name":"LocalUtil","url":"https://jongsic.github.io/localutil/"}}</script>
+    <!-- /social -->
+    <script src="theme-init.js"></script>
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        .cm-toolbar {
+            display: flex; align-items: flex-end; justify-content: flex-start;
+            gap: 26px; flex-wrap: wrap; padding: 16px 18px;
+        }
+        .cm-toolbar-group { display: flex; flex-direction: column; gap: 6px; }
+
+        /* Reusable button group (replaces small select boxes) */
+        .btn-group { display: inline-flex; border: 1px solid var(--border-color); border-radius: var(--r-sm); overflow: hidden; }
+        .btn-group button {
+            border: none; background: var(--bg-input); color: var(--text-muted);
+            padding: 8px 16px; font-size: 0.85rem; font-weight: 600; cursor: pointer; white-space: nowrap;
+            border-left: 1px solid var(--border-color);
+        }
+        .btn-group button:first-child { border-left: none; }
+        .btn-group button.active { background: var(--primary); color: #fff; }
+
+        .cm-error { color: var(--danger); font-weight: 600; font-size: 0.85rem; min-height: 1em; margin-top: 8px; }
+        #tool-csvmd .pane textarea { min-height: 320px; font-family: var(--font-mono); font-size: 0.85rem; }
+
+        /* Rendered table preview */
+        .cm-preview-wrap { margin-top: 16px; }
+        .cm-preview {
+            overflow: auto;
+            border: 1px solid var(--border-color);
+            border-radius: var(--r-md);
+            background: var(--bg-content);
+            box-shadow: var(--shadow-sm);
+        }
+        .cm-preview table { border-collapse: collapse; width: 100%; font-size: 0.85rem; }
+        .cm-preview th, .cm-preview td {
+            border: 1px solid var(--border-color); padding: 8px 12px; text-align: left; vertical-align: top;
+            white-space: pre-wrap; word-break: break-word;
+        }
+        .cm-preview th { background: var(--bg-subtle); font-weight: 700; position: sticky; top: 0; }
+        .cm-preview tr:nth-child(even) td { background: var(--bg-subtle); }
+        .cm-preview-empty { padding: 24px 16px; text-align: center; color: var(--text-faint); }
+    </style>
+</head>
+
+<body>
+    <div class="app-container">
+        <aside class="sidebar" id="app-sidebar"></aside>
+
+        <main class="main-content">
+            <header class="topbar" id="app-topbar">
+                <div class="topbar-title">
+                    <h1 id="current-tool-title">CSV ⇄ Markdown</h1>
+                    <p id="current-tool-desc" class="topbar-desc">Convert between CSV and Markdown tables</p>
+                </div>
+            </header>
+
+            <div class="tools-container">
+                <section id="tool-csvmd" class="tool-section active">
+                    <div class="cm-toolbar card">
+                        <div class="cm-toolbar-group">
+                            <label>Direction</label>
+                            <div class="btn-group" id="cm-dir">
+                                <button data-dir="c2m" class="active">CSV → Markdown</button>
+                                <button data-dir="m2c">Markdown → CSV</button>
+                            </div>
+                        </div>
+                        <div class="cm-toolbar-group">
+                            <label>CSV delimiter</label>
+                            <div class="btn-group" id="cm-delim">
+                                <button data-delim="," class="active">Comma ,</button>
+                                <button data-delim=";">Semicolon ;</button>
+                                <button data-delim="tab">Tab</button>
+                            </div>
+                        </div>
+                        <div class="cm-toolbar-group">
+                            <label>Markdown</label>
+                            <div class="btn-group" id="cm-align">
+                                <button data-align="0" class="active">Compact</button>
+                                <button data-align="1">Padded columns</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="split-pane">
+                        <div class="pane">
+                            <label id="cm-in-label" for="cm-input">CSV</label>
+                            <div class="field-hint" id="cm-in-hint">Paste CSV — first row is treated as the header.</div>
+                            <textarea id="cm-input" placeholder="name,role,city&#10;Ada,Engineer,London"></textarea>
+                        </div>
+                        <div class="pane">
+                            <label id="cm-out-label">Markdown</label>
+                            <div class="field-hint">Converted result.</div>
+                            <textarea id="cm-output" readonly placeholder="Result appears here…"></textarea>
+                            <button class="btn btn-small copy-btn" data-clipboard-target="#cm-output">Copy</button>
+                        </div>
+                    </div>
+                    <div class="cm-error" id="cm-error"></div>
+
+                    <div class="cm-preview-wrap">
+                        <label>Table preview</label>
+                        <div class="field-hint">How the data renders as a table.</div>
+                        <div class="cm-preview" id="cm-preview">
+                            <div class="cm-preview-empty">Table preview appears here…</div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </div>
+
+    <div id="toast" class="toast">Copied to clipboard!</div>
+
+    <script src="app.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const input = document.getElementById('cm-input');
+            const output = document.getElementById('cm-output');
+            const dirToggle = document.getElementById('cm-dir');
+            const delimToggle = document.getElementById('cm-delim');
+            const alignToggle = document.getElementById('cm-align');
+            const errorEl = document.getElementById('cm-error');
+            const previewEl = document.getElementById('cm-preview');
+            const inLabel = document.getElementById('cm-in-label');
+            const inHint = document.getElementById('cm-in-hint');
+            const outLabel = document.getElementById('cm-out-label');
+
+            let dir = 'c2m';
+            let delim = ',';
+            let padded = false;
+
+            // ---- CSV parser (RFC-4180-ish: quoted fields, "" escapes, newlines) ----
+            function parseCSV(text, d) {
+                const rows = [];
+                let row = [], field = '', inQuotes = false;
+                for (let i = 0; i < text.length; i++) {
+                    const ch = text[i];
+                    if (inQuotes) {
+                        if (ch === '"') {
+                            if (text[i + 1] === '"') { field += '"'; i++; }
+                            else inQuotes = false;
+                        } else field += ch;
+                    } else if (ch === '"') {
+                        inQuotes = true;
+                    } else if (ch === d) {
+                        row.push(field); field = '';
+                    } else if (ch === '\n') {
+                        row.push(field); rows.push(row); row = []; field = '';
+                    } else if (ch === '\r') {
+                        // handled by the following \n
+                    } else field += ch;
+                }
+                if (field !== '' || row.length) { row.push(field); rows.push(row); }
+                return rows.filter(r => !(r.length === 1 && r[0] === ''));
+            }
+
+            function csvEscape(val, d) {
+                if (val == null) val = '';
+                if (val.includes('"') || val.includes(d) || val.includes('\n')) {
+                    return '"' + val.replace(/"/g, '""') + '"';
+                }
+                return val;
+            }
+
+            // ---- Markdown table parsing ----
+            function splitMdRow(line) {
+                let s = line.trim();
+                if (s.startsWith('|')) s = s.slice(1);
+                if (s.endsWith('|')) s = s.slice(0, -1);
+                const cells = [];
+                let cur = '';
+                for (let i = 0; i < s.length; i++) {
+                    if (s[i] === '\\' && s[i + 1] === '|') { cur += '|'; i++; }
+                    else if (s[i] === '|') { cells.push(cur); cur = ''; }
+                    else cur += s[i];
+                }
+                cells.push(cur);
+                return cells.map(c => c.trim().replace(/<br\s*\/?>/gi, '\n'));
+            }
+            function isSeparator(line) {
+                return /^\s*\|?\s*:?-{1,}:?\s*(\|\s*:?-{1,}:?\s*)*\|?\s*$/.test(line);
+            }
+            function parseMd(text) {
+                const lines = text.split('\n').filter(l => l.trim() !== '');
+                return lines.filter(l => !isSeparator(l)).map(splitMdRow);
+            }
+
+            // Normalize a ragged grid so every row has the same column count.
+            function normalize(rows) {
+                if (!rows.length) return rows;
+                const cols = Math.max(...rows.map(r => r.length));
+                return rows.map(r => { const c = r.slice(); while (c.length < cols) c.push(''); return c; });
+            }
+
+            // ---- Builders ----
+            function buildMd(rows) {
+                if (!rows.length) return '';
+                const norm = normalize(rows);
+                const cols = norm[0].length;
+                const cellMd = v => v.replace(/\|/g, '\\|').replace(/\n/g, '<br>');
+                const header = norm[0], body = norm.slice(1);
+                if (padded) {
+                    const widths = [];
+                    for (let c = 0; c < cols; c++) widths[c] = Math.max(3, ...norm.map(r => cellMd(r[c]).length));
+                    const line = r => '| ' + r.map((v, c) => cellMd(v).padEnd(widths[c])).join(' | ') + ' |';
+                    const sep = '| ' + widths.map(w => '-'.repeat(w)).join(' | ') + ' |';
+                    return [line(header), sep, ...body.map(line)].join('\n');
+                }
+                const line = r => '| ' + r.map(cellMd).join(' | ') + ' |';
+                const sep = '| ' + Array(cols).fill('---').join(' | ') + ' |';
+                return [line(header), sep, ...body.map(line)].join('\n');
+            }
+            function buildCsv(rows) {
+                if (!rows.length) return '';
+                return normalize(rows).map(r => r.map(v => csvEscape(v, delim)).join(delim)).join('\n');
+            }
+
+            // Parse whichever side is the source into a grid of rows.
+            function sourceRows() {
+                return dir === 'c2m' ? parseCSV(input.value, delim) : parseMd(input.value);
+            }
+
+            function esc(s) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+            function renderPreview(rows) {
+                if (!rows.length) {
+                    previewEl.innerHTML = '<div class="cm-preview-empty">Table preview appears here…</div>';
+                    return;
+                }
+                const norm = normalize(rows);
+                const header = norm[0], body = norm.slice(1);
+                let html = '<table><thead><tr>' +
+                    header.map(c => '<th>' + esc(c) + '</th>').join('') + '</tr></thead><tbody>';
+                body.forEach(r => { html += '<tr>' + r.map(c => '<td>' + esc(c) + '</td>').join('') + '</tr>'; });
+                html += '</tbody></table>';
+                previewEl.innerHTML = html;
+            }
+
+            function convert() {
+                errorEl.textContent = '';
+                if (!input.value.trim()) {
+                    output.value = '';
+                    renderPreview([]);
+                    return;
+                }
+                try {
+                    const rows = sourceRows();
+                    output.value = dir === 'c2m' ? buildMd(rows) : buildCsv(rows);
+                    renderPreview(rows);
+                } catch (e) {
+                    errorEl.textContent = e.message;
+                    output.value = '';
+                    renderPreview([]);
+                }
+            }
+
+            function setDir(d) {
+                dir = d;
+                setActive(dirToggle, 'dir', d);
+                const c2m = d === 'c2m';
+                inLabel.textContent = c2m ? 'CSV' : 'Markdown';
+                outLabel.textContent = c2m ? 'Markdown' : 'CSV';
+                inHint.textContent = c2m ? 'Paste CSV — first row is treated as the header.' : 'Paste a Markdown table.';
+                input.placeholder = c2m ? 'name,role,city\nAda,Engineer,London'
+                    : '| name | role | city |\n| --- | --- | --- |\n| Ada | Engineer | London |';
+                // Feed the previous output back in so round-trips are one click.
+                if (output.value) input.value = output.value;
+                convert();
+            }
+
+            function setActive(group, attr, val) {
+                group.querySelectorAll('button').forEach(b => b.classList.toggle('active', b.dataset[attr] === val));
+            }
+
+            dirToggle.querySelectorAll('button').forEach(b => b.addEventListener('click', () => setDir(b.dataset.dir)));
+            delimToggle.querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
+                delim = b.dataset.delim === 'tab' ? '\t' : b.dataset.delim;
+                setActive(delimToggle, 'delim', b.dataset.delim);
+                convert();
+            }));
+            alignToggle.querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
+                padded = b.dataset.align === '1';
+                setActive(alignToggle, 'align', b.dataset.align);
+                convert();
+            }));
+            input.addEventListener('input', convert);
+
+            input.value = 'name,role,city\nAda,Engineer,London\nGrace,"Rear Admiral, USN",New York';
+            convert();
+        });
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
+    <title>JavaScript Minifier (Terser) — LocalUtil</title>
+    <!-- social / favicon -->
+    <meta name="description" content="Minify JavaScript with Terser to shrink file size, or beautify it back to readable code. Runs 100% in your browser — nothing is uploaded.">
+    <link rel="canonical" href="https://jongsic.github.io/localutil/js-minify.html">
+    <link rel="icon" href="favicon.ico" sizes="any">
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="LocalUtil">
+    <meta property="og:title" content="JavaScript Minifier (Terser) — LocalUtil">
+    <meta property="og:description" content="Minify JavaScript with Terser to shrink file size, or beautify it back to readable code. Runs 100% in your browser — nothing is uploaded.">
+    <meta property="og:image" content="https://jongsic.github.io/localutil/og.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:url" content="https://jongsic.github.io/localutil/js-minify.html">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:image" content="https://jongsic.github.io/localutil/og.png">
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebApplication","name":"JavaScript Minifier (Terser)","url":"https://jongsic.github.io/localutil/js-minify.html","description":"Minify JavaScript with Terser to shrink file size, or beautify it back to readable code. Runs 100% in your browser — nothing is uploaded.","applicationCategory":"DeveloperApplication","operatingSystem":"Any","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"isPartOf":{"@type":"WebSite","name":"LocalUtil","url":"https://jongsic.github.io/localutil/"}}</script>
+    <!-- /social -->
+    <script src="theme-init.js"></script>
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        /* Page-specific: taller editors for comfortable code work */
+        .jsm-editors { min-height: 460px; }
+        .jsm-editors textarea { min-height: 420px; }
+        .jsm-controls-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+        }
+        .jsm-action-row {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        .jsm-stats-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        .jsm-stat {
+            flex: 1;
+            min-width: 120px;
+            padding: 12px 14px;
+            background-color: var(--bg-subtle);
+            border: 1px solid var(--border-color);
+            border-radius: var(--r-sm);
+        }
+        .jsm-stat .jsm-stat-label {
+            font-size: 0.72rem;
+            font-weight: 700;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: var(--text-faint);
+            margin-bottom: 4px;
+        }
+        .jsm-stat strong { font-size: 1.05rem; font-weight: 700; }
+        @media (max-width: 860px) {
+            .jsm-controls-grid { grid-template-columns: 1fr; }
+        }
+    </style>
+    <!-- Terser for JS minification -->
+    <script src="vendor/terser.bundle.min.js"></script>
+    <!-- js-beautify for JS beautification -->
+    <script src="vendor/beautify.min.js"></script>
+</head>
+
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar" id="app-sidebar"></aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <header class="topbar" id="app-topbar">
+                <div class="topbar-title">
+                    <h1 id="current-tool-title">JS Minify</h1>
+                    <p id="current-tool-desc" class="topbar-desc">Minify or beautify JavaScript code</p>
+                </div>
+            </header>
+
+            <div class="tools-container">
+                <section id="tool-js-minify" class="tool-section active">
+                    <div class="split-pane jsm-editors">
+                        <div class="pane">
+                            <label for="jsm-input">Input JavaScript</label>
+                            <div class="field-hint" style="margin-bottom:2px;">Paste code, then choose an action below.</div>
+                            <textarea id="jsm-input" placeholder="Paste JS code here…"></textarea>
+                        </div>
+                        <div class="pane">
+                            <label for="jsm-output">Output</label>
+                            <div class="field-hint" style="margin-bottom:2px;">Your minified or beautified result.</div>
+                            <textarea id="jsm-output" placeholder="Result will appear here…" readonly></textarea>
+                            <button class="btn btn-small copy-btn" data-clipboard-target="#jsm-output">Copy</button>
+                        </div>
+                    </div>
+
+                    <div class="jsm-controls-grid">
+                        <div class="card">
+                            <div class="card-title" style="margin-bottom:2px;">Minify</div>
+                            <div class="card-subtitle">Shrink your code for production.</div>
+                            <div class="field-row">
+                                <div class="field-label">
+                                    <label for="jsm-mangle">Mangle names</label>
+                                    <div class="field-hint">Rename local variables to short forms.</div>
+                                </div>
+                                <label class="switch"><input type="checkbox" id="jsm-mangle" checked><span></span></label>
+                            </div>
+                            <div class="field-row">
+                                <div class="field-label">
+                                    <label for="jsm-compress">Compress</label>
+                                    <div class="field-hint">Apply size optimizations to the code.</div>
+                                </div>
+                                <label class="switch"><input type="checkbox" id="jsm-compress" checked><span></span></label>
+                            </div>
+                            <div class="field-row">
+                                <div class="field-label">
+                                    <label for="jsm-remove-console">Remove console.*</label>
+                                    <div class="field-hint">Strip console logging statements.</div>
+                                </div>
+                                <label class="switch"><input type="checkbox" id="jsm-remove-console" checked><span></span></label>
+                            </div>
+                            <div class="jsm-action-row" style="margin-top:16px;">
+                                <button id="btn-jsm-minify" class="btn btn-primary">Minify &rarr;</button>
+                            </div>
+                        </div>
+
+                        <div class="card">
+                            <div class="card-title" style="margin-bottom:2px;">Beautify</div>
+                            <div class="card-subtitle">Reformat minified or messy code to read it clearly.</div>
+                            <div class="form-group">
+                                <label for="jsm-indent">Indentation</label>
+                                <div class="field-hint">How each nesting level is indented.</div>
+                                <select id="jsm-indent">
+                                    <option value="2">2 spaces</option>
+                                    <option value="4">4 spaces</option>
+                                    <option value="tab">Tab</option>
+                                </select>
+                            </div>
+                            <div class="jsm-action-row" style="margin-top:16px;">
+                                <button id="btn-jsm-beautify" class="btn btn-primary">Beautify &rarr;</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="jsm-stats" class="card jsm-stats-grid" style="display:none;">
+                        <div class="jsm-stat">
+                            <div class="jsm-stat-label">Original</div>
+                            <strong id="jsm-orig-size">-</strong>
+                        </div>
+                        <div class="jsm-stat">
+                            <div class="jsm-stat-label">Result</div>
+                            <strong id="jsm-result-size">-</strong>
+                        </div>
+                        <div class="jsm-stat">
+                            <div class="jsm-stat-label">Ratio</div>
+                            <strong id="jsm-ratio">-</strong>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="toast">Copied to clipboard!</div>
+
+    <script src="app.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const input = document.getElementById('jsm-input');
+            const output = document.getElementById('jsm-output');
+            const statsEl = document.getElementById('jsm-stats');
+            const origSizeEl = document.getElementById('jsm-orig-size');
+            const resultSizeEl = document.getElementById('jsm-result-size');
+            const ratioEl = document.getElementById('jsm-ratio');
+
+            function formatBytes(bytes) {
+                if (bytes === 0) return '0 B';
+                const units = ['B', 'KB', 'MB'];
+                const i = Math.floor(Math.log(bytes) / Math.log(1024));
+                return parseFloat((bytes / Math.pow(1024, i)).toFixed(2)) + ' ' + units[i];
+            }
+
+            function formatSyntaxError(code, err) {
+                const line = err.line;
+                const col = err.col;
+                const msg = err.message || String(err);
+
+                if (!line) return 'Error: ' + msg;
+
+                const lines = code.split('\n');
+                const start = Math.max(0, line - 3);
+                const end = Math.min(lines.length, line + 2);
+                const gutterWidth = String(end).length;
+
+                let snippet = `Error: ${msg}\n\n`;
+                for (let i = start; i < end; i++) {
+                    const lineNum = String(i + 1).padStart(gutterWidth, ' ');
+                    const marker = (i + 1 === line) ? '>>>' : '   ';
+                    snippet += `${marker} ${lineNum} | ${lines[i]}\n`;
+                    if (i + 1 === line && col) {
+                        const pointer = ' '.repeat(marker.length + 1 + gutterWidth + 3 + col - 1) + '^';
+                        snippet += pointer + '\n';
+                    }
+                }
+                return snippet;
+            }
+
+            function showStats(origLen, resultLen) {
+                statsEl.style.display = 'flex';
+                origSizeEl.textContent = formatBytes(origLen);
+                resultSizeEl.textContent = formatBytes(resultLen);
+                if (origLen > 0) {
+                    const pct = ((1 - resultLen / origLen) * 100).toFixed(1);
+                    ratioEl.textContent = (pct >= 0 ? '-' : '+') + Math.abs(pct) + '%';
+                } else {
+                    ratioEl.textContent = '-';
+                }
+            }
+
+            // Minify using Terser
+            document.getElementById('btn-jsm-minify').addEventListener('click', async () => {
+                const val = input.value;
+                if (!val) return;
+
+                const mangle = document.getElementById('jsm-mangle').checked;
+                const compress = document.getElementById('jsm-compress').checked;
+                const removeConsole = document.getElementById('jsm-remove-console').checked;
+
+                try {
+                    if (typeof Terser === 'undefined') {
+                        output.value = 'Error: Terser library not loaded. Check your internet connection.';
+                        return;
+                    }
+
+                    const options = {
+                        mangle: mangle,
+                        compress: compress ? {
+                            drop_console: removeConsole
+                        } : false
+                    };
+
+                    const result = await Terser.minify(val, options);
+
+                    if (result.error) {
+                        output.value = 'Error: ' + result.error.message;
+                        return;
+                    }
+
+                    output.value = result.code;
+                    showStats(new Blob([val]).size, new Blob([result.code]).size);
+                } catch (e) {
+                    output.value = formatSyntaxError(val, e);
+                }
+            });
+
+            // Beautify using js-beautify
+            document.getElementById('btn-jsm-beautify').addEventListener('click', () => {
+                const val = input.value;
+                if (!val) return;
+
+                const indentConf = document.getElementById('jsm-indent').value;
+                let indent_size = 2;
+                let indent_char = ' ';
+                if (indentConf === '4') {
+                    indent_size = 4;
+                } else if (indentConf === 'tab') {
+                    indent_size = 1;
+                    indent_char = '\t';
+                }
+
+                try {
+                    if (typeof js_beautify !== 'undefined') {
+                        output.value = js_beautify(val, {
+                            indent_size: indent_size,
+                            indent_char: indent_char,
+                            space_in_empty_paren: true
+                        });
+                        showStats(new Blob([val]).size, new Blob([output.value]).size);
+                    } else {
+                        // Fallback: try JSON formatting
+                        try {
+                            output.value = JSON.stringify(JSON.parse(val), null, indentConf === 'tab' ? '\t' : indent_size);
+                            showStats(new Blob([val]).size, new Blob([output.value]).size);
+                        } catch (e) {
+                            output.value = 'Error: js-beautify library not loaded and input is not valid JSON.';
+                        }
+                    }
+                } catch (e) {
+                    output.value = 'Error: ' + e.message;
+                }
+            });
+        });
+    </script>
+</body>
+
+</html>

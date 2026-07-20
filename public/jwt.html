@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
+    <title>JWT Decoder — LocalUtil</title>
+    <!-- social / favicon -->
+    <meta name="description" content="Decode a JWT (JSON Web Token) and inspect its header, payload, and signature. Runs 100% in your browser — tokens never leave your machine.">
+    <link rel="canonical" href="https://jongsic.github.io/localutil/jwt.html">
+    <link rel="icon" href="favicon.ico" sizes="any">
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="LocalUtil">
+    <meta property="og:title" content="JWT Decoder — LocalUtil">
+    <meta property="og:description" content="Decode a JWT (JSON Web Token) and inspect its header, payload, and signature. Runs 100% in your browser — tokens never leave your machine.">
+    <meta property="og:image" content="https://jongsic.github.io/localutil/og.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:url" content="https://jongsic.github.io/localutil/jwt.html">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:image" content="https://jongsic.github.io/localutil/og.png">
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebApplication","name":"JWT Decoder","url":"https://jongsic.github.io/localutil/jwt.html","description":"Decode a JWT (JSON Web Token) and inspect its header, payload, and signature. Runs 100% in your browser — tokens never leave your machine.","applicationCategory":"DeveloperApplication","operatingSystem":"Any","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"isPartOf":{"@type":"WebSite","name":"LocalUtil","url":"https://jongsic.github.io/localutil/"}}</script>
+    <!-- /social -->
+    <script src="theme-init.js"></script>
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        /* JWT tool — page-specific layout only */
+        .jwt-decoded {
+            flex: 1;
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .jwt-field {
+            position: relative;
+            display: flex;
+        }
+
+        .jwt-field textarea {
+            flex: 1;
+        }
+
+        .jwt-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 4px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar" id="app-sidebar"></aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <header class="topbar" id="app-topbar">
+                <div class="topbar-title">
+                    <h1 id="current-tool-title">JWT Decode</h1>
+                    <p id="current-tool-desc" class="topbar-desc">Decode and inspect JSON Web Tokens</p>
+                </div>
+            </header>
+
+            <div class="tools-container">
+                <!-- JWT Tool -->
+                <section id="tool-jwt" class="tool-section active">
+                    <div class="tool-shell">
+                        <div class="split-pane">
+                            <!-- Encoded token side -->
+                            <div class="pane">
+                                <label for="jwt-input">Encoded token</label>
+                                <div class="field-hint">Paste a JWT to decode it, or build one below and encode.</div>
+                                <textarea id="jwt-input" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9…"></textarea>
+                                <button class="btn btn-small copy-btn" data-clipboard-target="#jwt-input">Copy</button>
+                                <div class="jwt-actions">
+                                    <button id="btn-jwt-decode" class="btn btn-primary">Decode token</button>
+                                    <button id="btn-jwt-encode" class="btn">Encode from claims</button>
+                                </div>
+                            </div>
+
+                            <!-- Decoded / claims side -->
+                            <div class="jwt-decoded">
+                                <div class="card">
+                                    <div class="section-title" style="margin-top:0;">Header</div>
+                                    <div class="field-hint mb-1">Algorithm and token type.</div>
+                                    <div class="jwt-field">
+                                        <textarea id="jwt-header" rows="3">{"alg":"HS256","typ":"JWT"}</textarea>
+                                        <button class="btn btn-small copy-btn" data-clipboard-target="#jwt-header">Copy</button>
+                                    </div>
+                                </div>
+
+                                <div class="card">
+                                    <div class="section-title" style="margin-top:0;">Payload</div>
+                                    <div class="field-hint mb-1">The claims carried by the token.</div>
+                                    <div class="jwt-field">
+                                        <textarea id="jwt-payload"
+                                            rows="7">{"sub":"1234567890","name":"John Doe","iat":1516239022}</textarea>
+                                        <button class="btn btn-small copy-btn" data-clipboard-target="#jwt-payload">Copy</button>
+                                    </div>
+                                </div>
+
+                                <div class="card">
+                                    <div class="section-title" style="margin-top:0;">Signature</div>
+                                    <div class="field-hint mb-1">Secret used to sign HS256 tokens when encoding.</div>
+                                    <input type="text" id="jwt-secret" placeholder="your-secret-key">
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="card">
+                            <div class="log-header mb-2">
+                                <div>
+                                    <div class="card-title" style="margin:0;">Recent activity</div>
+                                    <div class="field-hint">Stored locally · last 10</div>
+                                </div>
+                                <button id="btn-jwt-clear-log" class="btn btn-small">Clear</button>
+                            </div>
+                            <ul id="jwt-log" class="log-list"></ul>
+                            <div id="jwt-log-empty" class="field-hint">Nothing to show yet.</div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="toast">Copied to clipboard!</div>
+
+    <script src="app.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const tokenInput = document.getElementById('jwt-input');
+            const headerInput = document.getElementById('jwt-header');
+            const payloadInput = document.getElementById('jwt-payload');
+            const secretInput = document.getElementById('jwt-secret');
+            const logList = document.getElementById('jwt-log');
+            const logEmpty = document.getElementById('jwt-log-empty');
+            const LOG_KEY = 'localutil-jwt-log';
+
+            let logs = [];
+            try {
+                const stored = localStorage.getItem(LOG_KEY);
+                if (stored) {
+                    logs = JSON.parse(stored);
+                    if (!Array.isArray(logs)) logs = [];
+                }
+            } catch (e) { logs = []; }
+
+            function truncate(str, len) {
+                return str.length > len ? str.substring(0, len) + '...' : str;
+            }
+
+            function addLog(op, detail) {
+                const entry = op + ': ' + detail;
+                logs.unshift(entry);
+                if (logs.length > 10) logs.pop();
+                try { localStorage.setItem(LOG_KEY, JSON.stringify(logs)); } catch (e) {}
+                renderLog();
+            }
+
+            function renderLog() {
+                logList.innerHTML = '';
+                logEmpty.style.display = logs.length ? 'none' : 'block';
+                logs.forEach(entry => {
+                    const li = document.createElement('li');
+                    li.className = 'history-item';
+                    li.textContent = entry;
+                    logList.appendChild(li);
+                });
+            }
+
+            renderLog();
+
+            function base64UrlEncode(str) {
+                return btoa(unescape(encodeURIComponent(str)))
+                    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+            }
+
+            function decodeBase64Url(str) {
+                let b64 = str.replace(/-/g, '+').replace(/_/g, '/');
+                while (b64.length % 4) b64 += '=';
+                return decodeURIComponent(escape(atob(b64)));
+            }
+
+            document.getElementById('btn-jwt-encode').addEventListener('click', async () => {
+                try {
+                    const header = headerInput.value.trim();
+                    const payload = payloadInput.value.trim();
+                    const secret = secretInput.value;
+
+                    const h64 = base64UrlEncode(header);
+                    const p64 = base64UrlEncode(payload);
+                    const dataToSign = `${h64}.${p64}`;
+
+                    if (secret) {
+                        const encoder = new TextEncoder();
+                        const key = await crypto.subtle.importKey(
+                            'raw', encoder.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']
+                        );
+                        const signature = await crypto.subtle.sign('HMAC', key, encoder.encode(dataToSign));
+
+                        let b64 = btoa(String.fromCharCode(...new Uint8Array(signature)));
+                        const sig = b64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+                        tokenInput.value = `${dataToSign}.${sig}`;
+                    } else {
+                        tokenInput.value = `${dataToSign}.`;
+                    }
+                    addLog('Encode', truncate(payload, 50) + ' → ' + truncate(tokenInput.value, 50));
+                } catch (e) {
+                    tokenInput.value = "Encoding error: " + e.message;
+                }
+            });
+
+            function tryExtractJwt(raw) {
+                // Already looks like a JWT (has dots and starts with eyJ)
+                if (raw.includes('.') && raw.startsWith('eyJ')) {
+                    return raw;
+                }
+                // Try standard base64 decode (might be base64-encoded JWT)
+                try {
+                    let padded = raw.replace(/-/g, '+').replace(/_/g, '/');
+                    while (padded.length % 4) padded += '=';
+                    const decoded = atob(padded);
+                    if (decoded.includes('.') && decoded.startsWith('eyJ')) {
+                        return decoded;
+                    }
+                } catch (e) {}
+                // Not a recognizable JWT
+                return raw;
+            }
+
+            function decodeJwt(token) {
+                const parts = token.split('.');
+                if (parts.length < 2) {
+                    headerInput.value = "Invalid JWT structure.";
+                    payloadInput.value = "";
+                    return;
+                }
+
+                try {
+                    const header = JSON.parse(decodeBase64Url(parts[0]));
+                    headerInput.value = JSON.stringify(header, null, 2);
+                } catch (e) {
+                    headerInput.value = "Failed to parse Header.";
+                }
+
+                try {
+                    const payload = JSON.parse(decodeBase64Url(parts[1]));
+                    payloadInput.value = JSON.stringify(payload, null, 2);
+                } catch (e) {
+                    payloadInput.value = "Failed to parse Payload.";
+                }
+
+                addLog('Decode', truncate(token, 50) + ' → header/payload parsed');
+            }
+
+            document.getElementById('btn-jwt-decode').addEventListener('click', () => {
+                const raw = tokenInput.value.trim();
+                if (!raw) return;
+
+                const token = tryExtractJwt(raw);
+                if (token !== raw) {
+                    tokenInput.value = token;
+                    addLog('Auto-detect', 'Base64-wrapped JWT detected, unwrapped');
+                }
+                decodeJwt(token);
+            });
+
+            document.getElementById('btn-jwt-clear-log').addEventListener('click', () => {
+                logs.length = 0;
+                try { localStorage.removeItem(LOG_KEY); } catch (e) {}
+                renderLog();
+            });
+        });
+    </script>
+</body>
+
+</html>

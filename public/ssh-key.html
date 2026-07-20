@@ -1,0 +1,767 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
+    <title>SSH Key Converter (PEM / PuTTY PPK) — LocalUtil</title>
+    <!-- social / favicon -->
+    <meta name="description" content="Extract the public key from an SSH private key and convert between OpenSSH / PEM and PuTTY .ppk formats. Runs 100% in your browser — keys never leave your machine.">
+    <link rel="canonical" href="https://jongsic.github.io/localutil/ssh-key.html">
+    <link rel="icon" href="favicon.ico" sizes="any">
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="LocalUtil">
+    <meta property="og:title" content="SSH Key Converter (PEM / PuTTY PPK) — LocalUtil">
+    <meta property="og:description" content="Extract the public key from an SSH private key and convert between OpenSSH / PEM and PuTTY .ppk formats. Runs 100% in your browser — keys never leave your machine.">
+    <meta property="og:image" content="https://jongsic.github.io/localutil/og.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:url" content="https://jongsic.github.io/localutil/ssh-key.html">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:image" content="https://jongsic.github.io/localutil/og.png">
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebApplication","name":"SSH Key Converter (PEM / PuTTY PPK)","url":"https://jongsic.github.io/localutil/ssh-key.html","description":"Extract the public key from an SSH private key and convert between OpenSSH / PEM and PuTTY .ppk formats. Runs 100% in your browser — keys never leave your machine.","applicationCategory":"DeveloperApplication","operatingSystem":"Any","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"isPartOf":{"@type":"WebSite","name":"LocalUtil","url":"https://jongsic.github.io/localutil/"}}</script>
+    <!-- /social -->
+    <script src="theme-init.js"></script>
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        .sk-drop-zone {
+            width: 100%;
+            min-height: 120px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 16px;
+            border: 2px dashed var(--border-strong);
+            border-radius: var(--r-md);
+            background-color: var(--bg-subtle);
+            cursor: pointer;
+            text-align: center;
+            transition: border-color 0.18s, background-color 0.18s;
+        }
+        .sk-drop-zone:hover { border-color: var(--primary); background-color: var(--bg-hover); }
+        .sk-drop-zone.dragover { border-color: var(--primary); background-color: var(--primary-soft); }
+        .sk-drop-icon { color: var(--primary); opacity: 0.85; margin-bottom: 8px; }
+        .sk-drop-main { font-size: 0.9rem; font-weight: 600; color: var(--text-main); margin-bottom: 4px; }
+        .sk-drop-sub { font-size: 0.79rem; color: var(--text-muted); }
+
+        #sk-input {
+            width: 100%; min-height: 150px; resize: vertical;
+            font-family: var(--mono, ui-monospace, monospace);
+            font-size: 0.8rem; line-height: 1.4;
+        }
+
+        .sk-badges { display: flex; flex-wrap: wrap; gap: 8px; }
+        .sk-badge {
+            font-size: 0.76rem; font-weight: 600;
+            padding: 3px 9px; border-radius: 999px;
+            background: var(--primary-soft); color: var(--primary);
+            border: 1px solid var(--border-color);
+        }
+        .sk-badge.muted { background: var(--bg-subtle); color: var(--text-muted); }
+
+        .sk-out-label { font-size: 0.82rem; font-weight: 600; color: var(--text-main); margin-bottom: 4px; }
+        .sk-mono {
+            width: 100%; resize: vertical;
+            font-family: var(--mono, ui-monospace, monospace);
+            font-size: 0.78rem; line-height: 1.4;
+            word-break: break-all;
+        }
+        .sk-fp {
+            font-family: var(--mono, ui-monospace, monospace);
+            font-size: 0.78rem; color: var(--text-muted); word-break: break-all;
+        }
+        .sk-error {
+            padding: 10px 12px; border-radius: var(--r-sm);
+            background: var(--danger-soft, rgba(220,53,69,0.12));
+            border: 1px solid var(--danger, #dc3545);
+            color: var(--danger, #dc3545);
+            font-size: 0.84rem;
+        }
+        .sk-note {
+            font-size: 0.78rem; color: var(--text-muted); line-height: 1.5;
+            padding: 10px 12px; border: 1px solid var(--border-color);
+            border-radius: var(--r-sm); background: var(--bg-subtle);
+        }
+        .hidden { display: none !important; }
+    </style>
+</head>
+
+<body>
+    <div class="app-container">
+        <aside class="sidebar" id="app-sidebar"></aside>
+
+        <main class="main-content">
+            <header class="topbar" id="app-topbar">
+                <div class="topbar-title">
+                    <h1 id="current-tool-title">SSH Key Converter</h1>
+                    <p id="current-tool-desc" class="topbar-desc">Extract public keys and convert between PEM and PuTTY .ppk</p>
+                </div>
+            </header>
+
+            <div class="tools-container">
+                <section class="tool-section active">
+                    <div class="tool-shell">
+                        <div class="split-pane">
+                            <!-- Left: input -->
+                            <div class="pane">
+                                <div>
+                                    <div class="card-title" style="margin:0;">Private key</div>
+                                    <div class="field-hint">Drop or paste a PEM (<code>.pem</code>, OpenSSH, PKCS#1/#8, SEC1)
+                                        or a PuTTY <code>.ppk</code>. Everything is parsed locally — nothing is uploaded.</div>
+                                </div>
+
+                                <div id="sk-drop-zone" class="sk-drop-zone">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="38" height="38" viewBox="0 0 24 24"
+                                        fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
+                                        stroke-linejoin="round" class="sk-drop-icon">
+                                        <circle cx="7.5" cy="15.5" r="4.5"></circle>
+                                        <path d="m10.7 12.3 8.3-8.3"></path>
+                                        <path d="m16 5 3 3"></path>
+                                        <path d="m13 8 2 2"></path>
+                                    </svg>
+                                    <p class="sk-drop-main">Drop a key file, or click to open</p>
+                                    <p class="sk-drop-sub">…or paste the key text below</p>
+                                </div>
+                                <input type="file" id="sk-file-input" style="display:none;">
+
+                                <textarea id="sk-input" spellcheck="false" autocomplete="off"
+                                    placeholder="-----BEGIN OPENSSH PRIVATE KEY-----&#10;...&#10;-----END OPENSSH PRIVATE KEY-----&#10;&#10;or&#10;&#10;PuTTY-User-Key-File-3: ssh-ed25519&#10;..."></textarea>
+
+                                <div class="field-group">
+                                    <label for="sk-comment">Key comment</label>
+                                    <input type="text" id="sk-comment" spellcheck="false" placeholder="user@host">
+                                </div>
+
+                                <div class="sk-note">
+                                    Supported: RSA, ECDSA (nistp256/384/521) and Ed25519 — public-key extraction plus
+                                    conversion between OpenSSH-format PEM and PuTTY <code>.ppk</code>.
+                                    Encrypted (passphrase-protected) keys aren't supported yet — decrypt first.
+                                </div>
+                            </div>
+
+                            <!-- Right: outputs -->
+                            <div class="pane">
+                                <div>
+                                    <div class="card-title" style="margin:0;">Result</div>
+                                    <div id="sk-status" class="field-hint">Load a key to begin.</div>
+                                </div>
+
+                                <div id="sk-error" class="sk-error hidden"></div>
+
+                                <div id="sk-results" class="hidden flex-col" style="gap:16px;">
+                                    <div class="sk-badges" id="sk-badges"></div>
+
+                                    <div>
+                                        <div class="sk-out-label">Public key (OpenSSH)</div>
+                                        <textarea id="sk-pub" class="sk-mono" rows="4" readonly></textarea>
+                                        <div class="flex-row gap-1" style="margin-top:6px;">
+                                            <button id="sk-pub-copy" class="btn" type="button">Copy</button>
+                                            <button id="sk-pub-dl" class="btn" type="button">Download .pub</button>
+                                        </div>
+                                    </div>
+
+                                    <div>
+                                        <div class="sk-out-label">Fingerprint (SHA256)</div>
+                                        <div id="sk-fp" class="sk-fp"></div>
+                                    </div>
+
+                                    <div id="sk-priv-block">
+                                        <div class="sk-out-label">Download private key</div>
+                                        <div class="field-hint" style="margin-bottom:8px;">Convert to the other format.</div>
+                                        <div class="flex-row gap-1 wrap items-center">
+                                            <button id="sk-dl-pem" class="btn btn-primary" type="button">OpenSSH PEM</button>
+                                            <button id="sk-dl-ppk" class="btn btn-primary" type="button">PuTTY .ppk</button>
+                                            <span class="field-hint" style="margin-left:6px;">.ppk format</span>
+                                            <div class="segmented" id="sk-ppk-ver" role="tablist">
+                                                <button type="button" data-ver="3" class="active">v3</button>
+                                                <button type="button" data-ver="2">v2</button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </div>
+
+    <div id="toast" class="toast">Copied to clipboard</div>
+
+    <script src="app.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            'use strict';
+
+            // ========================= byte / encoding helpers =========================
+            const te = new TextEncoder();
+            const td = new TextDecoder();
+
+            function b64decode(str) {
+                const clean = str.replace(/\s+/g, '');
+                const bin = atob(clean);
+                const out = new Uint8Array(bin.length);
+                for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+                return out;
+            }
+            function b64encode(bytes) {
+                let bin = '';
+                for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+                return btoa(bin);
+            }
+            function b64wrap(str, width) {
+                const lines = [];
+                for (let i = 0; i < str.length; i += width) lines.push(str.slice(i, i + width));
+                return lines.join('\n');
+            }
+            function concat(arrays) {
+                let n = 0;
+                arrays.forEach(a => n += a.length);
+                const out = new Uint8Array(n);
+                let o = 0;
+                arrays.forEach(a => { out.set(a, o); o += a.length; });
+                return out;
+            }
+            function eq(a, b) {
+                if (a.length !== b.length) return false;
+                for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+                return true;
+            }
+
+            // ========================= SSH wire format =========================
+            function wire() {
+                const parts = [];
+                return {
+                    u32(n) { const b = new Uint8Array(4); new DataView(b.buffer).setUint32(0, n); parts.push(b); return this; },
+                    str(bytes) { this.u32(bytes.length); parts.push(bytes); return this; },
+                    raw(bytes) { parts.push(bytes); return this; },
+                    build() { return concat(parts); }
+                };
+            }
+            function wireReader(buf) {
+                let p = 0;
+                return {
+                    u32() { const v = new DataView(buf.buffer, buf.byteOffset + p, 4).getUint32(0); p += 4; return v; },
+                    str() { const n = this.u32(); const s = buf.subarray(p, p + n); p += n; return s; },
+                    remaining() { return buf.subarray(p); },
+                    atEnd() { return p >= buf.length; }
+                };
+            }
+            // mpint: strip leading zeros, then prepend 0x00 if the top bit is set (positive number).
+            function toMpint(bytes) {
+                let i = 0;
+                while (i < bytes.length - 1 && bytes[i] === 0) i++;
+                let m = bytes.subarray(i);
+                if (m.length === 0) return new Uint8Array(0);
+                if (m[0] & 0x80) return concat([new Uint8Array([0]), m]);
+                return m.slice();
+            }
+            // raw fixed-length magnitude (for EC point coords / scalars): strip the mpint leading zero.
+            function stripLeadingZero(bytes) {
+                let i = 0;
+                while (i < bytes.length - 1 && bytes[i] === 0) i++;
+                return bytes.subarray(i);
+            }
+
+            // ========================= minimal ASN.1 DER =========================
+            // Parser returns {tag, len, content(Uint8Array), end}. Constructed types expose children().
+            function derParse(buf, offset) {
+                let p = offset || 0;
+                const tag = buf[p++];
+                let len = buf[p++];
+                if (len & 0x80) {
+                    const nbytes = len & 0x7f;
+                    len = 0;
+                    for (let i = 0; i < nbytes; i++) len = (len << 8) | buf[p++];
+                }
+                const content = buf.subarray(p, p + len);
+                return { tag, len, content, end: p + len };
+            }
+            function derChildren(node) {
+                const out = [];
+                let p = 0;
+                const buf = node.content;
+                while (p < buf.length) {
+                    const child = derParse(buf, p);
+                    out.push(child);
+                    p = child.end;
+                }
+                return out;
+            }
+            function derOidString(content) {
+                const out = [];
+                const first = content[0];
+                out.push(Math.floor(first / 40), first % 40);
+                let val = 0;
+                for (let i = 1; i < content.length; i++) {
+                    val = (val << 7) | (content[i] & 0x7f);
+                    if (!(content[i] & 0x80)) { out.push(val); val = 0; }
+                }
+                return out.join('.');
+            }
+
+            const OID_RSA = '1.2.840.113549.1.1.1';
+            const OID_EC = '1.2.840.10045.2.1';
+            const OID_ED25519 = '1.3.101.112';
+            const CURVE_BY_OID = {
+                '1.2.840.10045.3.1.7': 'nistp256',
+                '1.3.132.0.34': 'nistp384',
+                '1.3.132.0.35': 'nistp521'
+            };
+
+            // ========================= key model =========================
+            // Normalized object: { type, algName, comment, pubBlob, hasPrivate, format, ...components }
+            // RSA components are stored as mpint byte arrays: n,e,d,iqmp,p,q
+            // EC:  { curve, Q (raw point bytes), d (mpint) }
+            // Ed:  { pub (32), seed (32) }
+
+            function buildRsaPub(e, n) {
+                return wire().str(te.encode('ssh-rsa')).str(e).str(n).build();
+            }
+            function buildEcPub(curve, Q) {
+                return wire().str(te.encode('ecdsa-sha2-' + curve)).str(te.encode(curve)).str(Q).build();
+            }
+            function buildEdPub(pub) {
+                return wire().str(te.encode('ssh-ed25519')).str(pub).build();
+            }
+
+            // ---- PEM helpers ----
+            function findPem(text, label) {
+                const re = new RegExp('-----BEGIN ' + label + '-----([\\s\\S]*?)-----END ' + label + '-----');
+                const m = text.match(re);
+                return m ? b64decode(m[1]) : null;
+            }
+            function isEncryptedPem(text) {
+                return /Proc-Type:\s*4,ENCRYPTED/i.test(text) ||
+                    /-----BEGIN ENCRYPTED PRIVATE KEY-----/.test(text);
+            }
+
+            // ---- parse a PKCS#1 RSAPrivateKey (also inner of PKCS#8 RSA) ----
+            function parsePkcs1(der) {
+                const seq = derParse(der);
+                const c = derChildren(seq);
+                // version, n, e, d, p, q, dmp1, dmq1, iqmp
+                const n = toMpint(c[1].content), e = toMpint(c[2].content), d = toMpint(c[3].content);
+                const p = toMpint(c[4].content), q = toMpint(c[5].content), iqmp = toMpint(c[8].content);
+                return {
+                    type: 'rsa', algName: 'ssh-rsa', hasPrivate: true,
+                    n, e, d, p, q, iqmp, pubBlob: buildRsaPub(e, n)
+                };
+            }
+
+            // ---- parse a SEC1 ECPrivateKey (also inner of PKCS#8 EC) ----
+            function parseSec1(der, curveHint) {
+                const seq = derParse(der);
+                const c = derChildren(seq);
+                let priv = null, curve = curveHint || null, Q = null;
+                priv = c[1].content; // OCTET STRING, raw scalar
+                for (let i = 2; i < c.length; i++) {
+                    if (c[i].tag === 0xa0) { // [0] parameters
+                        const oidNode = derParse(c[i].content);
+                        curve = CURVE_BY_OID[derOidString(oidNode.content)] || curve;
+                    } else if (c[i].tag === 0xa1) { // [1] publicKey BIT STRING
+                        const bs = derParse(c[i].content);
+                        Q = bs.content.subarray(1); // drop unused-bits byte
+                    }
+                }
+                if (!curve) throw new Error('Unsupported or unnamed EC curve.');
+                if (!Q) throw new Error('EC key has no embedded public point; cannot derive it.');
+                return {
+                    type: 'ecdsa', algName: 'ecdsa-sha2-' + curve, hasPrivate: true,
+                    curve, Q: Q.slice(), d: toMpint(priv), pubBlob: buildEcPub(curve, Q.slice())
+                };
+            }
+
+            // ---- parse PKCS#8 PrivateKeyInfo ----
+            function parsePkcs8(der) {
+                const seq = derParse(der);
+                const c = derChildren(seq);
+                const algSeq = c[1];
+                const algChildren = derChildren(algSeq);
+                const oid = derOidString(algChildren[0].content);
+                const inner = c[2].content; // OCTET STRING
+                if (oid === OID_RSA) return parsePkcs1(inner);
+                if (oid === OID_EC) {
+                    let curve = null;
+                    if (algChildren[1] && algChildren[1].tag === 0x06) curve = CURVE_BY_OID[derOidString(algChildren[1].content)];
+                    return parseSec1(inner, curve);
+                }
+                if (oid === OID_ED25519) {
+                    // inner is OCTET STRING wrapping the 32-byte seed. No public key present.
+                    const seedNode = derParse(inner);
+                    throw new Error('Ed25519 PKCS#8 keys omit the public key, which cannot be derived here. ' +
+                        'Use an OpenSSH-format Ed25519 key instead.');
+                }
+                throw new Error('Unsupported PKCS#8 key algorithm (OID ' + oid + ').');
+            }
+
+            // ---- parse OpenSSH new-format private key ----
+            function parseOpenssh(der) {
+                const magic = td.decode(der.subarray(0, 15));
+                if (magic !== 'openssh-key-v1\0') throw new Error('Not an OpenSSH v1 private key.');
+                const r = wireReader(der.subarray(15));
+                const cipher = td.decode(r.str());
+                const kdf = td.decode(r.str());
+                r.str(); // kdf options
+                const nkeys = r.u32();
+                if (cipher !== 'none' || kdf !== 'none') {
+                    throw new Error('This OpenSSH key is encrypted. Decrypt it first (ssh-keygen -p).');
+                }
+                const pubBlob = r.str();
+                const privSection = r.str();
+                const pr = wireReader(privSection);
+                const c1 = pr.u32(), c2 = pr.u32();
+                if (c1 !== c2) throw new Error('OpenSSH key checksum mismatch (wrong passphrase or corrupt).');
+                const keytype = td.decode(pr.str());
+
+                if (keytype === 'ssh-rsa') {
+                    const n = pr.str(), e = pr.str(), d = pr.str(), iqmp = pr.str(), p = pr.str(), q = pr.str();
+                    const comment = td.decode(pr.str());
+                    return {
+                        type: 'rsa', algName: 'ssh-rsa', hasPrivate: true, comment,
+                        n: toMpint(n), e: toMpint(e), d: toMpint(d), iqmp: toMpint(iqmp),
+                        p: toMpint(p), q: toMpint(q), pubBlob
+                    };
+                }
+                if (keytype === 'ssh-ed25519') {
+                    const pub = pr.str();       // 32
+                    const priv = pr.str();      // 64 = seed || pub
+                    const comment = td.decode(pr.str());
+                    return {
+                        type: 'ed25519', algName: 'ssh-ed25519', hasPrivate: true, comment,
+                        pub: pub.slice(), seed: priv.subarray(0, 32).slice(), pubBlob
+                    };
+                }
+                if (keytype.indexOf('ecdsa-sha2-') === 0) {
+                    const curve = td.decode(pr.str());
+                    const Q = pr.str();
+                    const d = pr.str();
+                    const comment = td.decode(pr.str());
+                    return {
+                        type: 'ecdsa', algName: keytype, hasPrivate: true, comment,
+                        curve, Q: Q.slice(), d: toMpint(d), pubBlob
+                    };
+                }
+                throw new Error('Unsupported OpenSSH key type: ' + keytype);
+            }
+
+            // ---- parse PuTTY .ppk ----
+            function parsePpk(text) {
+                const lines = text.split(/\r?\n/);
+                const hdr = {};
+                let pub = [], priv = [], mode = null, rem = 0;
+                for (const line of lines) {
+                    let m;
+                    if (m = line.match(/^PuTTY-User-Key-File-(\d+):\s*(.+)$/)) { hdr.version = +m[1]; hdr.alg = m[2].trim(); mode = null; }
+                    else if (m = line.match(/^Encryption:\s*(.+)$/)) { hdr.enc = m[1].trim(); }
+                    else if (m = line.match(/^Comment:\s*(.*)$/)) { hdr.comment = m[1]; }
+                    else if (m = line.match(/^Public-Lines:\s*(\d+)$/)) { mode = 'pub'; rem = +m[1]; }
+                    else if (m = line.match(/^Private-Lines:\s*(\d+)$/)) { mode = 'priv'; rem = +m[1]; }
+                    else if (line.match(/^Private-MAC:/)) { mode = null; }
+                    else if (mode === 'pub' && rem > 0) { pub.push(line.trim()); rem--; }
+                    else if (mode === 'priv' && rem > 0) { priv.push(line.trim()); rem--; }
+                }
+                if (hdr.enc && hdr.enc !== 'none') {
+                    throw new Error('This .ppk is passphrase-encrypted. Remove the passphrase in PuTTYgen first.');
+                }
+                const pubBlob = b64decode(pub.join(''));
+                const privBlob = b64decode(priv.join(''));
+                const alg = hdr.alg;
+                const pr = wireReader(privBlob);
+                const rPub = wireReader(pubBlob);
+                rPub.str(); // alg name in pub blob
+
+                if (alg === 'ssh-rsa') {
+                    const e = toMpint(rPub.str()), n = toMpint(rPub.str());
+                    const d = pr.str(), p = pr.str(), q = pr.str(), iqmp = pr.str();
+                    return {
+                        type: 'rsa', algName: 'ssh-rsa', hasPrivate: true, comment: hdr.comment || '',
+                        n, e, d: toMpint(d), p: toMpint(p), q: toMpint(q), iqmp: toMpint(iqmp), pubBlob
+                    };
+                }
+                if (alg === 'ssh-ed25519') {
+                    const pub = rPub.str();
+                    const seed = pr.str();
+                    return {
+                        type: 'ed25519', algName: 'ssh-ed25519', hasPrivate: true, comment: hdr.comment || '',
+                        pub: pub.slice(), seed: seed.subarray(0, 32).slice(), pubBlob
+                    };
+                }
+                if (alg.indexOf('ecdsa-sha2-') === 0) {
+                    const curve = td.decode(rPub.str());
+                    const Q = rPub.str();
+                    const d = pr.str();
+                    return {
+                        type: 'ecdsa', algName: alg, hasPrivate: true, comment: hdr.comment || '',
+                        curve, Q: Q.slice(), d: toMpint(d), pubBlob
+                    };
+                }
+                throw new Error('Unsupported .ppk key type: ' + alg);
+            }
+
+            // ---- top-level detect + parse ----
+            function parseKey(text) {
+                if (/PuTTY-User-Key-File-/.test(text)) return { ...parsePpk(text), format: 'PuTTY .ppk' };
+                if (isEncryptedPem(text)) throw new Error('This key is passphrase-encrypted. Decrypt it first, then retry.');
+                let der;
+                if (der = findPem(text, 'OPENSSH PRIVATE KEY')) return { ...parseOpenssh(der), format: 'OpenSSH' };
+                if (der = findPem(text, 'RSA PRIVATE KEY')) return { ...parsePkcs1(der), format: 'PKCS#1 (PEM)' };
+                if (der = findPem(text, 'EC PRIVATE KEY')) return { ...parseSec1(der), format: 'SEC1 (PEM)' };
+                if (der = findPem(text, 'PRIVATE KEY')) return { ...parsePkcs8(der), format: 'PKCS#8 (PEM)' };
+                throw new Error('No recognizable private key found. Expected a PEM (-----BEGIN … PRIVATE KEY-----) or a PuTTY .ppk.');
+            }
+
+            // ========================= writers =========================
+            function pubLine(key, comment) {
+                return key.algName + ' ' + b64encode(key.pubBlob) + (comment ? ' ' + comment : '');
+            }
+
+            // OpenSSH new-format private key (unencrypted).
+            function buildOpensshPem(key, comment) {
+                const rnd = new Uint8Array(4);
+                crypto.getRandomValues(rnd);
+                const priv = wire();
+                priv.raw(rnd).raw(rnd); // check1 == check2
+
+                if (key.type === 'rsa') {
+                    priv.str(te.encode('ssh-rsa')).str(key.n).str(key.e).str(key.d).str(key.iqmp).str(key.p).str(key.q);
+                } else if (key.type === 'ed25519') {
+                    priv.str(te.encode('ssh-ed25519')).str(key.pub).str(concat([key.seed, key.pub]));
+                } else if (key.type === 'ecdsa') {
+                    priv.str(te.encode(key.algName)).str(te.encode(key.curve)).str(key.Q).str(key.d);
+                }
+                priv.str(te.encode(comment || ''));
+
+                let privBody = priv.build();
+                // pad to 8-byte blocks with 1,2,3,...
+                const pad = (8 - (privBody.length % 8)) % 8;
+                if (pad) {
+                    const pb = new Uint8Array(pad);
+                    for (let i = 0; i < pad; i++) pb[i] = i + 1;
+                    privBody = concat([privBody, pb]);
+                }
+
+                const body = wire()
+                    .raw(te.encode('openssh-key-v1\0'))
+                    .str(te.encode('none'))     // cipher
+                    .str(te.encode('none'))     // kdf
+                    .str(new Uint8Array(0))     // kdf options
+                    .u32(1)                     // n keys
+                    .str(key.pubBlob)
+                    .str(privBody)
+                    .build();
+
+                const b64 = b64wrap(b64encode(body), 70);
+                return '-----BEGIN OPENSSH PRIVATE KEY-----\n' + b64 + '\n-----END OPENSSH PRIVATE KEY-----\n';
+            }
+
+            // ---- HMAC built on SubtleCrypto.digest (avoids importKey empty-key quirks) ----
+            async function hmac(hashName, blockSize, key, msg) {
+                let k = key;
+                if (k.length > blockSize) k = new Uint8Array(await crypto.subtle.digest(hashName, k));
+                if (k.length < blockSize) { const t = new Uint8Array(blockSize); t.set(k); k = t; }
+                const ipad = new Uint8Array(blockSize), opad = new Uint8Array(blockSize);
+                for (let i = 0; i < blockSize; i++) { ipad[i] = k[i] ^ 0x36; opad[i] = k[i] ^ 0x5c; }
+                const inner = new Uint8Array(await crypto.subtle.digest(hashName, concat([ipad, msg])));
+                return new Uint8Array(await crypto.subtle.digest(hashName, concat([opad, inner])));
+            }
+            function toHex(bytes) {
+                let s = '';
+                for (let i = 0; i < bytes.length; i++) s += bytes[i].toString(16).padStart(2, '0');
+                return s;
+            }
+
+            // PuTTY .ppk (v2 or v3, unencrypted).
+            async function buildPpk(key, comment, version) {
+                const alg = key.algName;
+                let privBlob;
+                if (key.type === 'rsa') {
+                    privBlob = wire().str(key.d).str(key.p).str(key.q).str(key.iqmp).build();
+                } else if (key.type === 'ed25519') {
+                    privBlob = wire().str(key.seed).build();
+                } else if (key.type === 'ecdsa') {
+                    privBlob = wire().str(key.d).build();
+                }
+                const enc = 'none';
+                const cmt = comment || '';
+
+                const macData = wire()
+                    .str(te.encode(alg))
+                    .str(te.encode(enc))
+                    .str(te.encode(cmt))
+                    .str(key.pubBlob)
+                    .str(privBlob)
+                    .build();
+
+                let mac;
+                if (version === 2) {
+                    const macKey = new Uint8Array(await crypto.subtle.digest('SHA-1',
+                        te.encode('putty-private-key-file-mac-key')));
+                    mac = toHex(await hmac('SHA-1', 64, macKey, macData));
+                } else {
+                    mac = toHex(await hmac('SHA-256', 64, new Uint8Array(0), macData));
+                }
+
+                const pubB64 = b64wrap(b64encode(key.pubBlob), 64).split('\n');
+                const privB64 = b64wrap(b64encode(privBlob), 64).split('\n');
+                const lines = [];
+                lines.push('PuTTY-User-Key-File-' + version + ': ' + alg);
+                lines.push('Encryption: ' + enc);
+                lines.push('Comment: ' + cmt);
+                lines.push('Public-Lines: ' + pubB64.length);
+                pubB64.forEach(l => lines.push(l));
+                if (version === 3) {
+                    // Unencrypted v3 has no Argon2 key-derivation header.
+                }
+                lines.push('Private-Lines: ' + privB64.length);
+                privB64.forEach(l => lines.push(l));
+                lines.push('Private-MAC: ' + mac);
+                return lines.join('\n') + '\n';
+            }
+
+            async function fingerprint(pubBlob) {
+                const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', pubBlob));
+                return 'SHA256:' + b64encode(digest).replace(/=+$/, '');
+            }
+
+            // ========================= UI =========================
+            const dropZone = document.getElementById('sk-drop-zone');
+            const fileInput = document.getElementById('sk-file-input');
+            const input = document.getElementById('sk-input');
+            const commentInput = document.getElementById('sk-comment');
+            const statusEl = document.getElementById('sk-status');
+            const errorEl = document.getElementById('sk-error');
+            const resultsEl = document.getElementById('sk-results');
+            const badgesEl = document.getElementById('sk-badges');
+            const pubEl = document.getElementById('sk-pub');
+            const fpEl = document.getElementById('sk-fp');
+            const privBlock = document.getElementById('sk-priv-block');
+            const ppkVer = document.getElementById('sk-ppk-ver');
+            let ppkVersion = 3;
+            ppkVer.querySelectorAll('button').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    ppkVersion = parseInt(btn.dataset.ver, 10);
+                    ppkVer.querySelectorAll('button').forEach(b => b.classList.toggle('active', b === btn));
+                });
+            });
+
+            let currentKey = null;
+
+            function showError(msg) {
+                currentKey = null;
+                resultsEl.classList.add('hidden');
+                errorEl.textContent = msg;
+                errorEl.classList.remove('hidden');
+                statusEl.textContent = 'Could not read the key.';
+            }
+
+            async function refresh() {
+                const text = input.value.trim();
+                if (!text) {
+                    errorEl.classList.add('hidden');
+                    resultsEl.classList.add('hidden');
+                    statusEl.textContent = 'Load a key to begin.';
+                    currentKey = null;
+                    return;
+                }
+                let key;
+                try {
+                    key = parseKey(text);
+                } catch (e) {
+                    showError(e.message || String(e));
+                    return;
+                }
+                currentKey = key;
+                errorEl.classList.add('hidden');
+                resultsEl.classList.remove('hidden');
+                statusEl.textContent = 'Parsed successfully.';
+
+                // comment: prefer user edit if they've typed one, else the key's own comment
+                if (document.activeElement !== commentInput) {
+                    commentInput.value = key.comment || '';
+                }
+                const comment = commentInput.value.trim();
+
+                const typeLabel = key.type === 'rsa' ? 'RSA'
+                    : key.type === 'ed25519' ? 'Ed25519'
+                        : (key.curve ? key.curve.replace('nistp', 'ECDSA P-') : 'ECDSA');
+                badgesEl.innerHTML =
+                    '<span class="sk-badge">' + typeLabel + '</span>' +
+                    '<span class="sk-badge muted">' + key.format + '</span>' +
+                    (key.hasPrivate ? '<span class="sk-badge muted">has private key</span>' : '');
+
+                pubEl.value = pubLine(key, comment);
+                fpEl.textContent = await fingerprint(key.pubBlob);
+                privBlock.classList.toggle('hidden', !key.hasPrivate);
+            }
+
+            // debounce input a little
+            let t = null;
+            input.addEventListener('input', () => { clearTimeout(t); t = setTimeout(refresh, 120); });
+            commentInput.addEventListener('input', () => { if (currentKey) refresh(); });
+
+            function loadFileText(file) {
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = e => { input.value = e.target.result; refresh(); };
+                reader.readAsText(file);
+            }
+            dropZone.addEventListener('click', () => fileInput.click());
+            fileInput.addEventListener('change', e => loadFileText(e.target.files[0]));
+            dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
+            dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+            dropZone.addEventListener('drop', e => {
+                e.preventDefault();
+                dropZone.classList.remove('dragover');
+                loadFileText(e.dataTransfer.files[0]);
+            });
+
+            function download(filename, text) {
+                const url = URL.createObjectURL(new Blob([text], { type: 'text/plain' }));
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                a.click();
+                setTimeout(() => URL.revokeObjectURL(url), 4000);
+            }
+            function baseName() {
+                const c = (commentInput.value.trim() || 'id_' + (currentKey ? currentKey.type : 'key'))
+                    .replace(/[^\w.\-]+/g, '_').replace(/^_+|_+$/g, '');
+                return c || 'id_key';
+            }
+
+            document.getElementById('sk-pub-copy').addEventListener('click', () => {
+                navigator.clipboard.writeText(pubEl.value)
+                    .then(() => window.showToast && window.showToast('Public key copied'))
+                    .catch(() => window.showToast && window.showToast('Copy failed', true));
+            });
+            document.getElementById('sk-pub-dl').addEventListener('click', () => {
+                download(baseName() + '.pub', pubEl.value + '\n');
+            });
+            document.getElementById('sk-dl-pem').addEventListener('click', () => {
+                if (!currentKey) return;
+                try {
+                    download(baseName() + '.pem', buildOpensshPem(currentKey, commentInput.value.trim()));
+                    window.showToast && window.showToast('OpenSSH private key saved');
+                } catch (e) { window.showToast && window.showToast(e.message, true); }
+            });
+            document.getElementById('sk-dl-ppk').addEventListener('click', async () => {
+                if (!currentKey) return;
+                try {
+                    const ppk = await buildPpk(currentKey, commentInput.value.trim(), ppkVersion);
+                    download(baseName() + '.ppk', ppk);
+                    window.showToast && window.showToast('PuTTY .ppk saved');
+                } catch (e) { window.showToast && window.showToast(e.message, true); }
+            });
+
+            // Paste routes to the textarea automatically (native), nothing extra needed.
+        });
+    </script>
+</body>
+
+</html>

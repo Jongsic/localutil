@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
+    <title>Text Diff / Compare Tool — LocalUtil</title>
+    <!-- social / favicon -->
+    <meta name="description" content="Compare two texts side by side and highlight the differences. Runs 100% in your browser — nothing is uploaded.">
+    <link rel="canonical" href="https://jongsic.github.io/localutil/diff.html">
+    <link rel="icon" href="favicon.ico" sizes="any">
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="LocalUtil">
+    <meta property="og:title" content="Text Diff / Compare Tool — LocalUtil">
+    <meta property="og:description" content="Compare two texts side by side and highlight the differences. Runs 100% in your browser — nothing is uploaded.">
+    <meta property="og:image" content="https://jongsic.github.io/localutil/og.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:url" content="https://jongsic.github.io/localutil/diff.html">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:image" content="https://jongsic.github.io/localutil/og.png">
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebApplication","name":"Text Diff / Compare Tool","url":"https://jongsic.github.io/localutil/diff.html","description":"Compare two texts side by side and highlight the differences. Runs 100% in your browser — nothing is uploaded.","applicationCategory":"DeveloperApplication","operatingSystem":"Any","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"isPartOf":{"@type":"WebSite","name":"LocalUtil","url":"https://jongsic.github.io/localutil/"}}</script>
+    <!-- /social -->
+    <script src="theme-init.js"></script>
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        .diff-toolbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            flex-wrap: wrap;
+            padding: 16px 18px;
+        }
+        .diff-options { display: flex; gap: 18px; flex-wrap: wrap; align-items: center; }
+        .diff-options label { display: inline-flex; align-items: center; gap: 7px; margin: 0; font-weight: 500; cursor: pointer; }
+        .diff-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+
+        #tool-diff .pane textarea { min-height: 200px; }
+
+        .diff-result {
+            margin-top: 16px;
+            border: 1px solid var(--border-color);
+            border-radius: var(--r-md);
+            overflow: hidden;
+            background: var(--bg-content);
+            box-shadow: var(--shadow-sm);
+        }
+        .diff-summary {
+            display: flex;
+            gap: 18px;
+            align-items: center;
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--border-color);
+            font-size: 0.85rem;
+            font-weight: 600;
+            flex-wrap: wrap;
+        }
+        .diff-summary .add { color: var(--success); }
+        .diff-summary .del { color: var(--danger); }
+        .diff-summary .same { color: var(--text-muted); }
+
+        .diff-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-family: var(--font-mono);
+            font-size: 0.82rem;
+            line-height: 1.55;
+        }
+        .diff-table td { padding: 1px 10px; vertical-align: top; white-space: pre-wrap; word-break: break-word; }
+        .diff-num {
+            width: 1%;
+            text-align: right;
+            color: var(--text-faint);
+            user-select: none;
+            background: var(--bg-subtle);
+            border-right: 1px solid var(--border-color);
+            padding-left: 12px;
+            padding-right: 12px;
+        }
+        .diff-side { width: 50%; border-right: 1px solid var(--border-color); }
+        td.diff-side:last-child { border-right: none; }
+        .row-add .diff-side.new, .row-add .diff-num.new { background: rgba(62, 207, 127, 0.14); }
+        .row-del .diff-side.old, .row-del .diff-num.old { background: rgba(229, 72, 77, 0.14); }
+        .row-chg .diff-side.old, .row-chg .diff-num.old { background: rgba(229, 72, 77, 0.12); }
+        .row-chg .diff-side.new, .row-chg .diff-num.new { background: rgba(62, 207, 127, 0.12); }
+        .cell-empty { background: repeating-linear-gradient(45deg, transparent, transparent 6px, var(--bg-subtle) 6px, var(--bg-subtle) 12px); }
+
+        .diff-empty { padding: 28px 16px; text-align: center; color: var(--text-faint); }
+    </style>
+</head>
+
+<body>
+    <div class="app-container">
+        <aside class="sidebar" id="app-sidebar"></aside>
+
+        <main class="main-content">
+            <header class="topbar" id="app-topbar">
+                <div class="topbar-title">
+                    <h1 id="current-tool-title">Diff / Compare</h1>
+                    <p id="current-tool-desc" class="topbar-desc">Compare two texts side by side</p>
+                </div>
+            </header>
+
+            <div class="tools-container">
+                <section id="tool-diff" class="tool-section active">
+                    <div class="diff-toolbar card">
+                        <div class="diff-options">
+                            <label><input type="checkbox" id="diff-trim"> Ignore leading/trailing whitespace</label>
+                            <label><input type="checkbox" id="diff-case"> Ignore case</label>
+                        </div>
+                        <div class="diff-actions">
+                            <button id="btn-diff-run" class="btn btn-primary">Compare</button>
+                            <button id="btn-diff-swap" class="btn">Swap</button>
+                            <button id="btn-diff-clear" class="btn">Clear</button>
+                        </div>
+                    </div>
+
+                    <div class="split-pane">
+                        <div class="pane">
+                            <label for="diff-a">Original</label>
+                            <div class="field-hint">Paste the first version.</div>
+                            <textarea id="diff-a" placeholder="Original text…"></textarea>
+                        </div>
+                        <div class="pane">
+                            <label for="diff-b">Changed</label>
+                            <div class="field-hint">Paste the second version.</div>
+                            <textarea id="diff-b" placeholder="Changed text…"></textarea>
+                        </div>
+                    </div>
+
+                    <div class="diff-result" id="diff-result">
+                        <div class="diff-empty">Paste text on both sides and press <strong>Compare</strong>.</div>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </div>
+
+    <div id="toast" class="toast">Copied to clipboard!</div>
+
+    <script src="app.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const a = document.getElementById('diff-a');
+            const b = document.getElementById('diff-b');
+            const result = document.getElementById('diff-result');
+            const optTrim = document.getElementById('diff-trim');
+            const optCase = document.getElementById('diff-case');
+
+            // Normalize a line for *comparison* only — the original text is still displayed.
+            function norm(line) {
+                let s = line;
+                if (optTrim.checked) s = s.trim();
+                if (optCase.checked) s = s.toLowerCase();
+                return s;
+            }
+
+            // Classic LCS over lines → an ordered list of ops: eq / del / ins.
+            function lcsDiff(oldLines, newLines) {
+                const n = oldLines.length, m = newLines.length;
+                const dp = Array.from({ length: n + 1 }, () => new Uint32Array(m + 1));
+                for (let i = n - 1; i >= 0; i--) {
+                    for (let j = m - 1; j >= 0; j--) {
+                        dp[i][j] = norm(oldLines[i]) === norm(newLines[j])
+                            ? dp[i + 1][j + 1] + 1
+                            : Math.max(dp[i + 1][j], dp[i][j + 1]);
+                    }
+                }
+                const ops = [];
+                let i = 0, j = 0;
+                while (i < n && j < m) {
+                    if (norm(oldLines[i]) === norm(newLines[j])) {
+                        ops.push({ t: 'eq', o: oldLines[i], nw: newLines[j] }); i++; j++;
+                    } else if (dp[i + 1][j] >= dp[i][j + 1]) {
+                        ops.push({ t: 'del', o: oldLines[i] }); i++;
+                    } else {
+                        ops.push({ t: 'ins', nw: newLines[j] }); j++;
+                    }
+                }
+                while (i < n) { ops.push({ t: 'del', o: oldLines[i] }); i++; }
+                while (j < m) { ops.push({ t: 'ins', nw: newLines[j] }); j++; }
+                return ops;
+            }
+
+            // Pair consecutive del/ins runs into side-by-side "changed" rows.
+            function toRows(ops) {
+                const rows = [];
+                let oldNo = 0, newNo = 0, k = 0;
+                while (k < ops.length) {
+                    const op = ops[k];
+                    if (op.t === 'eq') {
+                        rows.push({ type: 'eq', oldNo: ++oldNo, newNo: ++newNo, oldLine: op.o, newLine: op.nw });
+                        k++;
+                        continue;
+                    }
+                    const dels = [], inss = [];
+                    while (k < ops.length && ops[k].t !== 'eq') {
+                        if (ops[k].t === 'del') dels.push(ops[k].o); else inss.push(ops[k].nw);
+                        k++;
+                    }
+                    const max = Math.max(dels.length, inss.length);
+                    for (let r = 0; r < max; r++) {
+                        const hasOld = r < dels.length, hasNew = r < inss.length;
+                        rows.push({
+                            type: hasOld && hasNew ? 'chg' : (hasOld ? 'del' : 'ins'),
+                            oldNo: hasOld ? ++oldNo : null,
+                            newNo: hasNew ? ++newNo : null,
+                            oldLine: hasOld ? dels[r] : null,
+                            newLine: hasNew ? inss[r] : null
+                        });
+                    }
+                }
+                return rows;
+            }
+
+            function esc(s) {
+                return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            }
+
+            function run() {
+                const oldLines = a.value.split('\n');
+                const newLines = b.value.split('\n');
+                if (!a.value && !b.value) {
+                    result.innerHTML = '<div class="diff-empty">Paste text on both sides and press <strong>Compare</strong>.</div>';
+                    return;
+                }
+                const rows = toRows(lcsDiff(oldLines, newLines));
+                let added = 0, removed = 0, same = 0;
+                let body = '';
+                rows.forEach(row => {
+                    if (row.type === 'eq') same++;
+                    else if (row.type === 'del') removed++;
+                    else if (row.type === 'ins') added++;
+                    else { added++; removed++; }
+
+                    const rowClass = 'row-' + row.type;
+                    const oldCell = row.oldLine === null
+                        ? '<td class="diff-num old"></td><td class="diff-side old cell-empty"></td>'
+                        : '<td class="diff-num old">' + row.oldNo + '</td><td class="diff-side old">' + esc(row.oldLine) + '</td>';
+                    const newCell = row.newLine === null
+                        ? '<td class="diff-num new"></td><td class="diff-side new cell-empty"></td>'
+                        : '<td class="diff-num new">' + row.newNo + '</td><td class="diff-side new">' + esc(row.newLine) + '</td>';
+                    body += '<tr class="' + rowClass + '">' + oldCell + newCell + '</tr>';
+                });
+
+                const identical = added === 0 && removed === 0;
+                result.innerHTML =
+                    '<div class="diff-summary">' +
+                    (identical ? '<span class="same">Files are identical</span>' :
+                        '<span class="add">+' + added + ' added</span>' +
+                        '<span class="del">−' + removed + ' removed</span>' +
+                        '<span class="same">' + same + ' unchanged</span>') +
+                    '</div>' +
+                    '<div style="overflow:auto;"><table class="diff-table"><tbody>' + body + '</tbody></table></div>';
+            }
+
+            document.getElementById('btn-diff-run').addEventListener('click', run);
+            document.getElementById('btn-diff-clear').addEventListener('click', () => {
+                a.value = ''; b.value = '';
+                result.innerHTML = '<div class="diff-empty">Paste text on both sides and press <strong>Compare</strong>.</div>';
+                a.focus();
+            });
+            document.getElementById('btn-diff-swap').addEventListener('click', () => {
+                const t = a.value; a.value = b.value; b.value = t; run();
+            });
+            optTrim.addEventListener('change', run);
+            optCase.addEventListener('change', run);
+        });
+    </script>
+</body>
+
+</html>

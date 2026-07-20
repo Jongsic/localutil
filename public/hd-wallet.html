@@ -1,0 +1,817 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
+    <title>HD Wallet Deriver (BIP-39 Seed Phrase) — LocalUtil</title>
+    <!-- social / favicon -->
+    <meta name="description" content="Derive HD wallet accounts from a BIP-39 seed phrase or raw hex root key: addresses, public and private keys. Runs 100% in your browser — keys never leave your machine.">
+    <link rel="canonical" href="https://jongsic.github.io/localutil/hd-wallet.html">
+    <link rel="icon" href="favicon.ico" sizes="any">
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="LocalUtil">
+    <meta property="og:title" content="HD Wallet Deriver (BIP-39 Seed Phrase) — LocalUtil">
+    <meta property="og:description" content="Derive HD wallet accounts from a BIP-39 seed phrase or raw hex root key: addresses, public and private keys. Runs 100% in your browser — keys never leave your machine.">
+    <meta property="og:image" content="https://jongsic.github.io/localutil/og.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:url" content="https://jongsic.github.io/localutil/hd-wallet.html">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:image" content="https://jongsic.github.io/localutil/og.png">
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebApplication","name":"HD Wallet Deriver (BIP-39 Seed Phrase)","url":"https://jongsic.github.io/localutil/hd-wallet.html","description":"Derive HD wallet accounts from a BIP-39 seed phrase or raw hex root key: addresses, public and private keys. Runs 100% in your browser — keys never leave your machine.","applicationCategory":"DeveloperApplication","operatingSystem":"Any","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"isPartOf":{"@type":"WebSite","name":"LocalUtil","url":"https://jongsic.github.io/localutil/"}}</script>
+    <!-- /social -->
+    <script src="theme-init.js"></script>
+    <link rel="stylesheet" href="styles.css">
+    <script src="vendor/ethers.umd.min.js"></script>
+    <style>
+        /* -- Web3 wallet: page-specific styling built on the shared design tokens -- */
+
+        /* Preset chips */
+        .hd-preset-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        .hd-preset {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 12px;
+            border: 1px solid var(--border-color);
+            border-radius: var(--r-pill);
+            background: var(--bg-subtle);
+            color: var(--text-muted);
+            font-size: 0.8rem;
+            font-weight: 550;
+            text-decoration: none;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        .hd-preset:hover {
+            border-color: var(--border-strong);
+            color: var(--text-main);
+            background: var(--bg-hover);
+        }
+        .hd-preset.active {
+            border-color: var(--primary);
+            background: var(--primary);
+            color: #fff;
+            font-weight: 700;
+            box-shadow: 0 0 0 3px var(--primary-ring);
+        }
+        .hd-preset.active:hover {
+            background: var(--primary-hover);
+            color: #fff;
+        }
+
+        /* Inline callouts */
+        .hd-callout {
+            padding: 11px 14px;
+            border-radius: var(--r-sm);
+            font-size: 0.85rem;
+            line-height: 1.5;
+            border: 1px solid;
+        }
+        .hd-callout.warn {
+            border-color: var(--warning);
+            color: var(--warning);
+            background: color-mix(in srgb, var(--warning) 10%, transparent);
+        }
+        .hd-callout.error {
+            border-color: var(--danger);
+            color: var(--danger);
+            background: color-mix(in srgb, var(--danger) 10%, transparent);
+        }
+        .hd-callout.info {
+            border-color: var(--primary);
+            color: var(--primary);
+            background: color-mix(in srgb, var(--primary) 8%, transparent);
+        }
+
+        /* Summary key/value rows */
+        .hd-kv {
+            display: flex;
+            gap: 14px;
+            padding: 9px 0;
+            border-bottom: 1px solid var(--border-color);
+            align-items: flex-start;
+        }
+        .hd-kv:last-child { border-bottom: 0; }
+        .hd-kv-key {
+            flex: 0 0 180px;
+            color: var(--text-muted);
+            font-size: 0.78rem;
+            font-weight: 600;
+        }
+        .hd-kv-val {
+            flex: 1;
+            min-width: 0;
+            display: flex;
+            align-items: flex-start;
+            gap: 8px;
+            font-family: var(--font-mono);
+            font-size: 0.82rem;
+            word-break: break-all;
+        }
+        .hd-kv-val > span { flex: 1; min-width: 0; }
+
+        /* Derivation-step cards */
+        .hd-step {
+            display: flex;
+            gap: 12px;
+            padding: 12px 0;
+            border-bottom: 1px solid var(--border-color);
+        }
+        .hd-step:last-child { border-bottom: 0; }
+        .hd-step-num {
+            flex: 0 0 26px;
+            height: 26px;
+            border-radius: 50%;
+            background: var(--primary-soft);
+            color: var(--primary);
+            font-size: 0.8rem;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-top: 1px;
+        }
+        .hd-step-body { flex: 1; min-width: 0; }
+        .hd-step-title { font-size: 0.88rem; font-weight: 650; margin-bottom: 2px; }
+        .hd-step-desc { font-size: 0.78rem; color: var(--text-muted); margin-bottom: 6px; }
+        .hd-step-desc code { font-size: 0.74rem; }
+
+        /* Derived accounts table */
+        .hd-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.8rem;
+        }
+        .hd-table th {
+            text-align: left;
+            padding: 9px 10px;
+            border-bottom: 2px solid var(--border-color);
+            color: var(--text-muted);
+            font-weight: 600;
+            position: sticky;
+            top: 0;
+            background: var(--bg-content);
+            white-space: nowrap;
+        }
+        .hd-table td {
+            padding: 9px 10px;
+            border-bottom: 1px solid var(--border-color);
+            font-family: var(--font-mono);
+            word-break: break-all;
+            vertical-align: top;
+        }
+        .hd-table tbody tr:hover { background: var(--bg-hover); }
+        .hd-table tr.hd-match { background: var(--primary-soft) !important; }
+
+        .hd-secret { cursor: pointer; font-family: var(--font-mono); font-size: 0.8rem; word-break: break-all; }
+
+        /* Copy affordance shared by summary rows */
+        .hd-copy {
+            flex: 0 0 auto;
+            padding: 3px 8px;
+            font-size: 0.72rem;
+            line-height: 1.4;
+        }
+
+        @media (max-width: 640px) {
+            .hd-kv { flex-direction: column; gap: 4px; }
+            .hd-kv-key { flex: none; }
+        }
+        @media (max-width: 560px) {
+            /* Inline grid-template-columns on the form grids wins over the shared
+               mobile rule, so re-collapse them here. */
+            #tool-hd .form-grid { grid-template-columns: 1fr !important; }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar" id="app-sidebar"></aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <header class="topbar" id="app-topbar">
+                <div class="topbar-title">
+                    <h1 id="current-tool-title">Web3 Wallet</h1>
+                    <p id="current-tool-desc" class="topbar-desc">Create a root key from a seed phrase or raw hex, inspect addresses, derive HD accounts</p>
+                </div>
+            </header>
+
+            <div class="tools-container">
+                <section id="tool-hd" class="tool-section active">
+                    <div class="tool-shell">
+                        <!-- Input card -->
+                        <div class="card">
+                            <div class="card-title">Create a root private key</div>
+                            <div class="card-subtitle">Start from a BIP39 seed phrase, or bring a raw 32-byte hex key. Everything runs locally in your browser.</div>
+
+                            <div class="segmented mb-2" id="hd-mode">
+                                <button type="button" data-mode="seed" class="active">From seed phrase</button>
+                                <button type="button" data-mode="hex">From raw hex</button>
+                            </div>
+
+                            <!-- Seed phrase panel -->
+                            <div id="hd-panel-seed">
+                                <div class="field-group">
+                                    <label for="hd-mnemonic">Mnemonic words</label>
+                                    <textarea id="hd-mnemonic" rows="3"
+                                        placeholder="e.g. abandon abandon abandon … about"></textarea>
+                                    <div class="field-hint">Space-separated words. They don't have to be in the BIP39 wordlist — invalid phrases still derive keys (with a warning).</div>
+
+                                    <div class="section-title mt-2">Generate a new mnemonic</div>
+                                    <div class="field-hint mb-2">Creates a fresh BIP39 phrase using your browser's cryptographic RNG (<code>crypto.getRandomValues</code>).</div>
+                                    <div class="hd-preset-row" id="hd-word-presets">
+                                        <a href="#" data-words="12" class="hd-preset active">12 words</a>
+                                        <a href="#" data-words="15" class="hd-preset">15 words</a>
+                                        <a href="#" data-words="18" class="hd-preset">18 words</a>
+                                        <a href="#" data-words="21" class="hd-preset">21 words</a>
+                                        <a href="#" data-words="24" class="hd-preset">24 words</a>
+                                        <button id="btn-hd-random" class="btn btn-small" type="button" style="margin-left:6px;">🎲 Generate mnemonic</button>
+                                    </div>
+                                </div>
+
+                                <div class="form-grid mt-2" style="grid-template-columns: 1fr auto; align-items: end;">
+                                    <div class="field-group">
+                                        <label for="hd-passphrase">BIP39 passphrase (optional)</label>
+                                        <input type="text" id="hd-passphrase" placeholder="Extra passphrase / 25th word">
+                                        <div class="field-hint">Adds a hidden secret to the seed. Leave blank if you didn't set one.</div>
+                                    </div>
+                                    <button id="btn-hd-generate" class="btn btn-primary">Create root key</button>
+                                </div>
+                            </div>
+
+                            <!-- Raw hex panel -->
+                            <div id="hd-panel-hex" style="display:none;">
+                                <div class="field-group">
+                                    <label for="hd-hex">Private key (32-byte hex)</label>
+                                    <textarea id="hd-hex" rows="2" class="mono"
+                                        placeholder="0x… or bare hex — whitespace and the 0x prefix are handled for you"></textarea>
+                                    <div class="field-hint">64 hex characters (with or without <code>0x</code>). Whitespace and line breaks are stripped automatically.</div>
+                                </div>
+                                <div class="flex-row gap-1 wrap mt-2">
+                                    <button id="btn-hd-hex-random" class="btn" type="button">🎲 Random 32 bytes</button>
+                                    <button id="btn-hd-hex-use" class="btn btn-primary" type="button" style="margin-left:auto;">Create root key</button>
+                                </div>
+                            </div>
+
+                            <div id="hd-warn" class="hd-callout warn mt-2" style="display:none;"></div>
+                            <div id="hd-error" class="hd-callout error mt-2" style="display:none;"></div>
+                        </div>
+
+                        <!-- How the root key was made (populated by script) -->
+                        <div id="hd-steps-card" class="card" style="display:none;">
+                            <div class="card-title">How this root key was made</div>
+                            <div class="card-subtitle" id="hd-steps-subtitle"></div>
+                            <div id="hd-steps"></div>
+                        </div>
+
+                        <!-- Summary output cards (populated by script) -->
+                        <div id="hd-summary" class="flex-col gap-2" style="display:none;"></div>
+
+                        <!-- Derivation card -->
+                        <div id="hd-derive-panel" class="card" style="display:none;">
+                            <div class="card-title">Derive accounts</div>
+                            <div class="card-subtitle">Generate a sequence of child keys from a base derivation path. The account index is appended to the path as <code>/n</code>.</div>
+
+                            <div id="hd-derive-note" class="hd-callout info mb-2" style="display:none;"></div>
+
+                            <div class="section-title">Path presets</div>
+                            <div class="field-hint mb-2">Quick-fill the base path for common chains.</div>
+                            <div class="hd-preset-row mb-2">
+                                <a href="#" data-path="m/44'/60'/0'/0" class="hd-preset">ETH (BIP44)</a>
+                                <a href="#" data-path="m/44'/0'/0'/0" class="hd-preset">BTC Legacy</a>
+                                <a href="#" data-path="m/49'/0'/0'/0" class="hd-preset">BTC P2SH</a>
+                                <a href="#" data-path="m/84'/0'/0'/0" class="hd-preset">BTC Native</a>
+                            </div>
+
+                            <div class="form-grid" style="grid-template-columns: 1fr 120px auto; align-items: end;">
+                                <div class="field-group">
+                                    <label for="hd-path">Base derivation path</label>
+                                    <input type="text" id="hd-path" value="m/44'/60'/0'/0" class="mono">
+                                </div>
+                                <div class="field-group">
+                                    <label for="hd-count">Accounts</label>
+                                    <input type="number" id="hd-count" value="30" min="1" max="200">
+                                </div>
+                                <button id="btn-hd-derive" class="btn btn-primary">Derive</button>
+                            </div>
+
+                            <div class="field-row mt-2">
+                                <div class="field-label">
+                                    <label for="hd-show-secrets">Show all private keys</label>
+                                    <span class="field-hint">Reveal every private key in the table at once.</span>
+                                </div>
+                                <label class="switch"><input type="checkbox" id="hd-show-secrets"><span></span></label>
+                            </div>
+
+                            <div class="field-group mt-2">
+                                <label for="hd-filter">Search results</label>
+                                <div class="flex-row items-center" style="gap:12px;">
+                                    <input type="search" id="hd-filter" placeholder="Find an address or public key…" style="flex:1;">
+                                    <span id="hd-filter-count" class="text-xs text-muted" style="white-space:nowrap;"></span>
+                                </div>
+                            </div>
+
+                            <div id="hd-table-wrap" class="mt-2" style="overflow-x:auto;"></div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="toast">Copied to clipboard!</div>
+
+    <script src="app.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const mnemonicInput = document.getElementById('hd-mnemonic');
+            const passInput = document.getElementById('hd-passphrase');
+            const hexInput = document.getElementById('hd-hex');
+            const warnEl = document.getElementById('hd-warn');
+            const errEl = document.getElementById('hd-error');
+            const stepsCard = document.getElementById('hd-steps-card');
+            const stepsSubtitle = document.getElementById('hd-steps-subtitle');
+            const stepsEl = document.getElementById('hd-steps');
+            const summaryEl = document.getElementById('hd-summary');
+            const derivePanel = document.getElementById('hd-derive-panel');
+            const deriveNote = document.getElementById('hd-derive-note');
+            const pathInput = document.getElementById('hd-path');
+            const countInput = document.getElementById('hd-count');
+            const tableWrap = document.getElementById('hd-table-wrap');
+            const showSecrets = document.getElementById('hd-show-secrets');
+            const filterInput = document.getElementById('hd-filter');
+            const filterCount = document.getElementById('hd-filter-count');
+
+            let rootNode = null; // ethers HDNodeWallet used for the Derive accounts table
+
+            function showWarn(msg) { warnEl.textContent = msg; warnEl.style.display = msg ? 'block' : 'none'; }
+            function showErr(msg) { errEl.textContent = msg; errEl.style.display = msg ? 'block' : 'none'; }
+
+            // --- Mode switch -----------------------------------------------------
+            const modeButtons = document.querySelectorAll('#hd-mode button');
+            const panels = { seed: document.getElementById('hd-panel-seed'), hex: document.getElementById('hd-panel-hex') };
+            modeButtons.forEach(b => b.addEventListener('click', () => {
+                modeButtons.forEach(x => x.classList.toggle('active', x === b));
+                Object.entries(panels).forEach(([m, el]) => el.style.display = m === b.dataset.mode ? '' : 'none');
+            }));
+
+            // --- Bitcoin helpers -------------------------------------------------
+            function base58check(versionedHex) {
+                const checksum = ethers.sha256(ethers.sha256(versionedHex)).slice(2, 10);
+                const full = versionedHex + checksum;
+                const bytes = ethers.getBytes(full);
+                let leading = 0;
+                for (const b of bytes) { if (b === 0) leading++; else break; }
+                return '1'.repeat(leading) + ethers.encodeBase58(full);
+            }
+
+            // Legacy P2PKH address (starts with 1) from a compressed public key
+            function btcP2PKH(compressedPubKeyHex) {
+                const h = ethers.ripemd160(ethers.sha256(compressedPubKeyHex));
+                return base58check('0x00' + h.slice(2));
+            }
+
+            // WIF (compressed) from 32-byte private key hex
+            function btcWIF(privKeyHex) {
+                const body = '0x80' + privKeyHex.slice(2) + '01';
+                return base58check(body);
+            }
+
+            // --- Secret (click-to-reveal) cell ----------------------------------
+            function maskSecret(span) {
+                span.textContent = '•••••••• (click to reveal)';
+                span.dataset.revealed = '0';
+                span.style.color = 'var(--text-muted)';
+            }
+            function revealSecret(span) {
+                span.textContent = span.dataset.value;
+                span.dataset.revealed = '1';
+                span.style.color = 'var(--text-main)';
+            }
+            function secretSpan(value) {
+                const span = document.createElement('span');
+                span.className = 'hd-secret';
+                span.dataset.value = value;
+                if (showSecrets.checked) revealSecret(span); else maskSecret(span);
+                span.addEventListener('click', () => {
+                    if (span.dataset.revealed === '1') maskSecret(span); else revealSecret(span);
+                });
+                return span;
+            }
+
+            // --- Copy button for a static string value --------------------------
+            function copyButton(getValue) {
+                const btn = document.createElement('button');
+                btn.className = 'btn btn-small hd-copy';
+                btn.type = 'button';
+                btn.textContent = 'Copy';
+                btn.addEventListener('click', async () => {
+                    try {
+                        await navigator.clipboard.writeText(getValue());
+                        if (window.showToast) window.showToast('Copied to clipboard');
+                    } catch (e) {
+                        if (window.showToast) window.showToast('Copy failed', true);
+                    }
+                });
+                return btn;
+            }
+
+            showSecrets.addEventListener('change', () => {
+                document.querySelectorAll('.hd-secret').forEach(s => {
+                    if (showSecrets.checked) revealSecret(s); else maskSecret(s);
+                });
+            });
+
+            // --- Summary card rows ----------------------------------------------
+            // valueNode may be a plain string (public value) or a secret span node.
+            function rowEl(key, valueNode) {
+                const row = document.createElement('div');
+                row.className = 'hd-kv';
+
+                const k = document.createElement('div');
+                k.className = 'hd-kv-key';
+                k.textContent = key;
+
+                const v = document.createElement('div');
+                v.className = 'hd-kv-val';
+
+                if (typeof valueNode === 'string') {
+                    const span = document.createElement('span');
+                    span.textContent = valueNode;
+                    v.appendChild(span);
+                    v.appendChild(copyButton(() => valueNode));
+                } else {
+                    v.appendChild(valueNode);
+                    // secret spans carry their raw value in dataset.value
+                    if (valueNode.dataset && valueNode.dataset.value) {
+                        v.appendChild(copyButton(() => valueNode.dataset.value));
+                    }
+                }
+
+                row.appendChild(k);
+                row.appendChild(v);
+                return row;
+            }
+
+            function summaryCard(title, rows) {
+                const card = document.createElement('div');
+                card.className = 'card';
+                const h = document.createElement('div');
+                h.className = 'card-title';
+                h.textContent = title;
+                card.appendChild(h);
+                rows.forEach(([k, v]) => card.appendChild(rowEl(k, v)));
+                return card;
+            }
+
+            // --- Derivation-step rendering ---------------------------------------
+            // steps: [{title, desc (may contain <code>), rows: [[key, valueNode], …]}]
+            function renderSteps(subtitle, steps) {
+                stepsSubtitle.textContent = subtitle;
+                stepsEl.innerHTML = '';
+                steps.forEach((s, i) => {
+                    const step = document.createElement('div');
+                    step.className = 'hd-step';
+
+                    const num = document.createElement('div');
+                    num.className = 'hd-step-num';
+                    num.textContent = String(i + 1);
+
+                    const body = document.createElement('div');
+                    body.className = 'hd-step-body';
+                    const t = document.createElement('div');
+                    t.className = 'hd-step-title';
+                    t.textContent = s.title;
+                    const d = document.createElement('div');
+                    d.className = 'hd-step-desc';
+                    d.innerHTML = s.desc;
+                    body.appendChild(t);
+                    body.appendChild(d);
+                    (s.rows || []).forEach(([k, v]) => body.appendChild(rowEl(k, v)));
+
+                    step.appendChild(num);
+                    step.appendChild(body);
+                    stepsEl.appendChild(step);
+                });
+                stepsCard.style.display = 'block';
+            }
+
+            // --- Root key & addresses card ---------------------------------------
+            function rootKeyCard(privKeyHex) {
+                const pubUncompressed = ethers.SigningKey.computePublicKey(privKeyHex, false);
+                const pubCompressed = ethers.SigningKey.computePublicKey(privKeyHex, true);
+                const ethAddress = ethers.computeAddress(privKeyHex);
+                return summaryCard('Root key & addresses', [
+                    ['Private key (hex)', secretSpan(privKeyHex)],
+                    ['Private key (WIF)', secretSpan(btcWIF(privKeyHex))],
+                    ['Public key (uncompressed)', pubUncompressed],
+                    ['Public key (compressed)', pubCompressed],
+                    ['ETH Address', ethAddress],
+                    ['BTC Address (P2PKH)', btcP2PKH(pubCompressed)],
+                ]);
+            }
+
+            function resetOutput() {
+                showErr(''); showWarn('');
+                stepsCard.style.display = 'none';
+                summaryEl.style.display = 'none';
+                derivePanel.style.display = 'none';
+                deriveNote.style.display = 'none';
+                stepsEl.innerHTML = '';
+                summaryEl.innerHTML = '';
+                tableWrap.innerHTML = '';
+            }
+
+            // --- Seed computation (BIP39, wordlist-independent) -----------------
+            function computeSeedHex(phrase, passphrase) {
+                const normalizedPhrase = phrase.normalize('NFKD');
+                const salt = ('mnemonic' + (passphrase || '')).normalize('NFKD');
+                return ethers.pbkdf2(
+                    ethers.toUtf8Bytes(normalizedPhrase),
+                    ethers.toUtf8Bytes(salt),
+                    2048, 64, 'sha512'
+                );
+            }
+
+            function isValidBip39(phrase) {
+                try { ethers.Mnemonic.fromPhrase(phrase); return true; }
+                catch (e) { return false; }
+            }
+
+            function generateFromSeed() {
+                resetOutput();
+
+                const phrase = mnemonicInput.value.trim().replace(/\s+/g, ' ');
+                const passphrase = passInput.value;
+                if (!phrase) { showErr('Please enter a seed phrase.'); return; }
+
+                if (!isValidBip39(phrase)) {
+                    showWarn('⚠ This is not a valid BIP39 mnemonic (unknown words or invalid checksum). Deriving keys anyway from the raw phrase — make sure it is exactly what you intend.');
+                }
+
+                let seedHex;
+                try {
+                    seedHex = computeSeedHex(phrase, passphrase);
+                    rootNode = ethers.HDNodeWallet.fromSeed(seedHex);
+                } catch (e) {
+                    showErr('Failed to derive seed: ' + (e && e.message ? e.message : e));
+                    return;
+                }
+
+                renderSteps('Seed phrase → BIP39 seed → BIP32 master key, step by step.', [
+                    {
+                        title: 'Normalize the mnemonic',
+                        desc: 'The phrase is trimmed, whitespace-collapsed and Unicode-normalized (<code>NFKD</code>).',
+                        rows: [
+                            ['Mnemonic (' + phrase.split(' ').length + ' words)', secretSpan(phrase)],
+                            ['BIP39 passphrase', passphrase ? secretSpan(passphrase) : '(none)'],
+                        ],
+                    },
+                    {
+                        title: 'Stretch it into the BIP39 seed',
+                        desc: '<code>PBKDF2-HMAC-SHA512(password = mnemonic, salt = "mnemonic" + passphrase, 2048 iterations)</code> → 64 bytes.',
+                        rows: [['Seed (hex, 64 bytes)', secretSpan(seedHex)]],
+                    },
+                    {
+                        title: 'Split into the BIP32 master key',
+                        desc: '<code>HMAC-SHA512(key = "Bitcoin seed", data = seed)</code> — the left 32 bytes become the root private key, the right 32 bytes the chain code (path <code>m</code>).',
+                        rows: [
+                            ['Root private key', secretSpan(rootNode.privateKey)],
+                            ['Chain code', secretSpan(rootNode.chainCode)],
+                        ],
+                    },
+                ]);
+
+                summaryEl.appendChild(rootKeyCard(rootNode.privateKey));
+
+                // ETH / BTC default accounts
+                const ethAcct = rootNode.derivePath("m/44'/60'/0'/0/0");
+                const btcAcct = rootNode.derivePath("m/44'/0'/0'/0/0");
+
+                summaryEl.appendChild(summaryCard("Ethereum (m/44'/60'/0'/0/0)", [
+                    ['Address', ethAcct.address],
+                    ['Public key (compressed)', ethAcct.publicKey],
+                    ['Private key', secretSpan(ethAcct.privateKey)],
+                ]));
+
+                summaryEl.appendChild(summaryCard("Bitcoin (m/44'/0'/0'/0/0, Legacy P2PKH)", [
+                    ['Address', btcP2PKH(btcAcct.publicKey)],
+                    ['Public key (compressed)', btcAcct.publicKey],
+                    ['Private key (hex)', secretSpan(btcAcct.privateKey)],
+                    ['Private key (WIF)', secretSpan(btcWIF(btcAcct.privateKey))],
+                ]));
+
+                summaryEl.style.display = 'flex';
+                derivePanel.style.display = 'block';
+                derive();
+            }
+
+            // --- Raw hex root key -------------------------------------------------
+            // Accepts 64 hex chars with or without 0x, ignoring all whitespace.
+            function parseHexKey(raw) {
+                let s = (raw || '').replace(/\s+/g, '').toLowerCase();
+                if (s.startsWith('0x')) s = s.slice(2);
+                if (!s) throw new Error('Please enter a private key, or generate a random one.');
+                if (!/^[0-9a-f]+$/.test(s)) throw new Error('Input contains non-hex characters.');
+                if (s.length !== 64) throw new Error('Expected 64 hex characters (32 bytes), got ' + s.length + '.');
+                return '0x' + s;
+            }
+
+            function generateFromHex() {
+                resetOutput();
+
+                let pk;
+                try {
+                    pk = parseHexKey(hexInput.value);
+                    new ethers.Wallet(pk); // validates the key is in the secp256k1 range
+                } catch (e) {
+                    showErr((e && e.shortMessage) || (e && e.message) || String(e));
+                    return;
+                }
+                hexInput.value = pk; // show the parsed, 0x-prefixed form
+
+                renderSteps('Raw 32-byte hex → root private key.', [
+                    {
+                        title: 'Parse the hex input',
+                        desc: 'Whitespace is stripped and the optional <code>0x</code> prefix is handled; the result must be exactly 64 hex characters.',
+                        rows: [['Parsed key (32 bytes)', secretSpan(pk)]],
+                    },
+                    {
+                        title: 'Validate against secp256k1',
+                        desc: 'The value must be a valid private key: greater than 0 and below the curve order <code>n</code>.',
+                        rows: [['Result', 'valid ✓']],
+                    },
+                ]);
+
+                summaryEl.appendChild(rootKeyCard(pk));
+                summaryEl.style.display = 'flex';
+
+                // A bare private key has no chain code, so BIP32 derivation needs a seed.
+                // Treat the 32-byte hex as the BIP32 seed for the table below.
+                rootNode = ethers.HDNodeWallet.fromSeed(pk);
+                deriveNote.textContent = 'A raw private key has no chain code, so it cannot be a BIP32 parent by itself. The accounts below are derived by using your 32 bytes as a BIP32 seed instead (so the master key of this tree differs from your root key above).';
+                deriveNote.style.display = 'block';
+                derivePanel.style.display = 'block';
+                derive();
+            }
+
+            document.getElementById('btn-hd-hex-random').addEventListener('click', () => {
+                const bytes = new Uint8Array(32);
+                crypto.getRandomValues(bytes);
+                hexInput.value = ethers.hexlify(bytes);
+                generateFromHex();
+            });
+            document.getElementById('btn-hd-hex-use').addEventListener('click', generateFromHex);
+
+            function normalizePath(p) {
+                let path = (p || '').trim().replace(/\s+/g, '');
+                if (!path) path = "m/44'/60'/0'/0"; // sensible default if the field is empty
+                if (!path.startsWith('m')) path = 'm/' + path.replace(/^\/+/, '');
+                // collapse accidental double slashes and drop any trailing slash
+                path = path.replace(/\/{2,}/g, '/').replace(/\/+$/, '');
+                return path;
+            }
+
+            function derive() {
+                if (!rootNode) return;
+                showErr('');
+                const base = normalizePath(pathInput.value);
+                if (pathInput.value.trim() !== base) pathInput.value = base; // show the corrected path
+                let count = parseInt(countInput.value, 10);
+                if (!Number.isFinite(count) || count < 1) count = 30;
+                if (count > 200) count = 200;
+
+                const table = document.createElement('table');
+                table.className = 'hd-table';
+
+                const thead = document.createElement('thead');
+                const headRow = document.createElement('tr');
+                ['#', 'Path', 'ETH Address', 'BTC Address (P2PKH)', 'Public Key', 'Private Key'].forEach(t => {
+                    const th = document.createElement('th');
+                    th.textContent = t;
+                    headRow.appendChild(th);
+                });
+                thead.appendChild(headRow);
+                table.appendChild(thead);
+
+                const tbody = document.createElement('tbody');
+                try {
+                    for (let i = 0; i < count; i++) {
+                        const fullPath = base + '/' + i;
+                        const node = rootNode.derivePath(fullPath);
+                        const tr = document.createElement('tr');
+
+                        const btcAddr = btcP2PKH(node.publicKey);
+                        const cells = [
+                            String(i),
+                            fullPath,
+                            node.address,
+                            btcAddr,
+                            node.publicKey,
+                            null, // private key -> secret span
+                        ];
+                        cells.forEach((c, ci) => {
+                            const td = document.createElement('td');
+                            if (ci === 5) td.appendChild(secretSpan(node.privateKey));
+                            else td.textContent = c;
+                            tr.appendChild(td);
+                        });
+                        tr.dataset.search = (fullPath + ' ' + node.address + ' ' + btcAddr + ' ' + node.publicKey + ' ' + node.privateKey).toLowerCase();
+                        tbody.appendChild(tr);
+                    }
+                } catch (e) {
+                    showErr('Invalid derivation path: ' + (e && e.shortMessage ? e.shortMessage : (e.message || e)));
+                    return;
+                }
+                table.appendChild(tbody);
+                tableWrap.innerHTML = '';
+                tableWrap.appendChild(table);
+                applyFilter();
+            }
+
+            function applyFilter() {
+                const q = filterInput.value.trim().toLowerCase();
+                const rows = tableWrap.querySelectorAll('tbody tr');
+                if (!rows.length) { filterCount.textContent = ''; return; }
+                if (!q) {
+                    rows.forEach(r => { r.style.display = ''; r.classList.remove('hd-match'); });
+                    filterCount.textContent = '';
+                    return;
+                }
+                let matches = 0;
+                rows.forEach(r => {
+                    const hit = (r.dataset.search || '').includes(q);
+                    r.style.display = hit ? '' : 'none';
+                    r.classList.toggle('hd-match', hit);
+                    if (hit) matches++;
+                });
+                filterCount.textContent = matches + ' / ' + rows.length + ' match' + (matches === 1 ? '' : 'es');
+                filterCount.style.color = matches ? 'var(--primary)' : 'var(--danger)';
+            }
+
+            filterInput.addEventListener('input', applyFilter);
+
+            const presets = document.querySelectorAll('.hd-preset[data-path]');
+            function syncPresetActive() {
+                const cur = pathInput.value.trim();
+                presets.forEach(a => a.classList.toggle('active', a.dataset.path === cur));
+            }
+
+            // --- Random mnemonic generation (crypto RNG → BIP39) ----------------
+            const wordPresets = document.querySelectorAll('#hd-word-presets .hd-preset');
+            let selectedWords = 12;
+            wordPresets.forEach(a => {
+                a.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    selectedWords = parseInt(a.dataset.words, 10);
+                    wordPresets.forEach(x => x.classList.toggle('active', x === a));
+                });
+            });
+
+            function randomMnemonic(words) {
+                // BIP39 entropy: 12→16, 15→20, 18→24, 21→28, 24→32 bytes
+                const entropyBytes = (words / 3) * 4;
+                const entropy = new Uint8Array(entropyBytes);
+                crypto.getRandomValues(entropy);
+                return ethers.Mnemonic.fromEntropy(entropy).phrase;
+            }
+
+            document.getElementById('btn-hd-random').addEventListener('click', () => {
+                try {
+                    mnemonicInput.value = randomMnemonic(selectedWords);
+                    generateFromSeed();
+                } catch (e) {
+                    showErr('Could not generate mnemonic: ' + (e && e.message ? e.message : e));
+                }
+            });
+
+            document.getElementById('btn-hd-generate').addEventListener('click', generateFromSeed);
+            document.getElementById('btn-hd-derive').addEventListener('click', () => { derive(); });
+            pathInput.addEventListener('input', syncPresetActive);
+            presets.forEach(a => {
+                a.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    pathInput.value = a.dataset.path;
+                    syncPresetActive();
+                    derive();
+                });
+            });
+            syncPresetActive();
+        });
+    </script>
+</body>
+
+</html>

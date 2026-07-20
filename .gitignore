@@ -1,0 +1,4 @@
+.DS_Store
+test/node_modules/
+# ABI source files stay local; the embedded bundle public/abis.js is committed.
+abi/

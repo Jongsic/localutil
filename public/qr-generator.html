@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
+    <title>QR Code Generator — LocalUtil</title>
+    <!-- social / favicon -->
+    <meta name="description" content="Create QR codes from text or URLs, with an optional center logo. Runs 100% in your browser — nothing is uploaded.">
+    <link rel="canonical" href="https://jongsic.github.io/localutil/qr-generator.html">
+    <link rel="icon" href="favicon.ico" sizes="any">
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="LocalUtil">
+    <meta property="og:title" content="QR Code Generator — LocalUtil">
+    <meta property="og:description" content="Create QR codes from text or URLs, with an optional center logo. Runs 100% in your browser — nothing is uploaded.">
+    <meta property="og:image" content="https://jongsic.github.io/localutil/og.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:url" content="https://jongsic.github.io/localutil/qr-generator.html">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:image" content="https://jongsic.github.io/localutil/og.png">
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebApplication","name":"QR Code Generator","url":"https://jongsic.github.io/localutil/qr-generator.html","description":"Create QR codes from text or URLs, with an optional center logo. Runs 100% in your browser — nothing is uploaded.","applicationCategory":"DeveloperApplication","operatingSystem":"Any","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"isPartOf":{"@type":"WebSite","name":"LocalUtil","url":"https://jongsic.github.io/localutil/"}}</script>
+    <!-- /social -->
+    <script src="theme-init.js"></script>
+    <link rel="stylesheet" href="styles.css">
+    <script src="vendor/qr-code-styling.js"></script>
+    <style>
+        /* Page-specific: color pair (picker + hex text) */
+        .color-field { display: flex; align-items: center; gap: 8px; }
+        .color-field input[type="text"] { flex: 1; }
+
+        /* Page-specific: range with value label on the right */
+        .range-field { display: flex; align-items: center; gap: 10px; }
+        .range-field .range-val {
+            min-width: 42px;
+            text-align: right;
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            font-family: var(--font-mono);
+        }
+
+        /* Page-specific: logo drop zone */
+        #logo-drop-zone {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            border: 2px dashed var(--border-strong);
+            border-radius: var(--r-sm);
+            padding: 14px;
+            cursor: pointer;
+            background-color: var(--bg-subtle);
+            transition: border-color 0.15s, background-color 0.15s;
+        }
+        #logo-drop-zone:hover { border-color: var(--primary); background-color: var(--bg-hover); }
+
+        #logo-preview {
+            width: 48px;
+            height: 48px;
+            object-fit: contain;
+            border-radius: var(--r-xs);
+            background-color: var(--bg-input);
+            border: 1px solid var(--border-color);
+            display: none;
+            flex-shrink: 0;
+        }
+
+        #logo-hint {
+            font-size: 0.82rem;
+            color: var(--text-muted);
+            line-height: 1.4;
+        }
+
+        /* Page-specific: live preview surface */
+        .qr-preview-wrap {
+            width: 100%;
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background-color: var(--bg-subtle);
+            border: 1px solid var(--border-color);
+            border-radius: var(--r-md);
+            min-height: 320px;
+            padding: 24px;
+            overflow: auto;
+        }
+
+        #qr-preview canvas,
+        #qr-preview svg { max-width: 100%; height: auto; }
+
+        #qr-empty {
+            color: var(--text-muted);
+            font-size: 0.9rem;
+            text-align: center;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar" id="app-sidebar"></aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <header class="topbar" id="app-topbar">
+                <div class="topbar-title">
+                    <h1 id="current-tool-title">QR Generator</h1>
+                    <p id="current-tool-desc" class="topbar-desc">Create QR codes with an optional logo</p>
+                </div>
+            </header>
+
+            <div class="tools-container">
+                <section id="tool-qr-gen" class="tool-section active">
+                    <div class="tool-shell">
+                        <div class="split-pane">
+                            <!-- Left: options form -->
+                            <div class="pane" style="gap:16px;">
+                                <!-- Content -->
+                                <div class="field-group">
+                                    <label for="qr-data">Content</label>
+                                    <div class="field-hint" style="margin-bottom:2px;">The text, link, or data your QR code will point to.</div>
+                                    <textarea id="qr-data" placeholder="Enter text or a URL to encode…"
+                                        style="min-height:84px;">https://claude.com</textarea>
+                                </div>
+
+                                <!-- Layout -->
+                                <div class="card" style="padding:16px;">
+                                    <div class="section-title" style="margin-top:0;">Layout</div>
+                                    <div class="field-hint mb-2">Overall size, quiet-zone margin, and how much damage the code can survive.</div>
+                                    <div class="form-grid cols-3">
+                                        <div class="field-group">
+                                            <label for="qr-size">Size (px)</label>
+                                            <input type="number" id="qr-size" value="300" min="80" max="2000" step="10">
+                                        </div>
+                                        <div class="field-group">
+                                            <label for="qr-margin">Margin (px)</label>
+                                            <input type="number" id="qr-margin" value="10" min="0" max="100" step="1">
+                                        </div>
+                                        <div class="field-group">
+                                            <label for="qr-ecc">Error correction</label>
+                                            <select id="qr-ecc">
+                                                <option value="L">L (7%)</option>
+                                                <option value="M">M (15%)</option>
+                                                <option value="Q" selected>Q (25%)</option>
+                                                <option value="H">H (30%)</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Colors -->
+                                <div class="card" style="padding:16px;">
+                                    <div class="section-title" style="margin-top:0;">Colors</div>
+                                    <div class="field-hint mb-2">Keep strong contrast between dots and background so scanners can read it.</div>
+                                    <div class="form-grid">
+                                        <div class="field-group">
+                                            <label for="qr-fg">Foreground</label>
+                                            <div class="color-field">
+                                                <input type="color" id="qr-fg" value="#000000">
+                                                <input type="text" id="qr-fg-text" value="#000000">
+                                            </div>
+                                        </div>
+                                        <div class="field-group">
+                                            <label for="qr-bg">Background</label>
+                                            <div class="color-field">
+                                                <input type="color" id="qr-bg" value="#ffffff">
+                                                <input type="text" id="qr-bg-text" value="#ffffff">
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="field-row" style="margin-top:6px;">
+                                        <div class="field-label">
+                                            <label for="qr-transparent-bg">Transparent background</label>
+                                            <div class="field-hint">Export without a solid backdrop.</div>
+                                        </div>
+                                        <label class="switch">
+                                            <input type="checkbox" id="qr-transparent-bg">
+                                            <span></span>
+                                        </label>
+                                    </div>
+                                </div>
+
+                                <!-- Style -->
+                                <div class="card" style="padding:16px;">
+                                    <div class="section-title" style="margin-top:0;">Style</div>
+                                    <div class="field-hint mb-2">Shape the dots and the three finder corners for a custom look.</div>
+                                    <div class="form-grid cols-3">
+                                        <div class="field-group">
+                                            <label for="qr-dot-type">Dots</label>
+                                            <select id="qr-dot-type">
+                                                <option value="square" selected>Square</option>
+                                                <option value="dots">Dots</option>
+                                                <option value="rounded">Rounded</option>
+                                                <option value="extra-rounded">Extra Rounded</option>
+                                                <option value="classy">Classy</option>
+                                                <option value="classy-rounded">Classy Rounded</option>
+                                            </select>
+                                        </div>
+                                        <div class="field-group">
+                                            <label for="qr-corner-square-type">Corner frame</label>
+                                            <select id="qr-corner-square-type">
+                                                <option value="" selected>Auto</option>
+                                                <option value="square">Square</option>
+                                                <option value="dot">Dot</option>
+                                                <option value="extra-rounded">Extra Rounded</option>
+                                            </select>
+                                        </div>
+                                        <div class="field-group">
+                                            <label for="qr-corner-dot-type">Corner dot</label>
+                                            <select id="qr-corner-dot-type">
+                                                <option value="" selected>Auto</option>
+                                                <option value="square">Square</option>
+                                                <option value="dot">Dot</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Logo -->
+                                <div class="card" style="padding:16px;">
+                                    <div class="section-title" style="margin-top:0;">Logo</div>
+                                    <div class="field-hint mb-2">Drop a brand mark in the center. A logo hides part of the code, so higher error correction is applied automatically.</div>
+                                    <div class="field-group">
+                                        <div id="logo-drop-zone">
+                                            <img id="logo-preview" alt="logo">
+                                            <span id="logo-hint">Click to upload, drag &amp; drop,<br>or paste an image (Ctrl+V)</span>
+                                        </div>
+                                        <input type="file" id="logo-file-input" accept="image/*" style="display:none;">
+                                        <button id="btn-logo-clear" class="btn btn-small btn-danger" style="align-self:flex-start;display:none;margin-top:8px;">Remove logo</button>
+                                    </div>
+                                    <div class="form-grid" style="margin-top:14px;">
+                                        <div class="field-group">
+                                            <label for="qr-logo-size">Logo size</label>
+                                            <div class="range-field">
+                                                <input type="range" id="qr-logo-size" min="0.1" max="0.6" step="0.05" value="0.4">
+                                                <span class="range-val" id="qr-logo-size-val">40%</span>
+                                            </div>
+                                        </div>
+                                        <div class="field-group">
+                                            <label for="qr-logo-margin">Logo margin</label>
+                                            <div class="range-field">
+                                                <input type="range" id="qr-logo-margin" min="0" max="30" step="1" value="6">
+                                                <span class="range-val" id="qr-logo-margin-val">6px</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="field-row" style="margin-top:6px;">
+                                        <div class="field-label">
+                                            <label for="qr-hide-dots">Hide dots behind logo</label>
+                                            <div class="field-hint">Recommended — clears the area under the logo.</div>
+                                        </div>
+                                        <label class="switch">
+                                            <input type="checkbox" id="qr-hide-dots" checked>
+                                            <span></span>
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Right: preview + download -->
+                            <div class="pane" style="align-items:center;">
+                                <label style="align-self:flex-start;">Live preview</label>
+                                <div class="qr-preview-wrap">
+                                    <div id="qr-preview"></div>
+                                    <div id="qr-empty" style="display:none;">Nothing to show yet — add some content to generate a QR code.</div>
+                                </div>
+                                <div class="flex-row gap-1" style="margin-top:16px;flex-wrap:wrap;justify-content:center;">
+                                    <button id="btn-download-png" class="btn btn-primary">Download PNG</button>
+                                    <button id="btn-download-svg" class="btn">SVG</button>
+                                    <button id="btn-download-jpeg" class="btn">JPEG</button>
+                                </div>
+                                <div class="field-hint" style="margin-top:8px;text-align:center;">Export as PNG, vector SVG, or JPEG.</div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="toast">Copied to clipboard!</div>
+
+    <script src="app.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const previewContainer = document.getElementById('qr-preview');
+            const emptyMsg = document.getElementById('qr-empty');
+            const toast = document.getElementById('toast');
+
+            let logoDataUrl = null;
+
+            // Keep color pickers and their text inputs in sync
+            function bindColorPair(colorId, textId) {
+                const color = document.getElementById(colorId);
+                const text = document.getElementById(textId);
+                color.addEventListener('input', () => {
+                    text.value = color.value;
+                    scheduleRender();
+                });
+                text.addEventListener('input', () => {
+                    if (/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(text.value.trim())) {
+                        color.value = text.value.trim();
+                        scheduleRender();
+                    }
+                });
+            }
+            bindColorPair('qr-fg', 'qr-fg-text');
+            bindColorPair('qr-bg', 'qr-bg-text');
+
+            // Range value labels
+            const logoSize = document.getElementById('qr-logo-size');
+            const logoSizeVal = document.getElementById('qr-logo-size-val');
+            const logoMargin = document.getElementById('qr-logo-margin');
+            const logoMarginVal = document.getElementById('qr-logo-margin-val');
+            logoSize.addEventListener('input', () => {
+                logoSizeVal.textContent = Math.round(logoSize.value * 100) + '%';
+            });
+            logoMargin.addEventListener('input', () => {
+                logoMarginVal.textContent = logoMargin.value + 'px';
+            });
+
+            function buildOptions() {
+                const data = document.getElementById('qr-data').value;
+                const size = parseInt(document.getElementById('qr-size').value) || 300;
+                const margin = parseInt(document.getElementById('qr-margin').value) || 0;
+                const ecc = document.getElementById('qr-ecc').value;
+                const fg = document.getElementById('qr-fg').value;
+                const transparentBg = document.getElementById('qr-transparent-bg').checked;
+                const bg = transparentBg ? 'rgba(0,0,0,0)' : document.getElementById('qr-bg').value;
+                const dotType = document.getElementById('qr-dot-type').value;
+                const cornerSquareType = document.getElementById('qr-corner-square-type').value;
+                const cornerDotType = document.getElementById('qr-corner-dot-type').value;
+
+                const options = {
+                    width: size,
+                    height: size,
+                    type: 'canvas',
+                    data: data,
+                    margin: margin,
+                    qrOptions: { errorCorrectionLevel: ecc },
+                    dotsOptions: { color: fg, type: dotType },
+                    backgroundOptions: { color: bg },
+                    cornersSquareOptions: { color: fg },
+                    cornersDotOptions: { color: fg },
+                    imageOptions: {
+                        crossOrigin: 'anonymous',
+                        margin: parseInt(logoMargin.value) || 0,
+                        imageSize: parseFloat(logoSize.value) || 0.4,
+                        hideBackgroundDots: document.getElementById('qr-hide-dots').checked,
+                    },
+                };
+
+                if (cornerSquareType) options.cornersSquareOptions.type = cornerSquareType;
+                if (cornerDotType) options.cornersDotOptions.type = cornerDotType;
+                if (logoDataUrl) options.image = logoDataUrl;
+
+                return options;
+            }
+
+            let qrCode = null;
+
+            function render() {
+                const data = document.getElementById('qr-data').value.trim();
+                if (!data) {
+                    previewContainer.style.display = 'none';
+                    emptyMsg.style.display = 'block';
+                    return;
+                }
+                previewContainer.style.display = 'block';
+                emptyMsg.style.display = 'none';
+
+                const options = buildOptions();
+                if (!qrCode) {
+                    qrCode = new QRCodeStyling(options);
+                    qrCode.append(previewContainer);
+                } else {
+                    qrCode.update(options);
+                }
+            }
+
+            let renderTimer = null;
+            function scheduleRender() {
+                clearTimeout(renderTimer);
+                renderTimer = setTimeout(render, 150);
+            }
+
+            // Re-render on any control change (options live in the left pane)
+            const optionsPane = document.getElementById('qr-data').closest('.pane');
+            optionsPane.querySelectorAll('input, select, textarea').forEach(el => {
+                const evt = (el.type === 'range' || el.type === 'color' || el.tagName === 'SELECT') ? 'input' : 'input';
+                el.addEventListener(evt, scheduleRender);
+            });
+
+            // --- Logo handling ---
+            const dropZone = document.getElementById('logo-drop-zone');
+            const fileInput = document.getElementById('logo-file-input');
+            const logoPreview = document.getElementById('logo-preview');
+            const logoHint = document.getElementById('logo-hint');
+            const btnLogoClear = document.getElementById('btn-logo-clear');
+
+            function setLogo(dataUrl) {
+                logoDataUrl = dataUrl;
+                logoPreview.src = dataUrl;
+                logoPreview.style.display = 'block';
+                logoHint.textContent = 'Logo added. Click to replace.';
+                btnLogoClear.style.display = 'inline-block';
+                // A logo covers part of the code — bump error correction if it's low
+                const eccSel = document.getElementById('qr-ecc');
+                if (eccSel.value === 'L' || eccSel.value === 'M') {
+                    eccSel.value = 'H';
+                }
+                render();
+            }
+
+            function clearLogo() {
+                logoDataUrl = null;
+                logoPreview.src = '';
+                logoPreview.style.display = 'none';
+                logoHint.innerHTML = 'Click to upload, drag & drop,<br>or paste an image (Ctrl+V)';
+                btnLogoClear.style.display = 'none';
+                fileInput.value = '';
+                render();
+            }
+
+            function readLogoFile(file) {
+                if (!file || !file.type.startsWith('image/')) return;
+                const reader = new FileReader();
+                reader.onload = (e) => setLogo(e.target.result);
+                reader.readAsDataURL(file);
+            }
+
+            dropZone.addEventListener('click', () => fileInput.click());
+            fileInput.addEventListener('change', (e) => readLogoFile(e.target.files[0]));
+
+            dropZone.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                dropZone.style.borderColor = 'var(--primary)';
+            });
+            dropZone.addEventListener('dragleave', () => {
+                dropZone.style.borderColor = '';
+            });
+            dropZone.addEventListener('drop', (e) => {
+                e.preventDefault();
+                dropZone.style.borderColor = '';
+                readLogoFile(e.dataTransfer.files[0]);
+            });
+
+            btnLogoClear.addEventListener('click', (e) => {
+                e.stopPropagation();
+                clearLogo();
+            });
+
+            // Paste image from clipboard -> logo
+            document.addEventListener('paste', (e) => {
+                const items = e.clipboardData.items;
+                for (let i = 0; i < items.length; i++) {
+                    if (items[i].type.startsWith('image/')) {
+                        e.preventDefault();
+                        readLogoFile(items[i].getAsFile());
+                        return;
+                    }
+                }
+            });
+
+            // --- Downloads ---
+            function download(extension) {
+                if (!qrCode || !document.getElementById('qr-data').value.trim()) {
+                    showToast('Nothing to download', true);
+                    return;
+                }
+                qrCode.download({ name: 'qrcode', extension });
+            }
+            document.getElementById('btn-download-png').addEventListener('click', () => download('png'));
+            document.getElementById('btn-download-svg').addEventListener('click', () => download('svg'));
+            document.getElementById('btn-download-jpeg').addEventListener('click', () => download('jpeg'));
+
+            function showToast(msg, isError = false) {
+                toast.textContent = msg;
+                toast.style.backgroundColor = isError ? '#ef4444' : '#10b981';
+                toast.classList.add('show');
+                setTimeout(() => toast.classList.remove('show'), 2000);
+            }
+
+            // Initial render
+            render();
+        });
+    </script>
+</body>
+
+</html>

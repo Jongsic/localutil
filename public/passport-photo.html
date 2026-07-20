@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
+    <title>Passport Photo Maker (3.5 x 4.5 cm) — LocalUtil</title>
+    <!-- social / favicon -->
+    <meta name="description" content="Fit a photo into a 3.5 x 4.5 cm passport frame and export 413 x 531 px at 300 DPI. Runs 100% in your browser — photos are never uploaded.">
+    <link rel="canonical" href="https://jongsic.github.io/localutil/passport-photo.html">
+    <link rel="icon" href="favicon.ico" sizes="any">
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="LocalUtil">
+    <meta property="og:title" content="Passport Photo Maker (3.5 x 4.5 cm) — LocalUtil">
+    <meta property="og:description" content="Fit a photo into a 3.5 x 4.5 cm passport frame and export 413 x 531 px at 300 DPI. Runs 100% in your browser — photos are never uploaded.">
+    <meta property="og:image" content="https://jongsic.github.io/localutil/og.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:url" content="https://jongsic.github.io/localutil/passport-photo.html">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:image" content="https://jongsic.github.io/localutil/og.png">
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebApplication","name":"Passport Photo Maker (3.5 x 4.5 cm)","url":"https://jongsic.github.io/localutil/passport-photo.html","description":"Fit a photo into a 3.5 x 4.5 cm passport frame and export 413 x 531 px at 300 DPI. Runs 100% in your browser — photos are never uploaded.","applicationCategory":"DeveloperApplication","operatingSystem":"Any","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"isPartOf":{"@type":"WebSite","name":"LocalUtil","url":"https://jongsic.github.io/localutil/"}}</script>
+    <!-- /social -->
+    <script src="theme-init.js"></script>
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        .pp-drop-zone {
+            width: 100%;
+            min-height: 150px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 18px;
+            border: 2px dashed var(--border-strong);
+            border-radius: var(--r-md);
+            background-color: var(--bg-subtle);
+            cursor: pointer;
+            text-align: center;
+            transition: border-color 0.18s, background-color 0.18s;
+        }
+        .pp-drop-zone:hover { border-color: var(--primary); background-color: var(--bg-hover); }
+        .pp-drop-zone.dragover { border-color: var(--primary); background-color: var(--primary-soft); }
+        .pp-drop-icon { color: var(--primary); opacity: 0.85; margin-bottom: 10px; }
+        .pp-drop-main { font-size: 0.92rem; font-weight: 600; color: var(--text-main); margin-bottom: 5px; }
+        .pp-drop-sub { font-size: 0.8rem; color: var(--text-muted); }
+
+        .pp-source-row { display: flex; align-items: center; gap: 12px; }
+        .pp-source-thumb {
+            width: 56px; height: 56px; flex-shrink: 0;
+            border-radius: var(--r-sm);
+            border: 1px solid var(--border-color);
+            object-fit: cover;
+            background: var(--bg-subtle);
+        }
+
+        /* Slider rows */
+        .pp-ctrl-row { display: flex; align-items: center; gap: 10px; }
+        .pp-ctrl-row label { min-width: 58px; margin: 0; }
+        .pp-ctrl-row input[type="range"] { flex: 1; min-width: 0; }
+        .pp-ctrl-val {
+            min-width: 62px; text-align: right;
+            font-size: 0.82rem; color: var(--text-muted);
+            font-variant-numeric: tabular-nums;
+        }
+
+        /* Editor canvas */
+        .pp-stage {
+            display: flex; flex-direction: column; align-items: center; gap: 10px;
+        }
+        .pp-canvas-frame {
+            position: relative;
+            width: 100%;
+            max-width: 413px;
+            border: 1px solid var(--border-strong);
+            border-radius: var(--r-sm);
+            overflow: hidden;
+            box-shadow: 0 4px 18px rgba(0, 0, 0, 0.25);
+        }
+        #pp-canvas {
+            display: block;
+            width: 100%;
+            height: auto;
+            touch-action: none;
+            cursor: grab;
+        }
+        #pp-canvas.dragging { cursor: grabbing; }
+        .pp-stage-hint { font-size: 0.78rem; color: var(--text-muted); text-align: center; }
+
+        .pp-spec {
+            font-size: 0.8rem; color: var(--text-muted);
+            line-height: 1.55;
+            padding: 10px 12px;
+            border: 1px solid var(--border-color);
+            border-radius: var(--r-sm);
+            background: var(--bg-subtle);
+        }
+        .pp-spec strong { color: var(--text-main); }
+
+        .hidden { display: none !important; }
+    </style>
+</head>
+
+<body>
+    <div class="app-container">
+        <aside class="sidebar" id="app-sidebar"></aside>
+
+        <main class="main-content">
+            <header class="topbar" id="app-topbar">
+                <div class="topbar-title">
+                    <h1 id="current-tool-title">Passport Photo</h1>
+                    <p id="current-tool-desc" class="topbar-desc">Fit a photo into a 3.5×4.5cm frame and export 413×531px @ 300dpi</p>
+                </div>
+            </header>
+
+            <div class="tools-container">
+                <section class="tool-section active">
+                    <div class="tool-shell">
+                        <div class="split-pane">
+                            <!-- Left: source + controls -->
+                            <div class="pane">
+                                <div>
+                                    <div class="card-title" style="margin:0;">Photo</div>
+                                    <div class="field-hint">Drop, click, or paste a photo. Nothing leaves your browser.</div>
+                                </div>
+
+                                <div id="pp-drop-zone" class="pp-drop-zone">
+                                    <div id="pp-drop-empty">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="42" height="42" viewBox="0 0 24 24"
+                                            fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
+                                            stroke-linejoin="round" class="pp-drop-icon">
+                                            <rect x="3" y="3" width="18" height="18" rx="2"></rect>
+                                            <circle cx="12" cy="10" r="3"></circle>
+                                            <path d="M6.5 21c.9-3 3-4.5 5.5-4.5s4.6 1.5 5.5 4.5"></path>
+                                        </svg>
+                                        <p class="pp-drop-main">Drop a photo, or click to upload</p>
+                                        <p class="pp-drop-sub">Paste works too · Ctrl/⌘ + V</p>
+                                    </div>
+                                    <div id="pp-source-row" class="pp-source-row hidden">
+                                        <img id="pp-source-thumb" class="pp-source-thumb" alt="source">
+                                        <div style="text-align:left;min-width:0;">
+                                            <div id="pp-source-name" style="font-weight:600;font-size:0.88rem;word-break:break-all;"></div>
+                                            <div id="pp-source-dim" class="field-hint" style="margin:2px 0 0;"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <input type="file" id="pp-file-input" accept="image/*" style="display:none;">
+
+                                <div class="pp-ctrl-row" style="margin-top:6px;">
+                                    <label for="pp-zoom">Zoom</label>
+                                    <input type="range" id="pp-zoom" min="0" max="200" step="0.5" value="100" disabled>
+                                    <span id="pp-zoom-val" class="pp-ctrl-val">—</span>
+                                </div>
+
+                                <div class="pp-ctrl-row">
+                                    <label for="pp-rotate">Rotate</label>
+                                    <input type="range" id="pp-rotate" min="-30" max="30" step="0.1" value="0" disabled>
+                                    <span id="pp-rotate-val" class="pp-ctrl-val">0.0°</span>
+                                </div>
+
+                                <div class="flex-row gap-1 wrap items-center">
+                                    <button id="pp-rot90-btn" class="btn" type="button" disabled>Rotate 90°</button>
+                                    <button id="pp-reset-btn" class="btn" type="button" disabled>Reset</button>
+                                    <label class="flex-row gap-1 items-center" style="margin-left:auto;font-size:0.85rem;cursor:pointer;">
+                                        <input type="checkbox" id="pp-guide-toggle" checked style="margin:0;">
+                                        Head guide
+                                    </label>
+                                </div>
+
+                                <div class="pp-ctrl-row">
+                                    <label for="pp-bg">Background</label>
+                                    <input type="color" id="pp-bg" value="#ffffff"
+                                        style="width:44px;height:30px;padding:2px;border:1px solid var(--border-color);border-radius:var(--r-sm);background:var(--bg-subtle);cursor:pointer;">
+                                    <span class="field-hint" style="margin:0;">Fills areas the photo doesn't cover (white for KR passports).</span>
+                                </div>
+
+                                <div class="pp-spec">
+                                    <strong>Output:</strong> 3.5 × 4.5 cm at 300 dpi → <strong>413 × 531 px</strong> PNG
+                                    (dpi is embedded in the file).<br>
+                                    <strong>Head guide:</strong> chin-to-crown must be 3.2–3.6 cm — fit the head
+                                    between the inner and outer ovals.
+                                </div>
+
+                                <div class="flex-row gap-1 items-center" style="margin-top:auto;">
+                                    <button id="pp-download-btn" class="btn btn-primary" style="margin-left:auto;" disabled>Download PNG (413×531)</button>
+                                </div>
+                            </div>
+
+                            <!-- Right: editor -->
+                            <div class="pane">
+                                <div>
+                                    <div class="card-title" style="margin:0;">Frame · 3.5 × 4.5 cm</div>
+                                    <div class="field-hint">Drag to move · scroll / pinch to zoom · arrow keys to nudge (Shift = ×10).</div>
+                                </div>
+                                <div class="pp-stage">
+                                    <div class="pp-canvas-frame">
+                                        <canvas id="pp-canvas"></canvas>
+                                    </div>
+                                    <div class="pp-stage-hint">Preview shown at screen size — the download is exactly 413 × 531 px.</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </div>
+
+    <div id="toast" class="toast">Copied to clipboard</div>
+
+    <script src="app.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // ---- Output geometry: 3.5×4.5cm @ 300dpi ----
+            const OUT_W = 413, OUT_H = 531;
+            const PX_PER_CM = 300 / 2.54;         // ≈ 118.11
+            const CX = OUT_W / 2, CY = OUT_H / 2;
+            const DPI = 300;
+
+            // ---- Elements ----
+            const dropZone = document.getElementById('pp-drop-zone');
+            const fileInput = document.getElementById('pp-file-input');
+            const dropEmpty = document.getElementById('pp-drop-empty');
+            const sourceRow = document.getElementById('pp-source-row');
+            const sourceThumb = document.getElementById('pp-source-thumb');
+            const sourceName = document.getElementById('pp-source-name');
+            const sourceDim = document.getElementById('pp-source-dim');
+            const zoomSlider = document.getElementById('pp-zoom');
+            const zoomVal = document.getElementById('pp-zoom-val');
+            const rotSlider = document.getElementById('pp-rotate');
+            const rotVal = document.getElementById('pp-rotate-val');
+            const rot90Btn = document.getElementById('pp-rot90-btn');
+            const resetBtn = document.getElementById('pp-reset-btn');
+            const guideToggle = document.getElementById('pp-guide-toggle');
+            const bgInput = document.getElementById('pp-bg');
+            const downloadBtn = document.getElementById('pp-download-btn');
+            const canvas = document.getElementById('pp-canvas');
+            const ectx = canvas.getContext('2d');
+
+            // Editor canvas renders at a multiple of the output resolution for sharp preview.
+            const ES = Math.min(window.devicePixelRatio || 1, 2) * 1.25;
+            canvas.width = Math.round(OUT_W * ES);
+            canvas.height = Math.round(OUT_H * ES);
+
+            // ---- Transform state (all in output-pixel space) ----
+            let img = null;          // HTMLImageElement
+            let iw = 0, ih = 0;      // natural size
+            let scale = 1;           // absolute scale factor
+            let fitScale = 1;        // scale that makes the image cover the frame
+            let ox = 0, oy = 0;      // image-center offset from frame center
+            let rotBase = 0;         // 90° steps
+            // fine rotation lives in the slider
+
+            function rotation() { return rotBase + parseFloat(rotSlider.value); }
+
+            // ---- Rendering ----
+            function drawGuide(ctx) {
+                // Head-height guide: two concentric ovals for the 3.2–3.6cm range.
+                // The face sits high on a passport photo, so the shared center is placed
+                // at 9/19 of the frame height from the top (≈ the 9:10 split the user asked for).
+                const headCY = OUT_H * 9 / 19;
+                // Rounder than a true head ratio so it reads as a head, not an egg (width ≈ 0.82·height).
+                const ovals = [
+                    { h: 3.6 },   // outer (max head height)
+                    { h: 3.2 },   // inner (min head height)
+                ];
+                const WH_RATIO = 0.82;
+
+                function stroked(pathFn) {
+                    ctx.lineWidth = 3;
+                    ctx.strokeStyle = 'rgba(255,255,255,0.75)';
+                    pathFn(); ctx.stroke();
+                    ctx.lineWidth = 1.4;
+                    ctx.strokeStyle = 'rgba(0,145,255,0.95)';
+                    pathFn(); ctx.stroke();
+                }
+
+                // Vertical center line
+                ctx.setLineDash([7, 6]);
+                stroked(() => {
+                    ctx.beginPath();
+                    ctx.moveTo(CX, 14);
+                    ctx.lineTo(CX, OUT_H - 14);
+                });
+
+                // Two thin horizontal lines to level the head against — eye height varies by
+                // person (babies' eyes sit near center), so one line marks the head center and
+                // one sits slightly above it. Align both eyes to whichever fits, then rotate to level.
+                const lineHalf = (3.6 * PX_PER_CM) / 2 * WH_RATIO + 10;
+                function thinLine(y) {
+                    ctx.lineWidth = 2;
+                    ctx.strokeStyle = 'rgba(255,255,255,0.7)';
+                    ctx.beginPath(); ctx.moveTo(CX - lineHalf, y); ctx.lineTo(CX + lineHalf, y); ctx.stroke();
+                    ctx.lineWidth = 0.8;
+                    ctx.strokeStyle = 'rgba(0,145,255,0.95)';
+                    ctx.beginPath(); ctx.moveTo(CX - lineHalf, y); ctx.lineTo(CX + lineHalf, y); ctx.stroke();
+                }
+                thinLine(headCY);                       // head center
+                thinLine(headCY - 0.35 * PX_PER_CM);    // slightly above center
+                ctx.setLineDash([]);
+
+                // Head ovals — concentric, centered high on the frame.
+                ovals.forEach(o => {
+                    const ry = (o.h * PX_PER_CM) / 2;
+                    const rx = ry * WH_RATIO;
+                    stroked(() => {
+                        ctx.beginPath();
+                        ctx.ellipse(CX, headCY, rx, ry, 0, 0, Math.PI * 2);
+                    });
+                });
+
+                // Labels at the top of each oval
+                ctx.font = '600 11px system-ui, sans-serif';
+                ctx.textAlign = 'center';
+                ctx.lineWidth = 3;
+                ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+                ctx.fillStyle = 'rgba(0,120,220,1)';
+                const label = (t, x, y) => { ctx.strokeText(t, x, y); ctx.fillText(t, x, y); };
+                label('3.6cm', CX, headCY - (3.6 * PX_PER_CM) / 2 - 6);
+                label('3.2cm', CX, headCY - (3.2 * PX_PER_CM) / 2 - 6);
+            }
+
+            function render() {
+                ectx.setTransform(ES, 0, 0, ES, 0, 0);
+                ectx.fillStyle = bgInput.value;
+                ectx.fillRect(0, 0, OUT_W, OUT_H);
+
+                if (img) {
+                    ectx.save();
+                    ectx.translate(CX + ox, CY + oy);
+                    ectx.rotate(rotation() * Math.PI / 180);
+                    ectx.scale(scale, scale);
+                    ectx.imageSmoothingEnabled = true;
+                    ectx.imageSmoothingQuality = 'high';
+                    ectx.drawImage(img, -iw / 2, -ih / 2);
+                    ectx.restore();
+                }
+
+                if (guideToggle.checked) drawGuide(ectx);
+                updateReadouts();
+            }
+
+            function updateReadouts() {
+                zoomVal.textContent = img ? Math.round((scale / fitScale) * 100) + '%' : '—';
+                rotVal.textContent = rotation().toFixed(1) + '°';
+            }
+
+            // ---- Zoom helpers ----
+            function sliderToScale(v) { return fitScale * Math.pow(2, (v - 100) / 50); }
+            function syncZoomSlider() {
+                const v = 100 + 50 * Math.log2(scale / fitScale);
+                zoomSlider.value = Math.max(0, Math.min(200, v));
+            }
+            function clampScale(s) { return Math.max(fitScale * 0.2, Math.min(fitScale * 8, s)); }
+
+            // Rescale while keeping output-space point p fixed on screen.
+            function zoomAt(newScale, px, py) {
+                newScale = clampScale(newScale);
+                const k = newScale / scale;
+                ox = (px - CX) - k * ((px - CX) - ox);
+                oy = (py - CY) - k * ((py - CY) - oy);
+                scale = newScale;
+                syncZoomSlider();
+                render();
+            }
+
+            // ---- Load / reset ----
+            function resetView() {
+                if (!img) return;
+                fitScale = Math.max(OUT_W / iw, OUT_H / ih);
+                scale = fitScale;
+                ox = 0; oy = 0;
+                rotBase = 0;
+                rotSlider.value = 0;
+                zoomSlider.value = 100;
+                render();
+            }
+
+            function setControlsEnabled(on) {
+                [zoomSlider, rotSlider, rot90Btn, resetBtn, downloadBtn].forEach(el => el.disabled = !on);
+            }
+
+            function loadSource(src, name) {
+                const image = new Image();
+                image.onload = () => {
+                    img = image;
+                    iw = image.naturalWidth;
+                    ih = image.naturalHeight;
+                    dropEmpty.classList.add('hidden');
+                    sourceRow.classList.remove('hidden');
+                    sourceThumb.src = image.src;
+                    sourceName.textContent = name || 'pasted image';
+                    sourceDim.textContent = iw + ' × ' + ih + ' px';
+                    setControlsEnabled(true);
+                    resetView();
+                };
+                image.onerror = () => { window.showToast && window.showToast('Could not load image', true); };
+                image.src = src;
+            }
+
+            function handleImageFile(file) {
+                if (!file || !file.type.startsWith('image/')) return;
+                const reader = new FileReader();
+                reader.onload = e => loadSource(e.target.result, file.name);
+                reader.readAsDataURL(file);
+            }
+
+            dropZone.addEventListener('click', () => fileInput.click());
+            fileInput.addEventListener('change', e => handleImageFile(e.target.files[0]));
+            dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
+            dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+            dropZone.addEventListener('drop', e => {
+                e.preventDefault();
+                dropZone.classList.remove('dragover');
+                handleImageFile(e.dataTransfer.files[0]);
+            });
+            document.addEventListener('paste', e => {
+                const items = e.clipboardData && e.clipboardData.items;
+                if (!items) return;
+                for (let i = 0; i < items.length; i++) {
+                    if (items[i].kind === 'file' && items[i].type.startsWith('image/')) {
+                        handleImageFile(items[i].getAsFile());
+                        e.preventDefault();
+                        return;
+                    }
+                }
+            });
+            // Also allow dropping straight onto the canvas.
+            canvas.addEventListener('dragover', e => e.preventDefault());
+            canvas.addEventListener('drop', e => {
+                e.preventDefault();
+                handleImageFile(e.dataTransfer.files[0]);
+            });
+
+            // ---- Controls ----
+            zoomSlider.addEventListener('input', () => {
+                if (!img) return;
+                zoomAt(sliderToScale(parseFloat(zoomSlider.value)), CX, CY);
+            });
+            rotSlider.addEventListener('input', render);
+            rot90Btn.addEventListener('click', () => { rotBase = (rotBase + 90) % 360; render(); });
+            resetBtn.addEventListener('click', resetView);
+            guideToggle.addEventListener('change', render);
+            bgInput.addEventListener('input', render);
+
+            // ---- Pointer interaction: drag to pan, pinch to zoom ----
+            const pointers = new Map();
+
+            function toOutputCoords(e) {
+                const r = canvas.getBoundingClientRect();
+                return {
+                    x: (e.clientX - r.left) * OUT_W / r.width,
+                    y: (e.clientY - r.top) * OUT_H / r.height
+                };
+            }
+
+            canvas.addEventListener('pointerdown', e => {
+                if (!img) return;
+                canvas.setPointerCapture(e.pointerId);
+                pointers.set(e.pointerId, toOutputCoords(e));
+                canvas.classList.add('dragging');
+                e.preventDefault();
+            });
+
+            canvas.addEventListener('pointermove', e => {
+                if (!pointers.has(e.pointerId)) return;
+                const p = toOutputCoords(e);
+
+                if (pointers.size === 1) {
+                    const prev = pointers.get(e.pointerId);
+                    ox += p.x - prev.x;
+                    oy += p.y - prev.y;
+                    pointers.set(e.pointerId, p);
+                    render();
+                } else if (pointers.size === 2) {
+                    const ids = Array.from(pointers.keys());
+                    const a0 = pointers.get(ids[0]), b0 = pointers.get(ids[1]);
+                    const a1 = ids[0] === e.pointerId ? p : a0;
+                    const b1 = ids[1] === e.pointerId ? p : b0;
+
+                    const d0 = Math.hypot(b0.x - a0.x, b0.y - a0.y);
+                    const d1 = Math.hypot(b1.x - a1.x, b1.y - a1.y);
+                    const c0 = { x: (a0.x + b0.x) / 2, y: (a0.y + b0.y) / 2 };
+                    const c1 = { x: (a1.x + b1.x) / 2, y: (a1.y + b1.y) / 2 };
+
+                    if (d0 > 0) zoomAt(scale * (d1 / d0), c0.x, c0.y);
+                    ox += c1.x - c0.x;
+                    oy += c1.y - c0.y;
+                    pointers.set(e.pointerId, p);
+                    render();
+                }
+                e.preventDefault();
+            });
+
+            function endPointer(e) {
+                pointers.delete(e.pointerId);
+                if (!pointers.size) canvas.classList.remove('dragging');
+            }
+            canvas.addEventListener('pointerup', endPointer);
+            canvas.addEventListener('pointercancel', endPointer);
+
+            canvas.addEventListener('wheel', e => {
+                if (!img) return;
+                e.preventDefault();
+                const p = toOutputCoords(e);
+                zoomAt(scale * Math.exp(-e.deltaY * 0.0016), p.x, p.y);
+            }, { passive: false });
+
+            // Arrow keys nudge the photo (Shift = 10px steps).
+            document.addEventListener('keydown', e => {
+                if (!img) return;
+                const t = e.target;
+                if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+                const step = e.shiftKey ? 10 : 1;
+                let handled = true;
+                if (e.key === 'ArrowLeft') ox -= step;
+                else if (e.key === 'ArrowRight') ox += step;
+                else if (e.key === 'ArrowUp') oy -= step;
+                else if (e.key === 'ArrowDown') oy += step;
+                else handled = false;
+                if (handled) { e.preventDefault(); render(); }
+            });
+
+            // ---- Export: clean 413×531 render + pHYs (300dpi) chunk ----
+            const CRC_TABLE = (() => {
+                const t = new Uint32Array(256);
+                for (let n = 0; n < 256; n++) {
+                    let c = n;
+                    for (let k = 0; k < 8; k++) c = (c & 1) ? (0xedb88320 ^ (c >>> 1)) : (c >>> 1);
+                    t[n] = c >>> 0;
+                }
+                return t;
+            })();
+
+            function crc32(bytes) {
+                let c = 0xffffffff;
+                for (let i = 0; i < bytes.length; i++) c = CRC_TABLE[(c ^ bytes[i]) & 0xff] ^ (c >>> 8);
+                return (c ^ 0xffffffff) >>> 0;
+            }
+
+            // Insert a pHYs chunk right after IHDR so the PNG carries real DPI metadata.
+            function withDpi(buf, dpi) {
+                const src = new Uint8Array(buf);
+                const dv = new DataView(buf);
+                const ihdrLen = dv.getUint32(8);
+                const insertAt = 8 + 12 + ihdrLen;
+
+                const ppm = Math.round(dpi / 0.0254); // pixels per metre
+                const chunk = new Uint8Array(21);
+                const cdv = new DataView(chunk.buffer);
+                cdv.setUint32(0, 9);                                  // data length
+                chunk.set([0x70, 0x48, 0x59, 0x73], 4);               // "pHYs"
+                cdv.setUint32(8, ppm);
+                cdv.setUint32(12, ppm);
+                chunk[16] = 1;                                        // unit: metre
+                cdv.setUint32(17, crc32(chunk.subarray(4, 17)));
+
+                const out = new Uint8Array(src.length + chunk.length);
+                out.set(src.subarray(0, insertAt), 0);
+                out.set(chunk, insertAt);
+                out.set(src.subarray(insertAt), insertAt + chunk.length);
+                return out;
+            }
+
+            downloadBtn.addEventListener('click', () => {
+                if (!img) return;
+                const out = document.createElement('canvas');
+                out.width = OUT_W;
+                out.height = OUT_H;
+                const ctx = out.getContext('2d');
+                ctx.fillStyle = bgInput.value;
+                ctx.fillRect(0, 0, OUT_W, OUT_H);
+                ctx.translate(CX + ox, CY + oy);
+                ctx.rotate(rotation() * Math.PI / 180);
+                ctx.scale(scale, scale);
+                ctx.imageSmoothingEnabled = true;
+                ctx.imageSmoothingQuality = 'high';
+                ctx.drawImage(img, -iw / 2, -ih / 2);
+
+                out.toBlob(blob => {
+                    blob.arrayBuffer().then(buf => {
+                        const png = withDpi(buf, DPI);
+                        const url = URL.createObjectURL(new Blob([png], { type: 'image/png' }));
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = 'passport-photo-413x531.png';
+                        a.click();
+                        setTimeout(() => URL.revokeObjectURL(url), 5000);
+                        window.showToast && window.showToast('Saved 413×531 PNG @ 300dpi');
+                    });
+                }, 'image/png');
+            });
+
+            render();
+        });
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
+    <title>Hex to ASCII / ASCII to Hex Converter — LocalUtil</title>
+    <!-- social / favicon -->
+    <meta name="description" content="Convert hexadecimal to ASCII text and ASCII text to hex bytes. Runs 100% in your browser — nothing is uploaded.">
+    <link rel="canonical" href="https://jongsic.github.io/localutil/hex-ascii.html">
+    <link rel="icon" href="favicon.ico" sizes="any">
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="LocalUtil">
+    <meta property="og:title" content="Hex to ASCII / ASCII to Hex Converter — LocalUtil">
+    <meta property="og:description" content="Convert hexadecimal to ASCII text and ASCII text to hex bytes. Runs 100% in your browser — nothing is uploaded.">
+    <meta property="og:image" content="https://jongsic.github.io/localutil/og.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:url" content="https://jongsic.github.io/localutil/hex-ascii.html">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:image" content="https://jongsic.github.io/localutil/og.png">
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebApplication","name":"Hex to ASCII / ASCII to Hex Converter","url":"https://jongsic.github.io/localutil/hex-ascii.html","description":"Convert hexadecimal to ASCII text and ASCII text to hex bytes. Runs 100% in your browser — nothing is uploaded.","applicationCategory":"DeveloperApplication","operatingSystem":"Any","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"isPartOf":{"@type":"WebSite","name":"LocalUtil","url":"https://jongsic.github.io/localutil/"}}</script>
+    <!-- /social -->
+    <script src="theme-init.js"></script>
+    <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar" id="app-sidebar"></aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <header class="topbar" id="app-topbar">
+                <div class="topbar-title">
+                    <h1 id="current-tool-title">Hex / ASCII</h1>
+                    <p id="current-tool-desc" class="topbar-desc">Convert between hexadecimal and ASCII text</p>
+                </div>
+            </header>
+
+            <div class="tools-container">
+                <section id="tool-hex-ascii" class="tool-section active">
+                    <div class="tool-shell">
+                        <div class="card">
+                            <div class="card-title">Conversion options</div>
+                            <div class="card-subtitle">Choose how text is encoded and how hex is formatted.</div>
+                            <div class="form-grid cols-3">
+                                <div class="field-group">
+                                    <label for="opt-encoding">Character encoding</label>
+                                    <select id="opt-encoding">
+                                        <option value="utf8" selected>UTF-8</option>
+                                        <option value="ascii">ASCII (7-bit)</option>
+                                        <option value="latin1">Latin-1 (ISO 8859-1)</option>
+                                    </select>
+                                    <div class="field-hint">How characters map to bytes.</div>
+                                </div>
+                                <div class="field-group">
+                                    <label for="opt-delimiter">Hex delimiter</label>
+                                    <select id="opt-delimiter">
+                                        <option value="space" selected>Space (48 65 6C)</option>
+                                        <option value="none">None (48656C)</option>
+                                        <option value="0x">0x prefix (0x48 0x65)</option>
+                                        <option value="\\x">\\x prefix (\\x48\\x65)</option>
+                                    </select>
+                                    <div class="field-hint">Separator used in hex output.</div>
+                                </div>
+                                <div class="field-group">
+                                    <label for="opt-case">Letter case</label>
+                                    <select id="opt-case">
+                                        <option value="lower" selected>Lowercase (4a)</option>
+                                        <option value="upper">Uppercase (4A)</option>
+                                    </select>
+                                    <div class="field-hint">Case of hex digits a–f.</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="split-pane">
+                            <div class="pane">
+                                <label for="text-input">Text</label>
+                                <textarea id="text-input" placeholder="Type or paste text to convert to hex…"></textarea>
+                                <div class="flex-row gap-1">
+                                    <button id="btn-to-hex" class="btn btn-primary">To Hex →</button>
+                                </div>
+                            </div>
+                            <div class="pane">
+                                <label for="hex-input">Hex</label>
+                                <textarea id="hex-input" placeholder="Paste hex to decode (spaces, 0x, \x are auto-stripped)…"></textarea>
+                                <button class="btn btn-small copy-btn" data-clipboard-target="#hex-input">Copy</button>
+                                <div class="flex-row gap-1">
+                                    <button id="btn-to-text" class="btn btn-primary">← To Text</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="card">
+                            <div class="log-header mb-2">
+                                <div>
+                                    <div class="card-title" style="margin:0;">Recent conversions</div>
+                                    <div class="field-hint">Stored locally · last 10</div>
+                                </div>
+                                <button id="btn-clear-log" class="btn btn-small">Clear</button>
+                            </div>
+                            <ul class="log-list" id="hex-log"></ul>
+                            <div id="hex-log-empty" class="field-hint">No conversions yet.</div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="toast">Copied to clipboard!</div>
+
+    <script src="app.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const STORAGE_KEY = 'localutil-hex-log';
+            const MAX_LOG = 10;
+
+            const textInput = document.getElementById('text-input');
+            const hexInput = document.getElementById('hex-input');
+            const optEncoding = document.getElementById('opt-encoding');
+            const optDelimiter = document.getElementById('opt-delimiter');
+            const optCase = document.getElementById('opt-case');
+            const logList = document.getElementById('hex-log');
+            const logEmpty = document.getElementById('hex-log-empty');
+            const toast = document.getElementById('toast');
+
+            let logs = [];
+            try {
+                const stored = localStorage.getItem(STORAGE_KEY);
+                if (stored) logs = JSON.parse(stored);
+            } catch (e) {
+                logs = [];
+            }
+
+            function saveLogs() {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(logs));
+            }
+
+            function addLog(operation, input, output) {
+                const truncate = (str, max) => str.length > max ? str.substring(0, max) + '...' : str;
+                const entry = `${operation}: ${truncate(input, 50)} → ${truncate(output, 50)}`;
+                logs.unshift(entry);
+                if (logs.length > MAX_LOG) logs.pop();
+                saveLogs();
+                renderLogs();
+            }
+
+            function renderLogs() {
+                logList.innerHTML = '';
+                logEmpty.style.display = logs.length ? 'none' : 'block';
+                logs.forEach(entry => {
+                    const li = document.createElement('li');
+                    li.className = 'history-item';
+                    li.textContent = entry;
+                    logList.appendChild(li);
+                });
+            }
+
+            function showToast(msg, isError = false) {
+                toast.textContent = msg;
+                toast.style.backgroundColor = isError ? '#ef4444' : '#10b981';
+                toast.classList.add('show');
+                setTimeout(() => toast.classList.remove('show'), 2000);
+            }
+
+            // Normalize hex input: strip spaces, 0x prefixes, \x prefixes, commas
+            function normalizeHex(str) {
+                return str
+                    .replace(/\\x/gi, '')
+                    .replace(/0x/gi, '')
+                    .replace(/[,\s]+/g, '')
+                    .trim();
+            }
+
+            // Text to bytes using selected encoding
+            function textToBytes(text, encoding) {
+                if (encoding === 'utf8') {
+                    return new TextEncoder().encode(text);
+                } else if (encoding === 'ascii') {
+                    const bytes = new Uint8Array(text.length);
+                    for (let i = 0; i < text.length; i++) {
+                        const code = text.charCodeAt(i);
+                        if (code > 127) {
+                            throw new Error(`Character '${text[i]}' (U+${code.toString(16).toUpperCase().padStart(4, '0')}) is outside ASCII range (0-127)`);
+                        }
+                        bytes[i] = code;
+                    }
+                    return bytes;
+                } else if (encoding === 'latin1') {
+                    const bytes = new Uint8Array(text.length);
+                    for (let i = 0; i < text.length; i++) {
+                        const code = text.charCodeAt(i);
+                        if (code > 255) {
+                            throw new Error(`Character '${text[i]}' (U+${code.toString(16).toUpperCase().padStart(4, '0')}) is outside Latin-1 range (0-255)`);
+                        }
+                        bytes[i] = code;
+                    }
+                    return bytes;
+                }
+            }
+
+            // Bytes to text using selected encoding
+            function bytesToText(bytes, encoding) {
+                if (encoding === 'utf8') {
+                    return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+                } else if (encoding === 'ascii') {
+                    let result = '';
+                    for (let i = 0; i < bytes.length; i++) {
+                        if (bytes[i] > 127) {
+                            throw new Error(`Byte 0x${bytes[i].toString(16)} at position ${i} is outside ASCII range`);
+                        }
+                        result += String.fromCharCode(bytes[i]);
+                    }
+                    return result;
+                } else if (encoding === 'latin1') {
+                    let result = '';
+                    for (let i = 0; i < bytes.length; i++) {
+                        result += String.fromCharCode(bytes[i]);
+                    }
+                    return result;
+                }
+            }
+
+            // Format bytes as hex string
+            function bytesToHex(bytes, delimiter, hexCase) {
+                const hexArr = Array.from(bytes).map(b => {
+                    let h = b.toString(16).padStart(2, '0');
+                    return hexCase === 'upper' ? h.toUpperCase() : h;
+                });
+
+                switch (delimiter) {
+                    case 'none':
+                        return hexArr.join('');
+                    case '0x':
+                        return hexArr.map(h => '0x' + h).join(' ');
+                    case '\\x':
+                        return hexArr.map(h => '\\x' + h).join('');
+                    case 'space':
+                    default:
+                        return hexArr.join(' ');
+                }
+            }
+
+            // Parse hex string to bytes
+            function hexToBytes(hexStr) {
+                const clean = normalizeHex(hexStr);
+                if (clean.length === 0) {
+                    throw new Error('No hex data to convert');
+                }
+                if (!/^[0-9a-fA-F]+$/.test(clean)) {
+                    const bad = clean.match(/[^0-9a-fA-F]/);
+                    throw new Error(`Invalid hex character: '${bad[0]}'`);
+                }
+                if (clean.length % 2 !== 0) {
+                    throw new Error('Hex string has odd length — each byte requires 2 hex digits');
+                }
+                const bytes = new Uint8Array(clean.length / 2);
+                for (let i = 0; i < clean.length; i += 2) {
+                    bytes[i / 2] = parseInt(clean.substring(i, i + 2), 16);
+                }
+                return bytes;
+            }
+
+            // Text → Hex
+            document.getElementById('btn-to-hex').addEventListener('click', () => {
+                try {
+                    const text = textInput.value;
+                    if (!text) return;
+                    const encoding = optEncoding.value;
+                    const delimiter = optDelimiter.value;
+                    const hexCase = optCase.value;
+
+                    const bytes = textToBytes(text, encoding);
+                    const hex = bytesToHex(bytes, delimiter, hexCase);
+                    hexInput.value = hex;
+                    addLog(`Text→Hex (${encoding})`, text, hex);
+                } catch (e) {
+                    hexInput.value = '';
+                    showToast(e.message, true);
+                }
+            });
+
+            // Hex → Text
+            document.getElementById('btn-to-text').addEventListener('click', () => {
+                try {
+                    const hex = hexInput.value;
+                    if (!hex.trim()) return;
+                    const encoding = optEncoding.value;
+
+                    const bytes = hexToBytes(hex);
+                    const text = bytesToText(bytes, encoding);
+                    textInput.value = text;
+                    addLog(`Hex→Text (${encoding})`, normalizeHex(hex), text);
+                } catch (e) {
+                    textInput.value = '';
+                    showToast(e.message, true);
+                }
+            });
+
+            // Clear logs
+            document.getElementById('btn-clear-log').addEventListener('click', () => {
+                logs = [];
+                saveLogs();
+                renderLogs();
+            });
+
+            renderLogs();
+        });
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https://api.telegram.org; object-src 'none'; base-uri 'self'; form-action 'none'">
+    <title>Telegram Bot Update Logger — LocalUtil</title>
+    <!-- social / favicon -->
+    <meta name="description" content="Poll a Telegram bot's getUpdates from your browser and inspect incoming updates as JSON. Your bot token is only ever sent to api.telegram.org.">
+    <link rel="canonical" href="https://jongsic.github.io/localutil/tg-bot.html">
+    <link rel="icon" href="favicon.ico" sizes="any">
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="LocalUtil">
+    <meta property="og:title" content="Telegram Bot Update Logger — LocalUtil">
+    <meta property="og:description" content="Poll a Telegram bot's getUpdates from your browser and inspect incoming updates as JSON. Your bot token is only ever sent to api.telegram.org.">
+    <meta property="og:image" content="https://jongsic.github.io/localutil/og.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:url" content="https://jongsic.github.io/localutil/tg-bot.html">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:image" content="https://jongsic.github.io/localutil/og.png">
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebApplication","name":"Telegram Bot Update Logger","url":"https://jongsic.github.io/localutil/tg-bot.html","description":"Poll a Telegram bot's getUpdates from your browser and inspect incoming updates as JSON. Your bot token is only ever sent to api.telegram.org.","applicationCategory":"DeveloperApplication","operatingSystem":"Any","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"isPartOf":{"@type":"WebSite","name":"LocalUtil","url":"https://jongsic.github.io/localutil/"}}</script>
+    <!-- /social -->
+    <script src="theme-init.js"></script>
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        /* Live polling status pill */
+        .tg-status {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 3px 10px;
+            border-radius: var(--r-pill);
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: var(--success);
+            background: color-mix(in srgb, var(--success) 14%, transparent);
+        }
+        .tg-status .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--success);
+            animation: tg-pulse 1.5s infinite;
+        }
+        @keyframes tg-pulse {
+            0% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.4; transform: scale(0.75); }
+            100% { opacity: 1; transform: scale(1); }
+        }
+
+        /* Log output panel */
+        .tg-log-pane { position: relative; }
+        #tg-bot-output {
+            min-height: 320px;
+            font-family: var(--font-mono);
+            white-space: pre;
+            resize: vertical;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar" id="app-sidebar"></aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <header class="topbar" id="app-topbar">
+                <div class="topbar-title">
+                    <h1 id="current-tool-title">Telegram Bot Logger</h1>
+                    <p id="current-tool-desc" class="topbar-desc">Log and inspect Telegram bot updates</p>
+                </div>
+            </header>
+
+            <div class="tools-container">
+                <!-- Telegram Bot Tool -->
+                <section id="tool-tg-bot" class="tool-section active">
+                    <div class="tool-shell">
+                        <!-- Connection -->
+                        <div class="card">
+                            <div class="log-header mb-2">
+                                <div>
+                                    <div class="card-title" style="margin:0;">Bot connection</div>
+                                    <div class="field-hint">Paste your bot token and start polling to see incoming updates live.</div>
+                                </div>
+                                <span id="tg-polling-indicator" class="tg-status" style="display:none;">
+                                    <span class="dot"></span> Polling active
+                                </span>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="tg-bot-token">Bot token</label>
+                                <div class="input-group">
+                                    <input type="text" id="tg-bot-token"
+                                        placeholder="123456:ABC-DEF1234ghIkl…">
+                                    <button id="btn-tg-start" class="btn btn-primary">Start</button>
+                                    <button id="btn-tg-stop" class="btn btn-danger" disabled>Stop</button>
+                                    <button id="btn-tg-clear" class="btn btn-ghost">Clear</button>
+                                </div>
+                                <div class="field-hint">Get a token from @BotFather. Runs entirely in your browser — nothing is sent anywhere but Telegram.</div>
+                                <div id="tg-bot-token-error" class="error-text" style="display:none;"></div>
+                            </div>
+                        </div>
+
+                        <!-- Send Mini App Button -->
+                        <div class="card">
+                            <div class="card-title">Send a Mini App button</div>
+                            <div class="card-subtitle">Deliver a one-tap button that launches your Web App in a chat.</div>
+
+                            <div class="form-group">
+                                <label for="tg-chat-id">Delivery target</label>
+                                <div class="input-group">
+                                    <input type="text" id="tg-chat-id" placeholder="Chat ID (e.g. 123456789 or @channel)">
+                                    <input type="text" id="tg-webapp-url" placeholder="Web App URL (https://…)">
+                                    <button id="btn-tg-send-webapp" class="btn btn-primary">Send</button>
+                                </div>
+                                <div class="field-hint">Chat ID accepts a numeric id or an @username. Mini App URLs must use https://.</div>
+                                <div id="tg-send-error" class="error-text" style="display:none;"></div>
+                            </div>
+                        </div>
+
+                        <!-- Log Output -->
+                        <div class="pane tg-log-pane">
+                            <div class="log-header">
+                                <div>
+                                    <label for="tg-bot-output" style="margin:0;">Updates &amp; log</label>
+                                    <div class="field-hint">Raw update objects and system messages appear here as they arrive.</div>
+                                </div>
+                            </div>
+                            <textarea id="tg-bot-output"
+                                placeholder="Nothing to show yet. Start polling, then message your bot on Telegram to see updates here."
+                                readonly></textarea>
+                            <button class="btn btn-small copy-btn" data-clipboard-target="#tg-bot-output">Copy</button>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="toast">Copied to clipboard!</div>
+
+    <script src="app.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const tokenInput = document.getElementById('tg-bot-token');
+            const startBtn = document.getElementById('btn-tg-start');
+            const stopBtn = document.getElementById('btn-tg-stop');
+            const clearBtn = document.getElementById('btn-tg-clear');
+            const output = document.getElementById('tg-bot-output');
+
+            let isPolling = false;
+            let lastUpdateId = 0;
+            let pollTimeout = null;
+            const pollingIndicator = document.getElementById('tg-polling-indicator');
+
+            function updatePollingState(active) {
+                isPolling = active;
+                startBtn.disabled = active;
+                stopBtn.disabled = !active;
+                pollingIndicator.style.display = active ? 'inline' : 'none';
+
+                if (!active && pollTimeout) {
+                    clearTimeout(pollTimeout);
+                }
+            }
+
+            async function poll(token) {
+                if (!isPolling) return;
+                try {
+                    // max timeout 10 seconds to not keep connection open too long in browser context
+                    const res = await fetch(`https://api.telegram.org/bot${token}/getUpdates?offset=${lastUpdateId}&timeout=10`);
+                    const data = await res.json();
+
+                    if (data.ok && data.result.length > 0) {
+                        data.result.forEach(update => {
+                            lastUpdateId = Math.max(lastUpdateId, update.update_id + 1);
+                            if (update.message || update.callback_query || update.inline_query) {
+                                output.value += JSON.stringify(update, null, '\t') + '\n\n';
+                                output.scrollTop = output.scrollHeight;
+                            }
+                        });
+                    } else if (!data.ok) {
+                        output.value += `Error: ${data.description}\n\n`;
+                        output.scrollTop = output.scrollHeight;
+                        updatePollingState(false);
+                        return;
+                    }
+                } catch (err) {
+                    output.value += `Network/Polling Error: ${err.message}\n\n`;
+                    output.scrollTop = output.scrollHeight;
+                    updatePollingState(false);
+                    return;
+                }
+
+                if (isPolling) {
+                    pollTimeout = setTimeout(() => poll(token), 1000);
+                }
+            }
+
+            startBtn.addEventListener('click', () => {
+                const token = tokenInput.value.trim();
+                const errorSpan = document.getElementById('tg-bot-token-error');
+                errorSpan.style.display = 'none';
+
+                if (!token || !/^\d+:[A-Za-z0-9_-]+$/.test(token)) {
+                    errorSpan.textContent = 'Invalid Format (e.g. 123456:ABC-DEF...)';
+                    errorSpan.style.display = 'inline';
+                    return;
+                }
+
+                updatePollingState(true);
+
+                output.value += '봇이 메시지를 기다리고 있습니다. 텔레그램에서 봇에게 메시지를 보내세요...\n\n';
+                output.scrollTop = output.scrollHeight;
+
+                poll(token);
+            });
+
+            stopBtn.addEventListener('click', () => {
+                updatePollingState(false);
+                output.value += 'Polling stopped.\n\n';
+                output.scrollTop = output.scrollHeight;
+            });
+
+            clearBtn.addEventListener('click', () => {
+                output.value = '';
+            });
+
+            // Send MiniApp Button Handler
+            const chatIdInput = document.getElementById('tg-chat-id');
+            const webappUrlInput = document.getElementById('tg-webapp-url');
+            const sendWebappBtn = document.getElementById('btn-tg-send-webapp');
+
+            sendWebappBtn.addEventListener('click', async () => {
+                const token = tokenInput.value.trim();
+                const chatId = chatIdInput.value.trim();
+                const webappUrl = webappUrlInput.value.trim();
+
+                const errorSpan = document.getElementById('tg-send-error');
+                errorSpan.style.display = 'none';
+
+                if (!token || !/^\d+:[A-Za-z0-9_-]+$/.test(token)) {
+                    errorSpan.textContent = 'Invalid Bot Token Format';
+                    errorSpan.style.display = 'inline';
+                    return;
+                }
+
+                if (!chatId || !/^(-?\d+|@[A-Za-z0-9_]+)$/.test(chatId)) {
+                    errorSpan.textContent = 'Invalid Chat ID (Numbers or @channel)';
+                    errorSpan.style.display = 'inline';
+                    return;
+                }
+
+                try {
+                    const urlObj = new URL(webappUrl);
+                    if (urlObj.protocol !== 'https:') {
+                        errorSpan.textContent = 'Mini Apps must use https://';
+                        errorSpan.style.display = 'inline';
+                        return;
+                    }
+                } catch (e) {
+                    errorSpan.textContent = 'Invalid URL Format';
+                    errorSpan.style.display = 'inline';
+                    return;
+                }
+
+                sendWebappBtn.disabled = true;
+                sendWebappBtn.textContent = 'Sending...';
+
+                try {
+                    const response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            chat_id: chatId,
+                            text: '아래 버튼을 눌러 미니앱을 실행하세요.',
+                            reply_markup: {
+                                inline_keyboard: [
+                                    [
+                                        {
+                                            text: "🚀 미니앱 열기",
+                                            web_app: { url: webappUrl }
+                                        }
+                                    ]
+                                ]
+                            }
+                        })
+                    });
+
+                    const data = await response.json();
+                    if (data.ok) {
+                        output.value += `[System] 미니앱 버튼 전송 완료! (Chat ID: ${chatId})\n\n`;
+                    } else {
+                        output.value += `[System Error] 미니앱 전송 실패: ${data.description}\n\n`;
+                    }
+                    output.scrollTop = output.scrollHeight;
+                } catch (err) {
+                    output.value += `[System Error] 네트워크 에러: ${err.message}\n\n`;
+                    output.scrollTop = output.scrollHeight;
+                } finally {
+                    sendWebappBtn.disabled = false;
+                    sendWebappBtn.textContent = 'Send';
+                }
+            });
+        });
+    </script>
+</body>
+
+</html>

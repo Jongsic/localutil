@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://jongsic.github.io/localutil/sitemap.xml

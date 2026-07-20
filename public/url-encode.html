@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
+    <title>URL Encode / Decode Online — LocalUtil</title>
+    <!-- social / favicon -->
+    <meta name="description" content="Percent-encode and decode URLs, query strings, and cookies, with a full URL breakdown. Runs 100% in your browser — nothing is uploaded.">
+    <link rel="canonical" href="https://jongsic.github.io/localutil/url-encode.html">
+    <link rel="icon" href="favicon.ico" sizes="any">
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="LocalUtil">
+    <meta property="og:title" content="URL Encode / Decode Online — LocalUtil">
+    <meta property="og:description" content="Percent-encode and decode URLs, query strings, and cookies, with a full URL breakdown. Runs 100% in your browser — nothing is uploaded.">
+    <meta property="og:image" content="https://jongsic.github.io/localutil/og.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:url" content="https://jongsic.github.io/localutil/url-encode.html">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:image" content="https://jongsic.github.io/localutil/og.png">
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebApplication","name":"URL Encode / Decode Online","url":"https://jongsic.github.io/localutil/url-encode.html","description":"Percent-encode and decode URLs, query strings, and cookies, with a full URL breakdown. Runs 100% in your browser — nothing is uploaded.","applicationCategory":"DeveloperApplication","operatingSystem":"Any","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"isPartOf":{"@type":"WebSite","name":"LocalUtil","url":"https://jongsic.github.io/localutil/"}}</script>
+    <!-- /social -->
+    <script src="theme-init.js"></script>
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        .url-mode-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        .url-mode-label {
+            flex: 0 0 110px;
+            font-size: 0.82rem;
+            font-weight: 600;
+        }
+        .url-mode-hint {
+            flex-basis: 100%;
+            font-size: 0.76rem;
+            color: var(--text-muted);
+            margin: -2px 0 4px 118px;
+        }
+        @media (max-width: 560px) {
+            .url-mode-label { flex-basis: 100%; }
+            .url-mode-hint { margin-left: 0; }
+        }
+        .breakdown-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.8rem;
+        }
+        .breakdown-table th,
+        .breakdown-table td {
+            text-align: left;
+            padding: 6px 10px;
+            border-bottom: 1px solid var(--border-color);
+            vertical-align: top;
+            word-break: break-all;
+        }
+        .breakdown-table th {
+            color: var(--text-muted);
+            font-weight: 600;
+            white-space: nowrap;
+        }
+        .breakdown-table td.bd-key {
+            color: var(--text-muted);
+            white-space: nowrap;
+            width: 1%;
+            font-family: var(--font-mono);
+        }
+        .breakdown-table td.bd-val { font-family: var(--font-mono); }
+        .breakdown-table tr:last-child td { border-bottom: none; }
+        .breakdown-subtitle {
+            font-size: 0.78rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            margin: 14px 0 4px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar" id="app-sidebar"></aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <header class="topbar" id="app-topbar">
+                <div class="topbar-title">
+                    <h1 id="current-tool-title">URL Encode / Decode</h1>
+                    <p id="current-tool-desc" class="topbar-desc">Percent-encode &amp; decode URLs and components</p>
+                </div>
+            </header>
+
+            <div class="tools-container">
+                <section id="tool-url-encode" class="tool-section active">
+                    <div class="tool-shell">
+                        <div class="split-pane">
+                            <div class="pane">
+                                <label for="url-input">Input</label>
+                                <textarea id="url-input" placeholder="Paste a URL, a component value, or an encoded string…"></textarea>
+                                <div class="flex-col" style="gap:10px;">
+                                    <div class="url-mode-row">
+                                        <span class="url-mode-label">Full URL</span>
+                                        <button id="btn-uri-encode" class="btn btn-small btn-primary">Encode →</button>
+                                        <button id="btn-uri-decode" class="btn btn-small">← Decode</button>
+                                        <span class="url-mode-hint">encodeURI / decodeURI — keeps : / ? &amp; # intact. For a whole address.</span>
+                                    </div>
+                                    <div class="url-mode-row">
+                                        <span class="url-mode-label">Component</span>
+                                        <button id="btn-uric-encode" class="btn btn-small btn-primary">Encode →</button>
+                                        <button id="btn-uric-decode" class="btn btn-small">← Decode</button>
+                                        <span class="url-mode-hint">encodeURIComponent — escapes everything incl. : / ? &amp; #. Space is %20, + stays +.</span>
+                                    </div>
+                                    <div class="url-mode-row">
+                                        <span class="url-mode-label">Form / Query</span>
+                                        <button id="btn-urif-encode" class="btn btn-small btn-primary">Encode →</button>
+                                        <button id="btn-urif-decode" class="btn btn-small">← Decode</button>
+                                        <span class="url-mode-hint">x-www-form-urlencoded — space becomes + and + decodes to space, like browser query strings.</span>
+                                    </div>
+                                    <div class="flex-row gap-1">
+                                        <button id="btn-url-clear" class="btn btn-small btn-ghost" style="margin-left:auto;">Clear</button>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="pane">
+                                <label for="url-output">Output</label>
+                                <textarea id="url-output" placeholder="Result appears here…" readonly></textarea>
+                                <div class="flex-row gap-1">
+                                    <button id="btn-url-swap" class="btn btn-small">↑ Use as input</button>
+                                </div>
+                                <button class="btn btn-small copy-btn" data-clipboard-target="#url-output">Copy</button>
+                            </div>
+                        </div>
+
+                        <!-- URL / Cookie breakdown -->
+                        <div class="card" id="url-breakdown" style="display:none;">
+                            <div class="card-title" style="margin:0;">Breakdown</div>
+                            <div class="field-hint mb-2" id="breakdown-kind"></div>
+                            <div id="breakdown-body"></div>
+                        </div>
+
+                        <!-- Conversion Log -->
+                        <div class="card">
+                            <div class="log-header mb-2">
+                                <div>
+                                    <div class="card-title" style="margin:0;">Recent conversions</div>
+                                    <div class="field-hint">Stored locally · last 10</div>
+                                </div>
+                                <button id="btn-clear-log" class="btn btn-small">Clear</button>
+                            </div>
+                            <ul class="log-list" id="url-log"></ul>
+                            <div id="url-log-empty" class="field-hint">No conversions yet.</div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="toast">Copied to clipboard!</div>
+
+    <script src="app.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const STORAGE_KEY = 'localutil-url-log';
+            const MAX_LOG = 10;
+
+            const input = document.getElementById('url-input');
+            const output = document.getElementById('url-output');
+            const logList = document.getElementById('url-log');
+            const logEmpty = document.getElementById('url-log-empty');
+            const toast = document.getElementById('toast');
+
+            // Load logs from localStorage
+            let logs = [];
+            try {
+                const stored = localStorage.getItem(STORAGE_KEY);
+                if (stored) logs = JSON.parse(stored);
+            } catch (e) {
+                logs = [];
+            }
+
+            function saveLogs() {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(logs));
+            }
+
+            function addLog(operation, inputVal, outputVal) {
+                const truncate = (str, max) => str.length > max ? str.substring(0, max) + '...' : str;
+                const entry = `${operation}: ${truncate(inputVal, 60)} → ${truncate(outputVal, 60)}`;
+                logs.unshift(entry);
+                if (logs.length > MAX_LOG) logs.pop();
+                saveLogs();
+                renderLogs();
+            }
+
+            function renderLogs() {
+                logList.innerHTML = '';
+                logEmpty.style.display = logs.length ? 'none' : 'block';
+                logs.forEach(entry => {
+                    const li = document.createElement('li');
+                    li.className = 'history-item';
+                    li.textContent = entry;
+                    logList.appendChild(li);
+                });
+            }
+
+            function showToast(msg, isError = false) {
+                toast.textContent = msg;
+                toast.style.backgroundColor = isError ? '#ef4444' : '#10b981';
+                toast.classList.add('show');
+                setTimeout(() => toast.classList.remove('show'), 2000);
+            }
+
+            // Each mode is a [label, transform] pair; buttons share one input/output box.
+            const MODES = {
+                'btn-uri-encode': ['encodeURI', v => encodeURI(v)],
+                'btn-uri-decode': ['decodeURI', v => decodeURI(v)],
+                'btn-uric-encode': ['encodeURIComponent', v => encodeURIComponent(v)],
+                'btn-uric-decode': ['decodeURIComponent', v => decodeURIComponent(v)],
+                'btn-urif-encode': ['formEncode', v => new URLSearchParams([['v', v]]).toString().slice(2)],
+                'btn-urif-decode': ['formDecode', v => decodeURIComponent(v.replace(/\+/g, '%20'))],
+            };
+
+            Object.entries(MODES).forEach(([id, [name, fn]]) => {
+                document.getElementById(id).addEventListener('click', () => {
+                    try {
+                        const result = fn(input.value);
+                        output.value = result;
+                        addLog(name, input.value, result);
+                    } catch (e) {
+                        output.value = e.message;
+                        showToast(name + ' failed: ' + e.message, true);
+                    }
+                });
+            });
+
+            document.getElementById('btn-url-clear').addEventListener('click', () => {
+                input.value = '';
+                output.value = '';
+                input.focus();
+                analyze();
+            });
+
+            document.getElementById('btn-url-swap').addEventListener('click', () => {
+                if (!output.value) return;
+                input.value = output.value;
+                output.value = '';
+                input.focus();
+                analyze();
+            });
+
+            // --- Live breakdown: parse full URLs, cookie strings and query strings ---
+            const breakdownCard = document.getElementById('url-breakdown');
+            const breakdownKind = document.getElementById('breakdown-kind');
+            const breakdownBody = document.getElementById('breakdown-body');
+
+            // Plain percent-decode (no + → space); falls back to the raw value on bad escapes.
+            function safeDecode(v) {
+                try { return decodeURIComponent(v); } catch (e) { return v; }
+            }
+
+            function tryParseUrl(s) {
+                try {
+                    const u = new URL(s);
+                    if (u.host) return u;
+                } catch (e) { /* not an absolute URL */ }
+                if (/^[a-z0-9-]+(\.[a-z0-9-]+)+(:\d+)?([/?#]|$)/i.test(s)) {
+                    try {
+                        const u = new URL('https://' + s);
+                        if (u.host) return u;
+                    } catch (e) { /* fall through */ }
+                }
+                return null;
+            }
+
+            // name=value pairs separated by ';' — every segment must look like a pair.
+            function tryParseCookies(s) {
+                const parts = s.split(';').map(p => p.trim()).filter(Boolean);
+                if (parts.length < 2 && !s.includes(';')) return null;
+                const pairs = [];
+                for (const p of parts) {
+                    const idx = p.indexOf('=');
+                    if (idx <= 0) return null;
+                    pairs.push([p.slice(0, idx).trim(), p.slice(idx + 1)]);
+                }
+                return pairs.length ? pairs : null;
+            }
+
+            function makeTable(headers, rows) {
+                const table = document.createElement('table');
+                table.className = 'breakdown-table';
+                if (headers) {
+                    const tr = document.createElement('tr');
+                    headers.forEach(h => {
+                        const th = document.createElement('th');
+                        th.textContent = h;
+                        tr.appendChild(th);
+                    });
+                    table.appendChild(tr);
+                }
+                rows.forEach(([k, v]) => {
+                    const tr = document.createElement('tr');
+                    const tdKey = document.createElement('td');
+                    tdKey.className = 'bd-key';
+                    tdKey.textContent = k;
+                    const tdVal = document.createElement('td');
+                    tdVal.className = 'bd-val';
+                    tdVal.textContent = v;
+                    tr.append(tdKey, tdVal);
+                    table.appendChild(tr);
+                });
+                return table;
+            }
+
+            function addSubtitle(text) {
+                const d = document.createElement('div');
+                d.className = 'breakdown-subtitle';
+                d.textContent = text;
+                breakdownBody.appendChild(d);
+            }
+
+            function analyze() {
+                const s = input.value.trim();
+                breakdownBody.innerHTML = '';
+
+                const url = s && tryParseUrl(s);
+                if (url) {
+                    breakdownKind.textContent = 'Detected: URL';
+                    const parts = [
+                        ['scheme', url.protocol.replace(/:$/, '')],
+                        ['host', url.hostname],
+                    ];
+                    if (url.port) parts.push(['port', url.port]);
+                    parts.push(['path', safeDecode(url.pathname)]);
+                    if (url.hash) parts.push(['fragment', safeDecode(url.hash.slice(1))]);
+                    breakdownBody.appendChild(makeTable(null, parts));
+                    const params = [...url.searchParams];
+                    if (params.length) {
+                        addSubtitle(`Query parameters (${params.length}) — + decoded as space`);
+                        breakdownBody.appendChild(makeTable(['Parameter', 'Value (decoded)'], params));
+                    }
+                    breakdownCard.style.display = '';
+                    return;
+                }
+
+                if (s && s.includes(';') && s.includes('=')) {
+                    const pairs = tryParseCookies(s);
+                    if (pairs) {
+                        breakdownKind.textContent = 'Detected: cookie string — %-escapes decoded, + kept as +';
+                        breakdownBody.appendChild(makeTable(['Cookie', 'Value (decoded)'],
+                            pairs.map(([k, v]) => [k, safeDecode(v)])));
+                        breakdownCard.style.display = '';
+                        return;
+                    }
+                }
+
+                if (s && /^\??[^\s=&;]+=[^\s&;]*(&[^\s=&;]+=[^\s&;]*)*$/.test(s) && (s.startsWith('?') || s.includes('&'))) {
+                    const params = [...new URLSearchParams(s.replace(/^\?/, ''))];
+                    if (params.length) {
+                        breakdownKind.textContent = 'Detected: query string — + decoded as space';
+                        breakdownBody.appendChild(makeTable(['Parameter', 'Value (decoded)'], params));
+                        breakdownCard.style.display = '';
+                        return;
+                    }
+                }
+
+                breakdownCard.style.display = 'none';
+            }
+
+            input.addEventListener('input', analyze);
+            analyze();
+
+            // Clear logs
+            document.getElementById('btn-clear-log').addEventListener('click', () => {
+                logs = [];
+                saveLogs();
+                renderLogs();
+            });
+
+            // Render logs on load
+            renderLogs();
+        });
+    </script>
+</body>
+
+</html>

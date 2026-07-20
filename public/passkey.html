@@ -1,0 +1,1675 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
+    <title>Passkey / WebAuthn Debugger &amp; Tester — LocalUtil</title>
+    <!-- social / favicon -->
+    <meta name="description" content="Create and test WebAuthn passkeys against a simulated local server: decode authenticatorData, CBOR and COSE keys, and verify signatures step by step. Runs 100% in your browser — credentials never leave your machine.">
+    <link rel="canonical" href="https://jongsic.github.io/localutil/passkey.html">
+    <link rel="icon" href="favicon.ico" sizes="any">
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="LocalUtil">
+    <meta property="og:title" content="Passkey / WebAuthn Debugger &amp; Tester — LocalUtil">
+    <meta property="og:description" content="Create and test WebAuthn passkeys against a simulated local server: decode authenticatorData, CBOR and COSE keys, and verify signatures step by step. Runs 100% in your browser — credentials never leave your machine.">
+    <meta property="og:image" content="https://jongsic.github.io/localutil/og.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:url" content="https://jongsic.github.io/localutil/passkey.html">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:image" content="https://jongsic.github.io/localutil/og.png">
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebApplication","name":"Passkey / WebAuthn Debugger & Tester","url":"https://jongsic.github.io/localutil/passkey.html","description":"Create and test WebAuthn passkeys against a simulated local server: decode authenticatorData, CBOR and COSE keys, and verify signatures step by step. Runs 100% in your browser — credentials never leave your machine.","applicationCategory":"DeveloperApplication","operatingSystem":"Any","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"isPartOf":{"@type":"WebSite","name":"LocalUtil","url":"https://jongsic.github.io/localutil/"}}</script>
+    <!-- /social -->
+    <script src="theme-init.js"></script>
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        /* Passkey debugger — chips, ceremony ribbon, checklist, flag badges */
+        .pk-strip { display: flex; flex-direction: column; gap: 10px; padding: 14px 18px; }
+        .pk-chips { display: flex; flex-wrap: wrap; gap: 8px 14px; }
+        .pk-chip {
+            display: inline-flex; align-items: center; gap: 6px;
+            font-size: 0.8rem; font-weight: 600; color: var(--text-muted);
+        }
+        .pk-chip .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--text-faint); flex-shrink: 0; }
+        .pk-chip.on { color: var(--text-main); }
+        .pk-chip.on .dot { background: var(--success); }
+        .pk-chip.off .dot { background: transparent; border: 1.5px solid var(--text-faint); }
+        .pk-chip.unknown .dot { background: var(--warning); }
+
+        .pk-row { display: flex; gap: 16px; padding: 7px 0; align-items: baseline; }
+        .pk-row + .pk-row { border-top: 1px solid var(--border-color); }
+        .pk-row-key { flex: 0 0 150px; color: var(--text-muted); font-size: 0.8rem; font-weight: 600; }
+        .pk-row-val {
+            flex: 1; min-width: 0; font-family: var(--font-mono); font-size: 0.84rem;
+            word-break: break-all; white-space: pre-wrap; color: var(--text-main);
+        }
+        .pk-row-val .pk-note { font-family: inherit; color: var(--text-muted); font-size: 0.78rem; font-weight: 400; }
+        .pk-copy { cursor: pointer; }
+        .pk-copy:hover { color: var(--primary); }
+
+        /* Ceremony ribbon */
+        .pk-steps {
+            display: flex; align-items: center; gap: 6px; flex-wrap: nowrap;
+            padding: 10px 18px; overflow: hidden;
+        }
+        .pk-step { display: inline-flex; align-items: center; gap: 7px; color: var(--text-faint); font-size: 0.78rem; font-weight: 600; white-space: nowrap; }
+        .pk-step .num {
+            width: 20px; height: 20px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;
+            border: 1.5px solid var(--border-strong); font-size: 0.72rem; flex-shrink: 0;
+        }
+        .pk-step.reached { color: var(--text-main); }
+        .pk-step.reached .num { background: var(--primary); border-color: var(--primary); color: #fff; }
+        .pk-step.active .num { animation: pk-pulse 1.1s ease-in-out infinite; }
+        @keyframes pk-pulse { 50% { box-shadow: 0 0 0 5px var(--primary-ring); } }
+        .pk-step-sep { flex: 1; height: 1px; background: var(--border-color); min-width: 10px; }
+
+        /* Tabs */
+        .pk-tabs { display: flex; width: 100%; overflow-x: auto; }
+        .pk-tabs button { flex: 1; white-space: nowrap; }
+
+        /* Presets */
+        .pk-presets { display: flex; flex-wrap: wrap; }
+        .pk-preset-desc { font-size: 0.8rem; color: var(--text-muted); margin-top: 7px; min-height: 1.2em; }
+
+        /* Advanced accordion */
+        details.pk-adv, details.pk-json, details.pk-inline {
+            border: 1px solid var(--border-color); border-radius: var(--r-sm);
+            padding: 0 14px; background: var(--bg-subtle);
+        }
+        details.pk-adv summary, details.pk-json summary, details.pk-inline summary {
+            cursor: pointer; padding: 10px 0; font-size: 0.85rem; font-weight: 600;
+            color: var(--text-main); list-style: none; user-select: none;
+        }
+        details summary::-webkit-details-marker { display: none; }
+        details.pk-adv summary::before, details.pk-json summary::before, details.pk-inline summary::before {
+            content: "\25B8"; display: inline-block; margin-right: 7px; color: var(--text-muted); transition: transform 0.15s;
+        }
+        details[open].pk-adv summary::before, details[open].pk-json summary::before, details[open].pk-inline summary::before { transform: rotate(90deg); }
+        details.pk-adv > .pk-adv-body, details.pk-json > .pk-json-body, details.pk-inline > .pk-inline-body { padding-bottom: 12px; }
+        .pk-adv .field-row { flex-wrap: wrap; }
+        .pk-adv .field-row .field-label { max-width: 100%; }
+        .pk-optdesc { font-size: 0.78rem; color: var(--text-muted); }
+        .segmented button.pk-notset { font-style: italic; font-weight: 500; }
+
+        .pk-jsonbox {
+            position: relative; font-family: var(--font-mono); font-size: 0.8rem; line-height: 1.5;
+            background: var(--bg-content); border: 1px solid var(--border-color); border-radius: var(--r-xs);
+            padding: 12px; white-space: pre; overflow-x: auto;
+        }
+        .pk-rawbox {
+            font-family: var(--font-mono); font-size: 0.8rem; background: var(--bg-subtle);
+            border: 1px solid var(--border-color); border-radius: var(--r-xs); padding: 10px 12px;
+            word-break: break-all; white-space: pre-wrap; position: relative;
+        }
+        .pk-rawbox + .pk-rawbox { margin-top: 8px; }
+        .pk-rawbox .pk-raw-label { display: block; font-size: 0.7rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 4px; }
+
+        /* JSON syntax highlighting (theme-aware) */
+        .pk-j-key { color: var(--primary); }
+        .pk-j-str { color: var(--success); }
+        .pk-j-num { color: var(--warning); }
+        .pk-j-bool { color: var(--danger); }
+
+        /* Verification checklist */
+        .pk-card-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 4px; }
+        .pk-card-head .card-title { margin-bottom: 0; }
+        .pk-check-summary { font-size: 0.82rem; font-weight: 700; }
+        .pk-check-summary.ok { color: var(--success); }
+        .pk-check-summary.bad { color: var(--danger); }
+        details.pk-check { border-top: 1px solid var(--border-color); }
+        details.pk-check:first-of-type { border-top: none; }
+        details.pk-check summary {
+            display: flex; align-items: baseline; gap: 10px; padding: 9px 0; cursor: pointer; list-style: none;
+            font-size: 0.85rem;
+        }
+        .pk-check-icon { font-weight: 700; flex-shrink: 0; width: 16px; text-align: center; }
+        .pk-check.pass .pk-check-icon { color: var(--success); }
+        .pk-check.fail .pk-check-icon { color: var(--danger); }
+        .pk-check.info .pk-check-icon { color: var(--text-muted); }
+        .pk-check.warn .pk-check-icon { color: var(--warning); }
+        .pk-check-name { font-weight: 650; flex: 0 0 120px; }
+        .pk-check-note { color: var(--text-muted); flex: 1; min-width: 140px; }
+        .pk-check-why { color: var(--text-faint); font-size: 0.78rem; }
+        .pk-check-body { padding: 2px 0 10px 26px; }
+
+        /* Flag badges */
+        .pk-flags { display: flex; flex-wrap: wrap; gap: 6px; }
+        .pk-flag {
+            display: inline-block; padding: 2px 8px; border-radius: var(--r-pill);
+            font-size: 0.72rem; font-weight: 700; font-family: var(--font-mono);
+            border: 1px solid var(--border-strong); color: var(--text-faint);
+        }
+        .pk-flag.set { background: var(--primary-soft); border-color: var(--primary); color: var(--primary); }
+        .pk-flags-caption { font-size: 0.75rem; color: var(--text-muted); margin-top: 5px; }
+
+        /* View toggle inside data cards */
+        .pk-viewtoggle button { padding: 4px 11px; font-size: 0.78rem; }
+
+        /* Error card */
+        .pk-error { border-color: var(--danger); }
+        .pk-error .pk-error-title { font-weight: 700; color: var(--danger); margin-bottom: 6px; font-size: 0.92rem; }
+        .pk-error p { font-size: 0.85rem; margin-bottom: 6px; }
+        .pk-error pre { font-family: var(--font-mono); font-size: 0.8rem; white-space: pre-wrap; word-break: break-all; color: var(--text-muted); padding-top: 6px; }
+
+        /* Saved credentials */
+        .pk-cred-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+        .pk-cred-name { font-weight: 700; font-size: 0.95rem; }
+        .pk-cred-meta { font-size: 0.78rem; color: var(--text-muted); font-weight: 600; }
+        .pk-cred-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+        .pk-cred-confirm { margin-top: 10px; padding: 10px 12px; border: 1px solid var(--danger); border-radius: var(--r-sm); font-size: 0.83rem; }
+        .pk-store-note { font-size: 0.8rem; color: var(--warning); margin-top: 4px; }
+        .pk-empty { color: var(--text-muted); font-size: 0.87rem; padding: 8px 0; }
+
+        /* Loading spinner in CTA */
+        .pk-spin {
+            width: 14px; height: 14px; border-radius: 50%; flex-shrink: 0;
+            border: 2px solid rgba(255,255,255,0.35); border-top-color: #fff;
+            animation: pk-rot 0.8s linear infinite; display: inline-block;
+        }
+        @keyframes pk-rot { to { transform: rotate(360deg); } }
+
+        .pk-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+        .pk-keybtns { display: inline-flex; gap: 6px; }
+        .pk-challenge-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 0.85rem; }
+        .pk-challenge-row .mono { font-size: 0.8rem; }
+
+        @media (max-width: 640px) {
+            .pk-row { flex-direction: column; gap: 3px; }
+            .pk-row-key { flex-basis: auto; }
+            .pk-step .lbl { display: none; }
+            .pk-presets { flex-direction: column; align-items: stretch; }
+            .pk-presets button { text-align: left; }
+            .pk-adv .field-row { flex-direction: column; align-items: stretch; }
+            .pk-adv .field-row .segmented { display: flex; }
+            .pk-adv .field-row .segmented button { flex: 1; }
+            .pk-actions .btn-primary { width: 100%; }
+            .pk-check-name { flex-basis: auto; }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar" id="app-sidebar"></aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <header class="topbar" id="app-topbar">
+                <div class="topbar-title">
+                    <h1 id="current-tool-title">Passkey Debugger</h1>
+                    <p id="current-tool-desc" class="topbar-desc">Create, sign in with, and inspect WebAuthn passkeys against a simulated local server — every byte decoded and verified</p>
+                </div>
+            </header>
+
+            <div class="tools-container">
+                <section id="tool-passkey" class="tool-section active">
+                    <div class="tool-shell">
+
+                        <!-- Environment strip -->
+                        <div class="card pk-strip">
+                            <div class="pk-chips">
+                                <span class="pk-chip unknown" id="pk-chip-secure"><span class="dot"></span>Secure context</span>
+                                <span class="pk-chip unknown" id="pk-chip-webauthn"><span class="dot"></span>WebAuthn</span>
+                                <span class="pk-chip unknown" id="pk-chip-platform"><span class="dot"></span>Platform authenticator</span>
+                                <span class="pk-chip unknown" id="pk-chip-conditional"><span class="dot"></span>Conditional UI</span>
+                            </div>
+                            <div>
+                                <div class="pk-row"><span class="pk-row-key">RP ID</span><span class="pk-row-val pk-copy" id="pk-env-rpid"></span></div>
+                                <div class="pk-row"><span class="pk-row-key">Origin</span><span class="pk-row-val pk-copy" id="pk-env-origin"></span></div>
+                            </div>
+                        </div>
+
+                        <!-- Ceremony ribbon -->
+                        <div class="card pk-steps" id="pk-steps" aria-label="Ceremony progress">
+                            <span class="pk-step" data-step="1"><span class="num">1</span><span class="lbl">Build options</span></span>
+                            <span class="pk-step-sep"></span>
+                            <span class="pk-step" data-step="2"><span class="num">2</span><span class="lbl">Authenticator</span></span>
+                            <span class="pk-step-sep"></span>
+                            <span class="pk-step" data-step="3"><span class="num">3</span><span class="lbl">Response</span></span>
+                            <span class="pk-step-sep"></span>
+                            <span class="pk-step" data-step="4"><span class="num">4</span><span class="lbl">Verify</span></span>
+                        </div>
+
+                        <!-- Banner slot (insecure context / unsupported) -->
+                        <div id="pk-banner"></div>
+
+                        <!-- Tabs -->
+                        <div class="segmented pk-tabs" id="pk-tabs" role="tablist">
+                            <button type="button" data-tab="register" class="active" role="tab">Register</button>
+                            <button type="button" data-tab="signin" role="tab">Sign in</button>
+                            <button type="button" data-tab="saved" role="tab">Saved <span id="pk-saved-count"></span></button>
+                            <button type="button" data-tab="inspect" role="tab">Inspect</button>
+                        </div>
+
+                        <!-- ============ Register tab ============ -->
+                        <div class="pk-tab" id="pk-tab-register">
+                            <div class="card">
+                                <div class="card-title">Create a passkey</div>
+                                <div class="card-subtitle">Pick a scenario, then Create. Everything advanced is optional.</div>
+
+                                <div class="field-group mb-2">
+                                    <label>Scenario</label>
+                                    <div class="segmented pk-presets" id="pk-presets"></div>
+                                    <div class="pk-preset-desc" id="pk-preset-desc"></div>
+                                </div>
+
+                                <div class="field-group mb-2">
+                                    <label for="pk-username">User name</label>
+                                    <input type="text" id="pk-username" value="demo@localutil" autocomplete="off" spellcheck="false">
+                                    <span class="field-hint">Used as <code>user.name</code> — shown in the authenticator prompt.</span>
+                                </div>
+
+                                <div class="pk-challenge-row mb-2">
+                                    <label style="margin:0;">Challenge</label>
+                                    <span class="text-muted text-xs">auto · 32 random bytes</span>
+                                    <button type="button" class="btn btn-small" id="pk-challenge-regen">regenerate</button>
+                                    <details class="pk-inline" style="flex:1; min-width:200px;">
+                                        <summary>show</summary>
+                                        <div class="pk-inline-body"><span class="mono" id="pk-challenge-val" style="word-break:break-all; font-size:0.8rem;"></span></div>
+                                    </details>
+                                </div>
+
+                                <div class="pk-actions mb-2">
+                                    <button type="button" class="btn btn-primary" id="pk-btn-create">Create passkey</button>
+                                    <button type="button" class="btn" id="pk-btn-create-cancel" style="display:none;">Cancel</button>
+                                </div>
+
+                                <details class="pk-adv mb-1" id="pk-adv-register">
+                                    <summary>Advanced options</summary>
+                                    <div class="pk-adv-body" id="pk-adv-register-body"></div>
+                                </details>
+
+                                <details class="pk-json" id="pk-json-register">
+                                    <summary>Generated options JSON</summary>
+                                    <div class="pk-json-body">
+                                        <div class="pk-jsonbox" id="pk-json-register-out"></div>
+                                        <div class="field-hint mt-1">Binary fields are shown as base64url — the same JSON format <code>parseCreationOptionsFromJSON()</code> accepts.</div>
+                                    </div>
+                                </details>
+                            </div>
+
+                            <div id="pk-reg-result"></div>
+                        </div>
+
+                        <!-- ============ Sign in tab ============ -->
+                        <div class="pk-tab" id="pk-tab-signin" style="display:none;">
+                            <div class="card">
+                                <div class="card-title">Sign in with a passkey</div>
+                                <div class="card-subtitle">Authenticate with a saved credential or let the browser show an account picker.</div>
+
+                                <div class="field-row">
+                                    <div class="field-label">
+                                        <label>Credential source</label>
+                                        <span class="field-hint" id="pk-source-desc">Let the browser show an account picker (no ID sent).</span>
+                                    </div>
+                                    <div class="segmented" id="pk-signin-source">
+                                        <button type="button" data-val="discoverable" class="active">Discoverable</button>
+                                        <button type="button" data-val="specific">Specific credential</button>
+                                    </div>
+                                </div>
+
+                                <div class="field-group mb-2 mt-1" id="pk-signin-cred-wrap" style="display:none;">
+                                    <label for="pk-signin-cred">Saved credential</label>
+                                    <select id="pk-signin-cred"></select>
+                                </div>
+
+                                <div class="pk-actions mb-2 mt-2">
+                                    <button type="button" class="btn btn-primary" id="pk-btn-signin">Sign in</button>
+                                    <button type="button" class="btn" id="pk-btn-signin-cancel" style="display:none;">Cancel</button>
+                                </div>
+
+                                <details class="pk-adv mb-1" id="pk-adv-signin">
+                                    <summary>Advanced options</summary>
+                                    <div class="pk-adv-body" id="pk-adv-signin-body">
+                                        <div class="field-group mt-2 mb-1" id="pk-conditional-wrap" style="display:none;">
+                                            <label for="pk-conditional-input">Username field (autofill demo)</label>
+                                            <input type="text" id="pk-conditional-input" autocomplete="username webauthn" placeholder="Click here — the browser suggests saved passkeys">
+                                            <span class="field-hint">Conditional UI attaches passkey suggestions to this input instead of opening a modal.</span>
+                                        </div>
+                                    </div>
+                                </details>
+
+                                <details class="pk-json" id="pk-json-signin">
+                                    <summary>Generated options JSON</summary>
+                                    <div class="pk-json-body"><div class="pk-jsonbox" id="pk-json-signin-out"></div></div>
+                                </details>
+                            </div>
+
+                            <div id="pk-signin-result"></div>
+                        </div>
+
+                        <!-- ============ Saved tab ============ -->
+                        <div class="pk-tab" id="pk-tab-saved" style="display:none;">
+                            <div class="card">
+                                <div class="pk-card-head">
+                                    <div class="card-title">Saved credentials</div>
+                                    <div class="pk-keybtns">
+                                        <button type="button" class="btn btn-small" id="pk-btn-import">Import JSON</button>
+                                        <button type="button" class="btn btn-small" id="pk-btn-export-all">Export all</button>
+                                        <input type="file" id="pk-import-file" accept=".json,application/json" style="display:none;">
+                                    </div>
+                                </div>
+                                <div class="card-subtitle">Public data only — what a real relying-party server would keep in its database. There is no server here: it's simulated in this browser's localStorage.</div>
+                                <div id="pk-saved-list"></div>
+                                <div class="pk-store-note">⚠ Delete removes this entry from LocalUtil only. The passkey stays on your device / password manager — remove it there too.</div>
+                            </div>
+                        </div>
+
+                        <!-- ============ Inspect tab ============ -->
+                        <div class="pk-tab" id="pk-tab-inspect" style="display:none;">
+                            <div class="card">
+                                <div class="card-title">Inspect your own data</div>
+                                <div class="card-subtitle">Paste base64url from any WebAuthn response — decoded exactly like the ones above.</div>
+
+                                <div class="field-group mb-2">
+                                    <label>What is it?</label>
+                                    <div class="segmented" id="pk-inspect-type">
+                                        <button type="button" data-val="authData" class="active">authenticatorData</button>
+                                        <button type="button" data-val="clientData">clientDataJSON</button>
+                                        <button type="button" data-val="attestation">attestationObject</button>
+                                        <button type="button" data-val="cose">COSE key</button>
+                                    </div>
+                                </div>
+
+                                <div class="field-group mb-2">
+                                    <label for="pk-inspect-input">Base64url (or hex)</label>
+                                    <textarea id="pk-inspect-input" rows="8" style="min-height: 120px; flex: none; resize: vertical;" placeholder="Paste a base64url value and choose what it is." spellcheck="false"></textarea>
+                                </div>
+                                <button type="button" class="btn btn-primary" id="pk-btn-decode">Decode</button>
+                            </div>
+
+                            <div id="pk-inspect-result"></div>
+                        </div>
+
+                    </div>
+                </section>
+            </div>
+        </main>
+    </div>
+
+    <div id="toast" class="toast">Copied to clipboard</div>
+    <script src="app.js"></script>
+    <script>
+        (() => {
+            'use strict';
+
+            /* ============================================================
+               utils — base64url / hex / bytes
+               ============================================================ */
+            function bytesOf(buf) { return buf instanceof Uint8Array ? buf : new Uint8Array(buf); }
+
+            function b64urlEncode(buf) {
+                const b = bytesOf(buf);
+                let s = '';
+                for (let i = 0; i < b.length; i += 0x4000) s += String.fromCharCode.apply(null, b.subarray(i, i + 0x4000));
+                return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+            }
+
+            function b64urlDecode(str) {
+                let s = String(str).trim().replace(/-/g, '+').replace(/_/g, '/');
+                if (/[^A-Za-z0-9+/=]/.test(s)) throw new Error('not valid base64url');
+                while (s.length % 4) s += '=';
+                const bin = atob(s);
+                const out = new Uint8Array(bin.length);
+                for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+                return out;
+            }
+
+            function toHex(buf) { return Array.from(bytesOf(buf), b => b.toString(16).padStart(2, '0')).join(''); }
+            function fromHex(str) {
+                const s = str.replace(/\s+/g, '');
+                if (!/^[0-9a-fA-F]*$/.test(s) || s.length % 2) throw new Error('not valid hex');
+                const out = new Uint8Array(s.length / 2);
+                for (let i = 0; i < out.length; i++) out[i] = parseInt(s.substr(i * 2, 2), 16);
+                return out;
+            }
+
+            function bytesEqual(a, b) {
+                a = bytesOf(a); b = bytesOf(b);
+                if (a.length !== b.length) return false;
+                let diff = 0;
+                for (let i = 0; i < a.length; i++) diff |= a[i] ^ b[i];
+                return diff === 0;
+            }
+
+            function randomBytes(n) { return crypto.getRandomValues(new Uint8Array(n)); }
+            async function sha256(buf) { return new Uint8Array(await crypto.subtle.digest('SHA-256', bytesOf(buf))); }
+
+            function uuidFormat(bytes) {
+                const h = toHex(bytes);
+                return h.slice(0, 8) + '-' + h.slice(8, 12) + '-' + h.slice(12, 16) + '-' + h.slice(16, 20) + '-' + h.slice(20, 32);
+            }
+
+            function escapeHtml(s) {
+                return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+            }
+
+            // Pretty-print a plain JS value as syntax-highlighted JSON HTML.
+            // Built from the parsed value (never regex over serialized text), so
+            // the highlighting can't be confused by string contents.
+            function jsonHtml(v, ind) {
+                ind = ind || '';
+                const pad = ind + '  ';
+                if (v === null || v === undefined) return '<span class="pk-j-bool">null</span>';
+                if (typeof v === 'boolean') return '<span class="pk-j-bool">' + v + '</span>';
+                if (typeof v === 'number') return '<span class="pk-j-num">' + v + '</span>';
+                if (typeof v === 'string') return '<span class="pk-j-str">"' + escapeHtml(v.replace(/\\/g, '\\\\').replace(/"/g, '\\"')) + '"</span>';
+                if (Array.isArray(v)) {
+                    if (!v.length) return '[]';
+                    return '[\n' + v.map(x => pad + jsonHtml(x, pad)).join(',\n') + '\n' + ind + ']';
+                }
+                const keys = Object.keys(v);
+                if (!keys.length) return '{}';
+                return '{\n' + keys.map(k =>
+                    pad + '<span class="pk-j-key">"' + escapeHtml(k) + '"</span>: ' + jsonHtml(v[k], pad)
+                ).join(',\n') + '\n' + ind + '}';
+            }
+
+            /* ============================================================
+               cbor — minimal decoder (definite-length only; enough for
+               attestationObject / COSE keys / authData extensions)
+               ============================================================ */
+            function cborItem(bytes, offset) {
+                if (offset >= bytes.length) throw new Error('CBOR: unexpected end of data');
+                const ib = bytes[offset];
+                const major = ib >> 5;
+                const info = ib & 0x1f;
+                let len, off = offset + 1;
+
+                if (info < 24) len = info;
+                else if (info === 24) { len = bytes[off]; off += 1; }
+                else if (info === 25) { len = (bytes[off] << 8) | bytes[off + 1]; off += 2; }
+                else if (info === 26) { len = (bytes[off] * 0x1000000) + (bytes[off + 1] << 16 | bytes[off + 2] << 8 | bytes[off + 3]); off += 4; }
+                else if (info === 27) throw new Error('CBOR: 64-bit lengths not supported');
+                else if (info === 31) throw new Error('CBOR: indefinite length not supported');
+                else throw new Error('CBOR: reserved length encoding');
+
+                switch (major) {
+                    case 0: return [len, off];                       // unsigned int
+                    case 1: return [-1 - len, off];                  // negative int
+                    case 2: {                                        // byte string
+                        if (off + len > bytes.length) throw new Error('CBOR: byte string overruns data');
+                        return [bytes.slice(off, off + len), off + len];
+                    }
+                    case 3: {                                        // text string
+                        if (off + len > bytes.length) throw new Error('CBOR: text string overruns data');
+                        return [new TextDecoder().decode(bytes.slice(off, off + len)), off + len];
+                    }
+                    case 4: {                                        // array
+                        const arr = [];
+                        for (let i = 0; i < len; i++) { const [v, next] = cborItem(bytes, off); arr.push(v); off = next; }
+                        return [arr, off];
+                    }
+                    case 5: {                                        // map
+                        const map = new Map();
+                        for (let i = 0; i < len; i++) {
+                            const [k, koff] = cborItem(bytes, off);
+                            const [v, voff] = cborItem(bytes, koff);
+                            map.set(k, v); off = voff;
+                        }
+                        return [map, off];
+                    }
+                    case 6: return cborItem(bytes, off);             // tag: unwrap
+                    case 7: {                                        // simple values
+                        if (info === 20) return [false, off];
+                        if (info === 21) return [true, off];
+                        if (info === 22) return [null, off];
+                        throw new Error('CBOR: floats / simple value ' + info + ' not supported');
+                    }
+                }
+                throw new Error('CBOR: unreachable');
+            }
+
+            function cborDecode(bytes) {
+                const [value, end] = cborItem(bytesOf(bytes), 0);
+                if (end !== bytes.length) throw new Error('CBOR: ' + (bytes.length - end) + ' trailing bytes');
+                return value;
+            }
+
+            // Render a decoded CBOR value (Maps, bytes) as display-friendly JSON.
+            function cborToDisplay(v) {
+                if (v instanceof Map) {
+                    const o = {};
+                    for (const [k, val] of v) o[typeof k === 'string' ? k : String(k)] = cborToDisplay(val);
+                    return o;
+                }
+                if (v instanceof Uint8Array) return 'b64url:' + b64urlEncode(v);
+                if (Array.isArray(v)) return v.map(cborToDisplay);
+                return v;
+            }
+
+            /* ============================================================
+               authData — binary layout parser
+               ============================================================ */
+            function parseAuthenticatorData(bytes) {
+                bytes = bytesOf(bytes);
+                if (bytes.length < 37) throw new Error('authenticatorData must be at least 37 bytes (got ' + bytes.length + ')');
+                const flagsByte = bytes[32];
+                const flags = {
+                    up: !!(flagsByte & 0x01), uv: !!(flagsByte & 0x04),
+                    be: !!(flagsByte & 0x08), bs: !!(flagsByte & 0x10),
+                    at: !!(flagsByte & 0x40), ed: !!(flagsByte & 0x80),
+                };
+                const out = {
+                    rpIdHash: bytes.slice(0, 32),
+                    flagsByte, flags,
+                    signCount: new DataView(bytes.buffer, bytes.byteOffset + 33, 4).getUint32(0),
+                };
+                let off = 37;
+                if (flags.at) {
+                    if (bytes.length < off + 18) throw new Error('authenticatorData: attested credential data truncated');
+                    out.aaguid = bytes.slice(off, off + 16);
+                    const idLen = (bytes[off + 16] << 8) | bytes[off + 17];
+                    off += 18;
+                    if (bytes.length < off + idLen) throw new Error('authenticatorData: credential ID truncated');
+                    out.credentialId = bytes.slice(off, off + idLen);
+                    off += idLen;
+                    const [coseKey, next] = cborItem(bytes, off);
+                    out.cosePublicKey = coseKey;
+                    off = next;
+                }
+                if (flags.ed) {
+                    const [ext, next] = cborItem(bytes, off);
+                    out.extensions = ext;
+                    off = next;
+                }
+                return out;
+            }
+
+            /* ============================================================
+               cose — COSE key → JWK / algorithm names
+               ============================================================ */
+            const ALG_NAMES = { '-7': 'ES256', '-8': 'EdDSA', '-257': 'RS256' };
+            function algName(alg) { return ALG_NAMES[String(alg)] || ('COSE alg ' + alg); }
+
+            function coseToJwk(cose) {
+                if (!(cose instanceof Map)) throw new Error('COSE key must be a CBOR map');
+                const kty = cose.get(1), alg = cose.get(3);
+                if (kty === 2) { // EC2
+                    const crv = cose.get(-1);
+                    if (crv !== 1) throw new Error('unsupported EC curve (COSE crv ' + crv + ')');
+                    return { jwk: { kty: 'EC', crv: 'P-256', x: b64urlEncode(cose.get(-2)), y: b64urlEncode(cose.get(-3)) }, kty: 'EC2', crv: 'P-256', alg };
+                }
+                if (kty === 3) { // RSA
+                    return { jwk: { kty: 'RSA', n: b64urlEncode(cose.get(-1)), e: b64urlEncode(cose.get(-2)) }, kty: 'RSA', crv: null, alg };
+                }
+                if (kty === 1) { // OKP
+                    const crv = cose.get(-1);
+                    if (crv !== 6) throw new Error('unsupported OKP curve (COSE crv ' + crv + ')');
+                    return { jwk: { kty: 'OKP', crv: 'Ed25519', x: b64urlEncode(cose.get(-2)) }, kty: 'OKP', crv: 'Ed25519', alg };
+                }
+                throw new Error('unsupported COSE key type ' + kty);
+            }
+
+            function importParamsFor(jwk, alg) {
+                if (jwk.kty === 'EC') return { imp: { name: 'ECDSA', namedCurve: 'P-256' }, ver: { name: 'ECDSA', hash: 'SHA-256' } };
+                if (jwk.kty === 'RSA') return { imp: { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' }, ver: { name: 'RSASSA-PKCS1-v1_5' } };
+                if (jwk.kty === 'OKP') return { imp: { name: 'Ed25519' }, ver: { name: 'Ed25519' } };
+                throw new Error('unsupported key type ' + jwk.kty);
+            }
+
+            async function jwkToPem(jwk) {
+                const { imp } = importParamsFor(jwk);
+                const key = await crypto.subtle.importKey('jwk', jwk, imp, true, ['verify']);
+                const spki = new Uint8Array(await crypto.subtle.exportKey('spki', key));
+                let b64 = btoa(String.fromCharCode.apply(null, spki));
+                let pem = '-----BEGIN PUBLIC KEY-----\n';
+                for (let i = 0; i < b64.length; i += 64) pem += b64.slice(i, i + 64) + '\n';
+                return pem + '-----END PUBLIC KEY-----';
+            }
+
+            /* ============================================================
+               verify — DER→P1363 + WebCrypto signature check
+               ============================================================ */
+            function derToP1363(der, size) {
+                der = bytesOf(der); size = size || 32;
+                let off = 0;
+                if (der[off++] !== 0x30) throw new Error('DER: expected SEQUENCE');
+                if (der[off] & 0x80) off += 1 + (der[off] & 0x7f); else off += 1; // sequence length
+                function readInt() {
+                    if (der[off++] !== 0x02) throw new Error('DER: expected INTEGER');
+                    let len = der[off++];
+                    if (len & 0x80) { const n = len & 0x7f; len = 0; for (let i = 0; i < n; i++) len = (len << 8) | der[off++]; }
+                    let v = der.slice(off, off + len); off += len;
+                    while (v.length > 1 && v[0] === 0x00) v = v.slice(1); // strip sign padding
+                    if (v.length > size) throw new Error('DER: integer larger than curve size');
+                    const out = new Uint8Array(size);
+                    out.set(v, size - v.length);
+                    return out;
+                }
+                const r = readInt(), s = readInt();
+                const sig = new Uint8Array(size * 2);
+                sig.set(r, 0); sig.set(s, size);
+                return sig;
+            }
+
+            async function verifyAssertionSignature(jwk, authData, clientDataJSON, signature) {
+                const { imp, ver } = importParamsFor(jwk);
+                let key;
+                try {
+                    key = await crypto.subtle.importKey('jwk', jwk, imp, false, ['verify']);
+                } catch (e) {
+                    return { supported: false, valid: false, reason: (jwk.kty === 'OKP' ? 'Ed25519 not supported by this browser’s WebCrypto' : e.message) };
+                }
+                const clientHash = await sha256(clientDataJSON);
+                const signed = new Uint8Array(authData.length + 32);
+                signed.set(bytesOf(authData), 0); signed.set(clientHash, authData.length);
+                const sig = jwk.kty === 'EC' ? derToP1363(signature, 32) : bytesOf(signature);
+                const valid = await crypto.subtle.verify(ver, key, sig, signed);
+                return { supported: true, valid };
+            }
+
+            /* ============================================================
+               store — saved credentials in localStorage
+               ============================================================ */
+            const LS_KEY = 'localutil-passkeys';
+            function loadCreds() {
+                try {
+                    const arr = JSON.parse(localStorage.getItem(LS_KEY) || '[]');
+                    return Array.isArray(arr) ? arr : [];
+                } catch { return []; }
+            }
+            function saveCreds(creds) { localStorage.setItem(LS_KEY, JSON.stringify(creds)); }
+            function credById(id) { return loadCreds().find(c => c.id === id) || null; }
+            function upsertCred(entry) {
+                const creds = loadCreds();
+                const i = creds.findIndex(c => c.id === entry.id);
+                if (i >= 0) creds[i] = Object.assign(creds[i], entry); else creds.push(entry);
+                saveCreds(creds);
+            }
+            function removeCred(id) { saveCreds(loadCreds().filter(c => c.id !== id)); }
+            function validCredShape(c) {
+                return c && typeof c === 'object' && typeof c.id === 'string' && c.jwk && typeof c.jwk === 'object' && typeof c.name === 'string';
+            }
+
+            /* ============================================================
+               error map — plain-language WebAuthn failures
+               ============================================================ */
+            const ERROR_MAP = {
+                NotAllowedError: {
+                    title: 'Ceremony cancelled',
+                    body: 'The request was cancelled, timed out, or dismissed. Nothing was created.',
+                    tryFix: 'Click and complete the prompt within ~1 min. On localhost you may need to add a virtual authenticator in DevTools (Application → WebAuthn).',
+                },
+                InvalidStateError: {
+                    title: 'A passkey already exists',
+                    body: 'This authenticator already has a credential for this user — “Exclude existing credentials” blocked a duplicate.',
+                    tryFix: 'Use Sign in instead, or turn off Exclude in Advanced options.',
+                },
+                SecurityError: {
+                    title: 'RP ID / origin mismatch',
+                    body: 'The RP ID isn’t a registrable suffix of this origin, or the context isn’t secure.',
+                    tryFix: 'Serve this page over https:// or http://localhost.',
+                },
+                NotSupportedError: {
+                    title: 'Unsupported options',
+                    body: 'No requested algorithm/authenticator combination is available here.',
+                    tryFix: 'Enable ES256, or set Authenticator to “Not set”.',
+                },
+                AbortError: {
+                    title: 'Request aborted',
+                    body: 'The ceremony was cancelled by the page or a timeout.',
+                    tryFix: 'Start again.',
+                },
+                ConstraintError: {
+                    title: 'Requirement can’t be met',
+                    body: 'The authenticator can’t satisfy a required setting (often User verification: Required with no PIN/biometrics).',
+                    tryFix: 'Set User verification to Preferred.',
+                },
+            };
+
+            function errorCardHtml(err) {
+                const known = ERROR_MAP[err.name] || { title: 'Something went wrong', body: err.message || String(err), tryFix: null };
+                return '<div class="card pk-error">' +
+                    '<div class="pk-error-title">⚠ ' + escapeHtml(known.title) + ' — ' + escapeHtml(err.name || 'Error') + '</div>' +
+                    '<p>' + escapeHtml(known.body) + '</p>' +
+                    (known.tryFix ? '<p><b>Try:</b> ' + escapeHtml(known.tryFix) + '</p>' : '') +
+                    '<details class="pk-inline"><summary>Details</summary><div class="pk-inline-body"><pre>' +
+                    escapeHtml((err.name || 'Error') + ': ' + (err.message || '')) + '</pre></div></details></div>';
+            }
+
+            /* ============================================================
+               AAGUID — a few well-known providers (offline, no MDS fetch)
+               ============================================================ */
+            const AAGUIDS = {
+                '00000000-0000-0000-0000-000000000000': 'no model ID — common for platform passkeys',
+                'fbfc3007-154e-4ecc-8c0b-6e020557d7bd': 'iCloud Keychain',
+                'ea9b8d66-4d01-1d21-3ce4-b6b48cb575d4': 'Google Password Manager',
+                '08987058-cadc-4b81-b6e1-30de50dcbe96': 'Windows Hello',
+                '9ddd1817-af5a-4672-a2b9-3e3dd95000a9': 'Windows Hello',
+                '6028b017-b1d4-4c02-b4b3-afcdafc96bb2': 'Windows Hello (software)',
+                'bada5566-a7aa-401f-bd96-45619a55120d': '1Password',
+                'adce0002-35bc-c60a-648b-0b25f1f05503': 'Chrome Touch ID',
+            };
+
+            /* ============================================================
+               DOM helpers + shared UI state
+               ============================================================ */
+            const $ = id => document.getElementById(id);
+            const rpId = location.hostname;
+            let currentAbort = null;          // one in-flight ceremony at a time
+
+            function abortCurrent() {
+                if (currentAbort) { currentAbort.abort(new DOMException('superseded', 'AbortError')); currentAbort = null; }
+            }
+
+            function copyText(text) {
+                navigator.clipboard.writeText(text)
+                    .then(() => window.showToast('Copied to clipboard'))
+                    .catch(() => window.showToast('Copy failed', true));
+            }
+
+            // Delegated copy for dynamic content
+            document.addEventListener('click', e => {
+                const el = e.target.closest('.pk-copy');
+                if (el) copyText(el.dataset.copy || el.textContent.trim());
+            });
+
+            /* ---------------- ceremony ribbon ---------------- */
+            const stepsState = { register: 1, signin: 1 };
+            function renderSteps() {
+                const tab = activeTab;
+                const reached = (tab === 'register' || tab === 'signin') ? stepsState[tab] : 0;
+                document.querySelectorAll('#pk-steps .pk-step').forEach(el => {
+                    const n = +el.dataset.step;
+                    el.classList.toggle('reached', n <= reached);
+                    el.classList.toggle('active', n === 2 && reached === 2);
+                });
+            }
+            function setStep(tab, n) { stepsState[tab] = n; renderSteps(); }
+
+            /* ---------------- tabs ---------------- */
+            let activeTab = 'register';
+            $('pk-tabs').addEventListener('click', e => {
+                const btn = e.target.closest('button[data-tab]');
+                if (!btn) return;
+                activeTab = btn.dataset.tab;
+                document.querySelectorAll('#pk-tabs button').forEach(b => b.classList.toggle('active', b === btn));
+                ['register', 'signin', 'saved', 'inspect'].forEach(t => { $('pk-tab-' + t).style.display = t === activeTab ? '' : 'none'; });
+                renderSteps();
+            });
+
+            function switchTab(tab) {
+                document.querySelector('#pk-tabs button[data-tab="' + tab + '"]').click();
+            }
+
+            /* ---------------- environment ---------------- */
+            function setChip(id, state) {
+                const el = $(id);
+                el.classList.remove('on', 'off', 'unknown');
+                el.classList.add(state);
+            }
+
+            const hasWebAuthn = typeof window.PublicKeyCredential === 'function';
+
+            async function initEnvironment() {
+                $('pk-env-rpid').textContent = rpId;
+                $('pk-env-origin').textContent = location.origin;
+                setChip('pk-chip-secure', window.isSecureContext ? 'on' : 'off');
+                setChip('pk-chip-webauthn', hasWebAuthn ? 'on' : 'off');
+                if (!hasWebAuthn) {
+                    setChip('pk-chip-platform', 'off');
+                    setChip('pk-chip-conditional', 'off');
+                    return;
+                }
+                try {
+                    const p = await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
+                    setChip('pk-chip-platform', p ? 'on' : 'off');
+                } catch { setChip('pk-chip-platform', 'unknown'); }
+                try {
+                    const c = PublicKeyCredential.isConditionalMediationAvailable
+                        ? await PublicKeyCredential.isConditionalMediationAvailable() : false;
+                    setChip('pk-chip-conditional', c ? 'on' : 'off');
+                } catch { setChip('pk-chip-conditional', 'unknown'); }
+            }
+
+            function renderBanner() {
+                let html = '';
+                if (!hasWebAuthn) {
+                    html = '<div class="card pk-error"><div class="pk-error-title">⚠ WebAuthn isn’t available here</div>' +
+                        '<p><code>PublicKeyCredential</code> isn’t exposed in this browser. Try an up-to-date Chrome, Safari, Edge, or Firefox.</p></div>';
+                } else if (!window.isSecureContext) {
+                    html = '<div class="card pk-error"><div class="pk-error-title">⚠ WebAuthn needs a secure context</div>' +
+                        '<p>This page is on <code>' + escapeHtml(location.origin) + '</code>, which browsers don’t allow for passkeys. ' +
+                        'Open it over <b>https://</b> or <b>http://localhost</b> and reload. Tip: <code>localhost</code> and <code>127.0.0.1</code> count as secure even without HTTPS.</p></div>';
+                }
+                $('pk-banner').innerHTML = html;
+                if (html) { $('pk-btn-create').disabled = true; $('pk-btn-signin').disabled = true; }
+            }
+
+            /* ============================================================
+               Register tab — presets, advanced controls, create()
+               ============================================================ */
+            const PRESETS = {
+                platform: {
+                    label: 'Passkey — platform',
+                    desc: 'Discoverable credential on this device (Face/Touch/Windows Hello). The modern default.',
+                    set: { residentKey: 'required', uv: 'preferred', attachment: null, attestation: 'none', hints: null, attachmentOverride: 'platform' },
+                },
+                hybrid: {
+                    label: 'Passkey — cross-device',
+                    desc: 'Discoverable passkey from your phone or a roaming device via QR / Bluetooth.',
+                    set: { residentKey: 'required', uv: 'preferred', attachment: null, attestation: 'none', hints: 'hybrid' },
+                },
+                seckey: {
+                    label: 'Security key · 2FA',
+                    desc: 'Classic second-factor key. Not discoverable — you present it after a password.',
+                    set: { residentKey: 'discouraged', uv: 'discouraged', attachment: 'cross-platform', attestation: 'none', hints: null },
+                },
+                server: {
+                    label: 'Server-side (non-discoverable)',
+                    desc: 'Credential the server stores and references by ID. Saves authenticator storage.',
+                    set: { residentKey: 'discouraged', uv: 'preferred', attachment: null, attestation: 'none', hints: null },
+                },
+                custom: { label: 'Custom', desc: 'Custom options — edit below.' },
+            };
+
+            // field-key → segmented options with live one-line descriptions
+            const REG_FIELDS = [
+                {
+                    key: 'residentKey', label: 'Resident key',
+                    opts: [
+                        { val: 'discouraged', label: 'Discouraged', desc: 'Don’t store on the authenticator — server keeps it.' },
+                        { val: 'preferred', label: 'Preferred', desc: 'Store if there’s room; fall back if not.' },
+                        { val: 'required', label: 'Required', desc: 'Force a discoverable passkey; fail if no room.' },
+                    ],
+                },
+                {
+                    key: 'uv', label: 'User verification',
+                    opts: [
+                        { val: 'discouraged', label: 'Discouraged', desc: 'Skip PIN/biometrics — presence only.' },
+                        { val: 'preferred', label: 'Preferred', desc: 'Ask for PIN/biometrics if available, don’t insist.' },
+                        { val: 'required', label: 'Required', desc: 'Must verify identity; fail otherwise.' },
+                    ],
+                },
+                {
+                    key: 'attachment', label: 'Authenticator',
+                    opts: [
+                        { val: null, label: 'Not set', desc: 'Any authenticator the browser offers.' },
+                        { val: 'platform', label: 'This device', desc: 'Built-in platform authenticator only.' },
+                        { val: 'cross-platform', label: 'Roaming / USB', desc: 'External security key only.' },
+                    ],
+                },
+                {
+                    key: 'attestation', label: 'Attestation',
+                    opts: [
+                        { val: 'none', label: 'None', desc: 'No authenticator metadata requested. Best for privacy.' },
+                        { val: 'indirect', label: 'Indirect', desc: 'Browser may anonymize the attestation.' },
+                        { val: 'direct', label: 'Direct', desc: 'Request the authenticator’s attestation as-is.' },
+                        { val: 'enterprise', label: 'Enterprise', desc: 'Request a uniquely-identifying attestation (managed devices).' },
+                    ],
+                },
+                {
+                    key: 'hints', label: 'Hints',
+                    opts: [
+                        { val: null, label: 'Not set', desc: 'No UI hint — the browser picks the flow.' },
+                        { val: 'client-device', label: 'client-device', desc: 'Nudge toward this device.' },
+                        { val: 'security-key', label: 'security-key', desc: 'Nudge toward a security key.' },
+                        { val: 'hybrid', label: 'hybrid', desc: 'Nudge toward a phone / QR.' },
+                    ],
+                },
+            ];
+
+            const regState = {
+                preset: 'platform',
+                residentKey: 'required', uv: 'preferred', attachment: 'platform', attestation: 'none', hints: null,
+                algs: [-7, -257], exclude: false,
+                challenge: randomBytes(32),
+            };
+
+            function renderPresets() {
+                const wrap = $('pk-presets');
+                wrap.innerHTML = Object.keys(PRESETS).map(k => {
+                    if (k === 'custom' && regState.preset !== 'custom') return '';
+                    return '<button type="button" data-preset="' + k + '"' + (regState.preset === k ? ' class="active"' : '') +
+                        (k === 'custom' ? ' disabled' : '') + '>' + PRESETS[k].label + '</button>';
+                }).join('');
+                $('pk-preset-desc').textContent = PRESETS[regState.preset].desc;
+            }
+
+            $('pk-presets').addEventListener('click', e => {
+                const btn = e.target.closest('button[data-preset]');
+                if (!btn || btn.dataset.preset === 'custom') return;
+                const p = PRESETS[btn.dataset.preset];
+                regState.preset = btn.dataset.preset;
+                regState.residentKey = p.set.residentKey;
+                regState.uv = p.set.uv;
+                regState.attachment = p.set.attachmentOverride || p.set.attachment;
+                regState.attestation = p.set.attestation;
+                regState.hints = p.set.hints;
+                renderPresets(); renderAdvanced(); refreshRegJson();
+            });
+
+            function renderAdvanced() {
+                const body = $('pk-adv-register-body');
+                let html = '';
+                REG_FIELDS.forEach(f => {
+                    const cur = regState[f.key];
+                    const curOpt = f.opts.find(o => o.val === cur) || f.opts[0];
+                    html += '<div class="field-row">' +
+                        '<div class="field-label"><label>' + f.label + '</label>' +
+                        '<span class="field-hint pk-optdesc" id="pk-optdesc-' + f.key + '">' + escapeHtml(curOpt.desc) + '</span></div>' +
+                        '<div class="segmented" data-field="' + f.key + '">' +
+                        f.opts.map(o => '<button type="button" data-val="' + (o.val === null ? '' : o.val) + '"' +
+                            ((o.val === cur ? ' class="active' : ' class="') + (o.val === null ? ' pk-notset' : '') + '"') +
+                            '>' + o.label + '</button>').join('') +
+                        '</div></div>';
+                });
+                // algorithms
+                html += '<div class="field-row"><div class="field-label"><label>Algorithms</label>' +
+                    '<span class="field-hint">Offered to the authenticator in preference order.</span></div>' +
+                    '<div class="options-row">' +
+                    [[-7, 'ES256 (-7)'], [-257, 'RS256 (-257)'], [-8, 'EdDSA (-8)']].map(([v, l]) =>
+                        '<span class="option-item"><input type="checkbox" id="pk-alg-' + Math.abs(v) + '" data-alg="' + v + '"' +
+                        (regState.algs.includes(v) ? ' checked' : '') + '><label for="pk-alg-' + Math.abs(v) + '">' + l + '</label></span>'
+                    ).join('') + '</div></div>';
+                // exclude
+                const excludable = loadCreds().filter(c => c.name === $('pk-username').value).length;
+                html += '<div class="field-row"' + (excludable ? '' : ' style="display:none;"') + '>' +
+                    '<div class="field-label"><label for="pk-exclude">Exclude existing credentials</label>' +
+                    '<span class="field-hint">Sends this user’s saved IDs so the same device can’t register twice.</span></div>' +
+                    '<label class="switch"><input type="checkbox" id="pk-exclude"' + (regState.exclude ? ' checked' : '') + '><span></span></label></div>';
+                body.innerHTML = html;
+
+                body.querySelectorAll('.segmented[data-field]').forEach(seg => {
+                    seg.addEventListener('click', e => {
+                        const btn = e.target.closest('button[data-val]');
+                        if (!btn) return;
+                        const field = seg.dataset.field;
+                        const raw = btn.dataset.val;
+                        regState[field] = raw === '' ? null : raw;
+                        regState.preset = 'custom';
+                        seg.querySelectorAll('button').forEach(b => b.classList.toggle('active', b === btn));
+                        const f = REG_FIELDS.find(x => x.key === field);
+                        const o = f.opts.find(x => (x.val === null ? '' : x.val) === raw);
+                        $('pk-optdesc-' + field).textContent = o.desc;
+                        renderPresets(); refreshRegJson();
+                    });
+                });
+                body.querySelectorAll('input[data-alg]').forEach(cb => {
+                    cb.addEventListener('change', () => {
+                        const v = parseInt(cb.dataset.alg, 10);
+                        regState.algs = regState.algs.filter(a => a !== v);
+                        if (cb.checked) regState.algs.push(v);
+                        regState.preset = 'custom';
+                        renderPresets(); refreshRegJson();
+                    });
+                });
+                const ex = body.querySelector('#pk-exclude');
+                if (ex) ex.addEventListener('change', () => { regState.exclude = ex.checked; refreshRegJson(); });
+            }
+
+            function excludeList() {
+                if (!regState.exclude) return [];
+                return loadCreds().filter(c => c.name === $('pk-username').value)
+                    .map(c => ({ type: 'public-key', id: b64urlDecode(c.id) }));
+            }
+
+            function buildCreationOptions() {
+                const sel = {};
+                if (regState.attachment) sel.authenticatorAttachment = regState.attachment;
+                sel.residentKey = regState.residentKey;
+                sel.userVerification = regState.uv;
+                const pk = {
+                    rp: { name: 'LocalUtil Passkey Debugger', id: rpId },
+                    user: {
+                        id: randomBytes(16),
+                        name: $('pk-username').value || 'demo@localutil',
+                        displayName: $('pk-username').value || 'demo@localutil',
+                    },
+                    challenge: regState.challenge,
+                    pubKeyCredParams: [-7, -257, -8].filter(a => regState.algs.includes(a)).map(alg => ({ type: 'public-key', alg })),
+                    timeout: 60000,
+                    authenticatorSelection: sel,
+                    attestation: regState.attestation,
+                    extensions: { credProps: true },
+                };
+                const excl = excludeList();
+                if (excl.length) pk.excludeCredentials = excl;
+                if (regState.hints) pk.hints = [regState.hints];
+                return pk;
+            }
+
+            // WebAuthn JSON serialization: buffers as base64url strings
+            function toJsonValue(v) {
+                if (v instanceof Uint8Array || v instanceof ArrayBuffer) return b64urlEncode(v);
+                if (Array.isArray(v)) return v.map(toJsonValue);
+                if (v && typeof v === 'object') {
+                    const o = {};
+                    for (const k of Object.keys(v)) o[k] = toJsonValue(v[k]);
+                    return o;
+                }
+                return v;
+            }
+
+            function refreshRegJson() {
+                $('pk-json-register-out').innerHTML = jsonHtml(toJsonValue({ publicKey: buildCreationOptions() }));
+                $('pk-challenge-val').textContent = b64urlEncode(regState.challenge);
+            }
+
+            $('pk-challenge-regen').addEventListener('click', () => { regState.challenge = randomBytes(32); refreshRegJson(); });
+            $('pk-username').addEventListener('input', () => { renderAdvanced(); refreshRegJson(); });
+
+            /* ---------------- ceremony plumbing ---------------- */
+            function setBusy(tab, busy) {
+                const btn = tab === 'register' ? $('pk-btn-create') : $('pk-btn-signin');
+                const cancel = tab === 'register' ? $('pk-btn-create-cancel') : $('pk-btn-signin-cancel');
+                btn.disabled = busy;
+                btn.innerHTML = busy ? '<span class="pk-spin"></span> Waiting for authenticator…'
+                    : (tab === 'register' ? 'Create passkey' : 'Sign in');
+                cancel.style.display = busy ? '' : 'none';
+                const form = $(tab === 'register' ? 'pk-tab-register' : 'pk-tab-signin');
+                form.querySelectorAll('.segmented button, input, select').forEach(el => {
+                    if (el !== cancel) el.disabled = busy;
+                });
+            }
+
+            $('pk-btn-create-cancel').addEventListener('click', abortCurrent);
+            $('pk-btn-signin-cancel').addEventListener('click', abortCurrent);
+
+            /* ---------------- create ---------------- */
+            $('pk-btn-create').addEventListener('click', async () => {
+                abortCurrent();
+                const publicKey = buildCreationOptions();
+                const ac = new AbortController();
+                currentAbort = ac;
+                setBusy('register', true);
+                setStep('register', 2);
+                $('pk-reg-result').innerHTML = '';
+                try {
+                    const cred = await navigator.credentials.create({ publicKey, signal: ac.signal });
+                    setStep('register', 3);
+                    await handleRegistration(cred, publicKey);
+                    setStep('register', 4);
+                } catch (err) {
+                    setStep('register', 1);
+                    $('pk-reg-result').innerHTML = errorCardHtml(err);
+                    $('pk-reg-result').scrollIntoView({ behavior: 'smooth', block: 'start' });
+                } finally {
+                    if (currentAbort === ac) currentAbort = null;
+                    setBusy('register', false);
+                    regState.challenge = randomBytes(32); // one challenge per ceremony
+                    refreshRegJson();
+                }
+            });
+
+            async function handleRegistration(cred, publicKey) {
+                const resp = cred.response;
+                const clientDataBytes = bytesOf(resp.clientDataJSON);
+                const attObjBytes = bytesOf(resp.attestationObject);
+                const attObj = cborDecode(attObjBytes);
+                const authDataBytes = bytesOf(attObj.get('authData'));
+                const parsed = parseAuthenticatorData(authDataBytes);
+                const clientData = JSON.parse(new TextDecoder().decode(clientDataBytes));
+                const coseInfo = parsed.cosePublicKey ? coseToJwk(parsed.cosePublicKey) : null;
+                const credProps = (cred.getClientExtensionResults && cred.getClientExtensionResults()) || {};
+                const transports = resp.getTransports ? resp.getTransports() : null;
+
+                // Cross-check our CBOR parse against the browser's own view (L3 convenience API)
+                if (resp.getAuthenticatorData) {
+                    const theirs = bytesOf(resp.getAuthenticatorData());
+                    if (!bytesEqual(theirs, authDataBytes)) console.warn('passkey: manual authData parse differs from getAuthenticatorData()');
+                }
+
+                // verification checklist (this page plays the server role)
+                const expectedChallenge = b64urlEncode(publicKey.challenge);
+                const rpHash = await sha256(new TextEncoder().encode(rpId));
+                const checks = [
+                    check('Type', clientData.type === 'webauthn.create', 'is webauthn.create', 'expected', 'webauthn.create', 'received', clientData.type),
+                    check('Challenge', clientData.challenge === expectedChallenge, 'matches the one we generated', 'expected', expectedChallenge, 'received', clientData.challenge),
+                    check('Origin', clientData.origin === location.origin, 'matches ' + location.origin, 'expected', location.origin, 'received', clientData.origin),
+                    check('RP ID hash', bytesEqual(parsed.rpIdHash, rpHash), 'SHA-256(“' + rpId + '”) matches authData', 'expected', toHex(rpHash), 'received', toHex(parsed.rpIdHash)),
+                    check('User Present', parsed.flags.up, 'UP flag set', 'expected', 'UP = true', 'received', 'UP = ' + parsed.flags.up),
+                ];
+
+                // save (public data only)
+                const entry = {
+                    id: cred.id,
+                    name: publicKey.user.name,
+                    userId: b64urlEncode(publicKey.user.id),
+                    alg: coseInfo ? coseInfo.alg : null,
+                    algName: coseInfo ? algName(coseInfo.alg) : 'unknown',
+                    kty: coseInfo ? coseInfo.kty : null,
+                    crv: coseInfo ? coseInfo.crv : null,
+                    jwk: coseInfo ? coseInfo.jwk : null,
+                    signCount: parsed.signCount,
+                    be: parsed.flags.be, bs: parsed.flags.bs,
+                    aaguid: parsed.aaguid ? uuidFormat(parsed.aaguid) : null,
+                    transports,
+                    discoverable: credProps.credProps ? credProps.credProps.rk : null,
+                    createdAt: Date.now(), lastUsedAt: null, authCount: 0,
+                };
+                upsertCred(entry);
+                renderSaved();
+                window.showToast('Saved to this browser');
+
+                const mount = $('pk-reg-result');
+                mount.innerHTML = checklistHtml(checks) +
+                    (await authDataCardHtml(parsed, authDataBytes, coseInfo, 'reg')) +
+                    dataCardHtml('clientDataJSON', jsonHtml(clientData), clientDataBytes, 'reg-cd') +
+                    attestationCardHtml(attObj, credProps, attObjBytes, transports);
+                bindViewToggles(mount);
+                mount.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+
+            /* ---------------- checklist rendering ---------------- */
+            function check(name, ok, note, expLabel, expected, actLabel, actual, state) {
+                return { name, state: state || (ok ? 'pass' : 'fail'), note, expLabel, expected, actLabel, actual };
+            }
+
+            const CHECK_ICON = { pass: '✓', fail: '✗', info: 'ℹ', warn: '⚠' };
+
+            function checklistHtml(checks) {
+                const graded = checks.filter(c => c.state === 'pass' || c.state === 'fail');
+                const passed = graded.filter(c => c.state === 'pass').length;
+                const ok = passed === graded.length;
+                const summary = ok ? '✓ ' + passed + ' / ' + graded.length + ' passed'
+                    : '✗ ' + (graded.length - passed) + ' of ' + graded.length + ' failed';
+                return '<div class="card" data-pk="checklist">' +
+                    '<div class="pk-card-head"><div class="card-title">Verification checklist</div>' +
+                    '<div class="pk-check-summary ' + (ok ? 'ok' : 'bad') + '">' + summary + '</div></div>' +
+                    '<div class="card-subtitle">Simulation — there is no real server. This page stands in for the relying party: it generated the challenge and now verifies the response, exactly as your backend would.</div>' +
+                    checks.map(c =>
+                        '<details class="pk-check ' + c.state + '"' + (c.state === 'fail' || c.state === 'warn' ? ' open' : '') + '>' +
+                        '<summary><span class="pk-check-icon">' + CHECK_ICON[c.state] + '</span>' +
+                        '<span class="pk-check-name">' + escapeHtml(c.name) + '</span>' +
+                        '<span class="pk-check-note">' + escapeHtml(c.note) + '</span>' +
+                        '<span class="pk-check-why">why</span></summary>' +
+                        '<div class="pk-check-body">' +
+                        (c.expected !== undefined ? '<div class="pk-row"><span class="pk-row-key">' + escapeHtml(c.expLabel || 'expected') + '</span><span class="pk-row-val pk-copy">' + escapeHtml(String(c.expected)) + '</span></div>' : '') +
+                        (c.actual !== undefined ? '<div class="pk-row"><span class="pk-row-key">' + escapeHtml(c.actLabel || 'received') + '</span><span class="pk-row-val pk-copy">' + escapeHtml(String(c.actual)) + '</span></div>' : '') +
+                        '</div></details>'
+                    ).join('') + '</div>';
+            }
+
+            /* ---------------- data cards ---------------- */
+            function rawViewsHtml(bytes) {
+                return '<div class="pk-rawbox"><span class="pk-raw-label">base64url</span><span class="pk-copy">' + b64urlEncode(bytes) + '</span></div>' +
+                    '<div class="pk-rawbox"><span class="pk-raw-label">hex</span><span class="pk-copy">' + toHex(bytes) + '</span></div>';
+            }
+
+            // decodedHtml must already be escaped / highlighted markup
+            function dataCardHtml(title, decodedHtml, rawBytes, key) {
+                return '<div class="card pk-datacard" data-pk="' + key + '">' +
+                    '<div class="pk-card-head"><div class="card-title">' + escapeHtml(title) + '</div>' +
+                    '<div class="segmented pk-viewtoggle"><button type="button" class="active" data-view="decoded">Decoded</button><button type="button" data-view="raw">Raw</button></div></div>' +
+                    '<div class="pk-view" data-view="decoded"><div class="pk-jsonbox pk-copy">' + decodedHtml + '</div></div>' +
+                    '<div class="pk-view" data-view="raw" style="display:none;">' + rawViewsHtml(rawBytes) + '</div></div>';
+            }
+
+            const FLAG_DEFS = [
+                ['UP', 'up', 'User Present'], ['UV', 'uv', 'User Verified'],
+                ['BE', 'be', 'Backup Eligible'], ['BS', 'bs', 'Backed Up'],
+                ['AT', 'at', 'Attested credential data'], ['ED', 'ed', 'Extension data'],
+            ];
+
+            async function authDataCardHtml(parsed, rawBytes, coseInfo, keyPrefix) {
+                const flagsHtml = '<div class="pk-flags">' + FLAG_DEFS.map(([code, k]) =>
+                    '<span class="pk-flag' + (parsed.flags[k] ? ' set' : '') + '">' + code + (parsed.flags[k] ? '✓' : '·') + '</span>').join('') + '</div>' +
+                    '<div class="pk-flags-caption">' + FLAG_DEFS.map(([code, k, label]) => (parsed.flags[k] ? label : 'no ' + label)).join(' · ') + '</div>';
+
+                let rows = '<div class="pk-row"><span class="pk-row-key">rpIdHash</span><span class="pk-row-val pk-copy">' + toHex(parsed.rpIdHash) +
+                    ' <span class="pk-note">(SHA-256 of the RP ID)</span></span></div>' +
+                    '<div class="pk-row"><span class="pk-row-key">Flags</span><span class="pk-row-val" style="font-family:inherit;">' + flagsHtml + '</span></div>' +
+                    '<div class="pk-row"><span class="pk-row-key">Sign count</span><span class="pk-row-val">' + parsed.signCount +
+                    (parsed.signCount === 0 ? ' <span class="pk-note">Sign count is 0 — normal for platform passkeys (iCloud Keychain, Google Password Manager). They don’t increment a counter; there’s nothing wrong.</span>' : '') +
+                    '</span></div>';
+
+                if (parsed.aaguid) {
+                    const uuid = uuidFormat(parsed.aaguid);
+                    rows += '<div class="pk-row"><span class="pk-row-key">AAGUID</span><span class="pk-row-val pk-copy" data-copy="' + uuid + '">' + uuid +
+                        (AAGUIDS[uuid] ? ' <span class="pk-note">(' + AAGUIDS[uuid] + ')</span>' : '') + '</span></div>';
+                }
+                if (parsed.credentialId) {
+                    rows += '<div class="pk-row"><span class="pk-row-key">Credential ID</span><span class="pk-row-val pk-copy">' + b64urlEncode(parsed.credentialId) +
+                        ' <span class="pk-note">(' + parsed.credentialId.length + ' bytes)</span></span></div>';
+                }
+                if (coseInfo) {
+                    let pem = null;
+                    try { pem = await jwkToPem(coseInfo.jwk); } catch { /* Ed25519 w/o WebCrypto support */ }
+                    rows += '<div class="pk-row"><span class="pk-row-key">Public key</span><span class="pk-row-val" style="font-family:inherit;">' +
+                        '<b>' + coseInfo.kty + (coseInfo.crv ? ' · ' + coseInfo.crv : '') + ' · ' + algName(coseInfo.alg) + '</b> ' +
+                        '<span class="pk-keybtns"><button type="button" class="btn btn-small" data-toggle="#' + keyPrefix + '-jwk">JWK</button>' +
+                        (pem ? '<button type="button" class="btn btn-small" data-toggle="#' + keyPrefix + '-pem">PEM</button>' : '') + '</span>' +
+                        '<div id="' + keyPrefix + '-jwk" style="display:none;"><div class="pk-rawbox mt-1"><span class="pk-raw-label">JWK</span><span class="pk-copy" style="white-space:pre;">' + jsonHtml(coseInfo.jwk) + '</span></div></div>' +
+                        (pem ? '<div id="' + keyPrefix + '-pem" style="display:none;"><div class="pk-rawbox mt-1"><span class="pk-raw-label">PEM (SPKI)</span><span class="pk-copy">' + escapeHtml(pem) + '</span></div></div>' : '') +
+                        '</span></div>';
+                }
+                if (parsed.extensions) {
+                    rows += '<div class="pk-row"><span class="pk-row-key">Extensions</span><span class="pk-row-val pk-copy">' + escapeHtml(JSON.stringify(cborToDisplay(parsed.extensions))) + '</span></div>';
+                }
+
+                return '<div class="card pk-datacard" data-pk="' + keyPrefix + '-authdata">' +
+                    '<div class="pk-card-head"><div class="card-title">authenticatorData</div>' +
+                    '<div class="segmented pk-viewtoggle"><button type="button" class="active" data-view="decoded">Decoded</button><button type="button" data-view="raw">Raw</button></div></div>' +
+                    '<div class="pk-view" data-view="decoded">' + rows + '</div>' +
+                    '<div class="pk-view" data-view="raw" style="display:none;">' + rawViewsHtml(rawBytes) + '</div></div>';
+            }
+
+            function attestationCardHtml(attObj, credProps, rawBytes, transports) {
+                const fmt = attObj.get('fmt');
+                const attStmt = attObj.get('attStmt');
+                const empty = attStmt instanceof Map && attStmt.size === 0;
+                const rows = '<div class="pk-row"><span class="pk-row-key">Format</span><span class="pk-row-val">' + escapeHtml(String(fmt)) +
+                    (fmt === 'none' ? ' <span class="pk-note">(the browser default — no authenticator metadata)</span>' : '') + '</span></div>' +
+                    '<div class="pk-row"><span class="pk-row-key">Statement</span><span class="pk-row-val">' +
+                    (empty ? '(empty)' : '<span class="pk-copy">' + jsonHtml(cborToDisplay(attStmt)) + '</span>') + '</span></div>' +
+                    (transports && transports.length
+                        ? '<div class="pk-row"><span class="pk-row-key">Transports</span><span class="pk-row-val">' + transports.map(escapeHtml).join(', ') +
+                        ' <span class="pk-note">(how this authenticator can be reached)</span></span></div>'
+                        : '') +
+                    (credProps && credProps.credProps && typeof credProps.credProps.rk === 'boolean'
+                        ? '<div class="pk-row"><span class="pk-row-key">credProps.rk</span><span class="pk-row-val">' + credProps.credProps.rk +
+                        ' <span class="pk-note">(' + (credProps.credProps.rk ? 'discoverable — usable without allowCredentials' : 'not discoverable — the server must send its ID') + ')</span></span></div>'
+                        : '');
+                if (!rawBytes) return '<div class="card" data-pk="attestation"><div class="card-title">Attestation</div>' + rows + '</div>';
+                return '<div class="card pk-datacard" data-pk="attestation">' +
+                    '<div class="pk-card-head"><div class="card-title">Attestation</div>' +
+                    '<div class="segmented pk-viewtoggle"><button type="button" class="active" data-view="decoded">Decoded</button><button type="button" data-view="raw">Raw</button></div></div>' +
+                    '<div class="pk-view" data-view="decoded">' + rows + '</div>' +
+                    '<div class="pk-view" data-view="raw" style="display:none;">' + rawViewsHtml(rawBytes) + '</div></div>';
+            }
+
+            function bindViewToggles(root) {
+                root.querySelectorAll('.pk-viewtoggle').forEach(seg => {
+                    seg.addEventListener('click', e => {
+                        const btn = e.target.closest('button[data-view]');
+                        if (!btn) return;
+                        seg.querySelectorAll('button').forEach(b => b.classList.toggle('active', b === btn));
+                        const card = seg.closest('.pk-datacard');
+                        card.querySelectorAll(':scope > .pk-view').forEach(v => { v.style.display = v.dataset.view === btn.dataset.view ? '' : 'none'; });
+                    });
+                });
+                root.querySelectorAll('button[data-toggle]').forEach(btn => {
+                    btn.addEventListener('click', () => {
+                        const el = root.querySelector(btn.dataset.toggle);
+                        if (el) el.style.display = el.style.display === 'none' ? '' : 'none';
+                    });
+                });
+            }
+
+            /* ============================================================
+               Sign in tab
+               ============================================================ */
+            const signinState = { source: 'discoverable', uv: 'preferred', mediation: 'optional', challenge: randomBytes(32) };
+
+            const SIGNIN_FIELDS = [
+                {
+                    key: 'uv', label: 'User verification',
+                    opts: [
+                        { val: 'discouraged', label: 'Discouraged', desc: 'Skip PIN/biometrics — presence only.' },
+                        { val: 'preferred', label: 'Preferred', desc: 'Ask for PIN/biometrics if available, don’t insist.' },
+                        { val: 'required', label: 'Required', desc: 'Must verify identity; fail otherwise.' },
+                    ],
+                },
+                {
+                    key: 'mediation', label: 'Mediation',
+                    opts: [
+                        { val: 'optional', label: 'Optional', desc: 'Standard modal prompt.' },
+                        { val: 'conditional', label: 'Conditional', desc: 'Autofill UI — needs a username field with autocomplete.' },
+                    ],
+                },
+            ];
+
+            function renderSigninAdvanced() {
+                const body = $('pk-adv-signin-body');
+                const condWrap = $('pk-conditional-wrap');
+                // build field rows before the conditional input wrap
+                let html = '';
+                SIGNIN_FIELDS.forEach(f => {
+                    const curOpt = f.opts.find(o => o.val === signinState[f.key]) || f.opts[0];
+                    html += '<div class="field-row">' +
+                        '<div class="field-label"><label>' + f.label + '</label>' +
+                        '<span class="field-hint pk-optdesc" id="pk-si-optdesc-' + f.key + '">' + escapeHtml(curOpt.desc) + '</span></div>' +
+                        '<div class="segmented" data-field="' + f.key + '">' +
+                        f.opts.map(o => '<button type="button" data-val="' + o.val + '"' + (o.val === signinState[f.key] ? ' class="active"' : '') + '>' + o.label + '</button>').join('') +
+                        '</div></div>';
+                });
+                // keep the conditional wrap node (declared in markup) and re-insert after rows
+                body.innerHTML = html;
+                body.appendChild(condWrap);
+                condWrap.style.display = signinState.mediation === 'conditional' ? '' : 'none';
+
+                body.querySelectorAll('.segmented[data-field]').forEach(seg => {
+                    seg.addEventListener('click', e => {
+                        const btn = e.target.closest('button[data-val]');
+                        if (!btn) return;
+                        signinState[seg.dataset.field] = btn.dataset.val;
+                        seg.querySelectorAll('button').forEach(b => b.classList.toggle('active', b === btn));
+                        const f = SIGNIN_FIELDS.find(x => x.key === seg.dataset.field);
+                        $('pk-si-optdesc-' + seg.dataset.field).textContent = f.opts.find(o => o.val === btn.dataset.val).desc;
+                        condWrap.style.display = signinState.mediation === 'conditional' ? '' : 'none';
+                        refreshSigninJson();
+                    });
+                });
+            }
+
+            $('pk-signin-source').addEventListener('click', e => {
+                const btn = e.target.closest('button[data-val]');
+                if (!btn) return;
+                signinState.source = btn.dataset.val;
+                document.querySelectorAll('#pk-signin-source button').forEach(b => b.classList.toggle('active', b === btn));
+                $('pk-source-desc').textContent = btn.dataset.val === 'discoverable'
+                    ? 'Let the browser show an account picker (no ID sent).'
+                    : 'Send allowCredentials from a saved entry.';
+                $('pk-signin-cred-wrap').style.display = btn.dataset.val === 'specific' ? '' : 'none';
+                refreshSigninJson();
+            });
+
+            function renderSigninCredSelect() {
+                const sel = $('pk-signin-cred');
+                const creds = loadCreds();
+                sel.innerHTML = creds.length
+                    ? creds.map(c => '<option value="' + escapeHtml(c.id) + '">' + escapeHtml(c.name) + ' · ' + escapeHtml(c.algName || '') + ' · ' + escapeHtml(c.id) + '</option>').join('')
+                    : '<option value="">(no saved credentials)</option>';
+            }
+
+            function buildRequestOptions() {
+                const pk = {
+                    challenge: signinState.challenge,
+                    rpId,
+                    timeout: 60000,
+                    userVerification: signinState.uv,
+                };
+                if (signinState.source === 'specific') {
+                    const id = $('pk-signin-cred').value;
+                    if (id) pk.allowCredentials = [{ type: 'public-key', id: b64urlDecode(id) }];
+                }
+                return pk;
+            }
+
+            function refreshSigninJson() {
+                $('pk-json-signin-out').innerHTML = jsonHtml(toJsonValue({ publicKey: buildRequestOptions(), mediation: signinState.mediation }));
+            }
+
+            $('pk-btn-signin').addEventListener('click', async () => {
+                abortCurrent();
+                const publicKey = buildRequestOptions();
+                const mediation = signinState.mediation;
+                const ac = new AbortController();
+                currentAbort = ac;
+                setBusy('signin', true);
+                setStep('signin', 2);
+                $('pk-signin-result').innerHTML = '';
+                if (mediation === 'conditional') $('pk-conditional-input').focus();
+                try {
+                    const cred = await navigator.credentials.get({ publicKey, mediation, signal: ac.signal });
+                    setStep('signin', 3);
+                    await handleAuthentication(cred, publicKey);
+                    setStep('signin', 4);
+                } catch (err) {
+                    setStep('signin', 1);
+                    $('pk-signin-result').innerHTML = errorCardHtml(err);
+                    $('pk-signin-result').scrollIntoView({ behavior: 'smooth', block: 'start' });
+                } finally {
+                    if (currentAbort === ac) currentAbort = null;
+                    setBusy('signin', false);
+                    signinState.challenge = randomBytes(32);
+                    refreshSigninJson();
+                }
+            });
+
+            async function handleAuthentication(cred, publicKey) {
+                const resp = cred.response;
+                const clientDataBytes = bytesOf(resp.clientDataJSON);
+                const authDataBytes = bytesOf(resp.authenticatorData);
+                const sigBytes = bytesOf(resp.signature);
+                const parsed = parseAuthenticatorData(authDataBytes);
+                const clientData = JSON.parse(new TextDecoder().decode(clientDataBytes));
+                const userHandle = resp.userHandle && resp.userHandle.byteLength ? b64urlEncode(resp.userHandle) : null;
+
+                const stored = credById(cred.id);
+                const expectedChallenge = b64urlEncode(publicKey.challenge);
+                const rpHash = await sha256(new TextEncoder().encode(rpId));
+
+                const checks = [
+                    check('Type', clientData.type === 'webauthn.get', 'is webauthn.get', 'expected', 'webauthn.get', 'received', clientData.type),
+                    check('Challenge', clientData.challenge === expectedChallenge, 'matches the one we generated', 'expected', expectedChallenge, 'received', clientData.challenge),
+                    check('Origin', clientData.origin === location.origin, 'matches ' + location.origin, 'expected', location.origin, 'received', clientData.origin),
+                    check('RP ID hash', bytesEqual(parsed.rpIdHash, rpHash), 'SHA-256(“' + rpId + '”) matches authData', 'expected', toHex(rpHash), 'received', toHex(parsed.rpIdHash)),
+                    check('User Present', parsed.flags.up, 'UP flag set', 'expected', 'UP = true', 'received', 'UP = ' + parsed.flags.up),
+                ];
+
+                // signature
+                if (stored && stored.jwk) {
+                    const res = await verifyAssertionSignature(stored.jwk, authDataBytes, clientDataBytes, sigBytes);
+                    if (!res.supported) {
+                        checks.push(check('Signature', false, res.reason + ' — displayed only', 'algorithm', stored.algName, 'signature (b64url)', b64urlEncode(sigBytes), 'info'));
+                    } else {
+                        checks.push(check('Signature', res.valid, res.valid ? 'verified with the saved public key' : 'INVALID — does not match the saved public key',
+                            'signed data', 'authenticatorData ‖ SHA-256(clientDataJSON)', 'algorithm', stored.algName));
+                    }
+                } else {
+                    checks.push(check('Signature', false, 'unknown credential — not in Saved credentials, can’t verify locally', 'credential ID', cred.id, undefined, undefined, 'info'));
+                }
+
+                // counter
+                const prev = stored ? (stored.signCount || 0) : 0;
+                const cur = parsed.signCount;
+                if (cur === 0 && prev === 0) {
+                    checks.push(check('Sign counter', true, '0 → 0 — counter not used (normal for synced passkeys)', 'stored', prev, 'received', cur, 'info'));
+                } else if (cur > prev) {
+                    checks.push(check('Sign counter', true, prev + ' → ' + cur + ' — increased as expected', 'stored', prev, 'received', cur));
+                } else if (cur === prev) {
+                    checks.push(check('Sign counter', true, prev + ' → ' + cur + ' — unchanged', 'stored', prev, 'received', cur, 'info'));
+                } else {
+                    checks.push(check('Sign counter', false, prev + ' → ' + cur + ' — counter went backwards; possible cloned authenticator', 'stored', prev, 'received', cur, 'warn'));
+                }
+
+                // update store
+                if (stored) {
+                    upsertCred({ id: stored.id, signCount: Math.max(cur, prev), lastUsedAt: Date.now(), authCount: (stored.authCount || 0) + 1 });
+                    renderSaved();
+                }
+
+                let extraRows = '';
+                if (userHandle) {
+                    const match = loadCreds().find(c => c.userId === userHandle);
+                    extraRows = '<div class="card" data-pk="userhandle"><div class="card-title">userHandle</div>' +
+                        '<div class="pk-row"><span class="pk-row-key">user.id</span><span class="pk-row-val pk-copy">' + userHandle +
+                        (match ? ' <span class="pk-note">(matches saved credential “' + escapeHtml(match.name) + '”)</span>' : ' <span class="pk-note">(no matching saved credential)</span>') +
+                        '</span></div></div>';
+                }
+
+                const mount = $('pk-signin-result');
+                mount.innerHTML = checklistHtml(checks) +
+                    (await authDataCardHtml(parsed, authDataBytes, null, 'auth')) +
+                    dataCardHtml('clientDataJSON', jsonHtml(clientData), clientDataBytes, 'auth-cd') +
+                    dataCardHtml('signature', 'algorithm: ' + (stored ? stored.algName : 'unknown') + '\nlength: ' + sigBytes.length + ' bytes', sigBytes, 'auth-sig') +
+                    extraRows;
+                bindViewToggles(mount);
+                mount.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+
+            /* ============================================================
+               Saved tab
+               ============================================================ */
+            function fmtDate(ts) { return ts ? new Date(ts).toLocaleString() : '—'; }
+
+            function renderSaved() {
+                const creds = loadCreds();
+                $('pk-saved-count').textContent = creds.length ? '· ' + creds.length : '';
+                renderSigninCredSelect();
+                const list = $('pk-saved-list');
+                if (!creds.length) {
+                    list.innerHTML = '<div class="pk-empty">No saved credentials yet. Create a passkey in the Register tab and it’ll show up here.</div>';
+                    return;
+                }
+                list.innerHTML = creds.map(c =>
+                    '<div class="card pk-cred" data-id="' + escapeHtml(c.id) + '">' +
+                    '<div class="pk-cred-head"><span class="pk-cred-name" data-role="name">' + escapeHtml(c.name) + '</span>' +
+                    '<span class="pk-cred-meta">' + escapeHtml(c.algName || '') + (c.crv ? ' · ' + escapeHtml(c.crv) : '') +
+                    (c.be ? ' · ⬤ synced' : '') + '</span></div>' +
+                    '<div class="pk-row"><span class="pk-row-key">Credential ID</span><span class="pk-row-val pk-copy">' + escapeHtml(c.id) + '</span></div>' +
+                    '<div class="pk-row"><span class="pk-row-key">Created</span><span class="pk-row-val">' + fmtDate(c.createdAt) + '</span></div>' +
+                    '<div class="pk-row"><span class="pk-row-key">Last used</span><span class="pk-row-val">' + fmtDate(c.lastUsedAt) +
+                    (c.authCount ? ' <span class="pk-note">(' + c.authCount + ' sign-in' + (c.authCount > 1 ? 's' : '') + ')</span>' : '') + '</span></div>' +
+                    '<div class="pk-row"><span class="pk-row-key">Sign count</span><span class="pk-row-val">' + (c.signCount || 0) + '</span></div>' +
+                    '<details class="pk-inline mt-1"><summary>All stored data (JSON)</summary>' +
+                    '<div class="pk-inline-body"><div class="pk-jsonbox pk-copy">' + jsonHtml(c) + '</div>' +
+                    '<div class="field-hint mt-1">This is everything LocalUtil knows about this credential — all public. The private key never leaves your authenticator.</div></div></details>' +
+                    '<div class="pk-cred-actions">' +
+                    '<button type="button" class="btn btn-small" data-act="use">Use for sign-in</button>' +
+                    '<button type="button" class="btn btn-small" data-act="rename">Rename</button>' +
+                    '<button type="button" class="btn btn-small" data-act="export">Export</button>' +
+                    '<button type="button" class="btn btn-small btn-danger" data-act="delete">Delete</button>' +
+                    '</div><div class="pk-cred-confirm" style="display:none;"></div></div>'
+                ).join('');
+            }
+
+            $('pk-saved-list').addEventListener('click', e => {
+                const btn = e.target.closest('button[data-act]');
+                if (!btn) return;
+                const card = btn.closest('.pk-cred');
+                const id = card.dataset.id;
+                const cred = credById(id);
+                if (!cred) return;
+                const act = btn.dataset.act;
+
+                if (act === 'use') {
+                    switchTab('signin');
+                    document.querySelector('#pk-signin-source button[data-val="specific"]').click();
+                    $('pk-signin-cred').value = id;
+                    refreshSigninJson();
+                } else if (act === 'rename') {
+                    const span = card.querySelector('[data-role="name"]');
+                    const input = document.createElement('input');
+                    input.type = 'text'; input.value = cred.name; input.style.maxWidth = '260px';
+                    span.replaceWith(input); input.focus(); input.select();
+                    const commit = () => { upsertCred({ id, name: input.value || cred.name }); renderSaved(); renderAdvanced(); refreshRegJson(); };
+                    input.addEventListener('keydown', ev => { if (ev.key === 'Enter') commit(); if (ev.key === 'Escape') renderSaved(); });
+                    input.addEventListener('blur', commit);
+                } else if (act === 'export') {
+                    downloadJson('passkey-' + cred.name.replace(/[^\w.-]+/g, '_') + '.json', [cred]);
+                } else if (act === 'delete') {
+                    const box = card.querySelector('.pk-cred-confirm');
+                    box.style.display = '';
+                    box.innerHTML = 'Remove <b>' + escapeHtml(cred.name) + '</b> from this browser? This does not delete the passkey from your device or password manager. ' +
+                        '<span class="pk-keybtns" style="margin-left:8px;"><button type="button" class="btn btn-small" data-confirm="no">Cancel</button>' +
+                        '<button type="button" class="btn btn-small btn-danger" data-confirm="yes">Remove entry</button></span>';
+                }
+            });
+            // delete-confirm buttons (injected above) get their own delegate
+            $('pk-saved-list').addEventListener('click', e => {
+                const btn = e.target.closest('button[data-confirm]');
+                if (!btn) return;
+                const card = btn.closest('.pk-cred');
+                if (btn.dataset.confirm === 'yes') { removeCred(card.dataset.id); renderSaved(); renderAdvanced(); refreshRegJson(); }
+                else card.querySelector('.pk-cred-confirm').style.display = 'none';
+            });
+
+            function downloadJson(filename, data) {
+                const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(blob); a.download = filename;
+                document.body.appendChild(a); a.click(); a.remove();
+                setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+            }
+
+            $('pk-btn-export-all').addEventListener('click', () => downloadJson('localutil-passkeys.json', loadCreds()));
+            $('pk-btn-import').addEventListener('click', () => $('pk-import-file').click());
+            $('pk-import-file').addEventListener('change', async () => {
+                const file = $('pk-import-file').files[0];
+                $('pk-import-file').value = '';
+                if (!file) return;
+                try {
+                    const data = JSON.parse(await file.text());
+                    const arr = Array.isArray(data) ? data : [data];
+                    const valid = arr.filter(validCredShape);
+                    if (!valid.length) throw new Error('no valid credential entries found (need id / name / jwk fields)');
+                    valid.forEach(upsertCred);
+                    renderSaved(); renderAdvanced(); refreshRegJson();
+                    window.showToast('Imported ' + valid.length + ' credential' + (valid.length > 1 ? 's' : ''));
+                } catch (err) {
+                    $('pk-saved-list').insertAdjacentHTML('beforebegin', errorCardHtml({ name: 'ImportError', message: err.message }));
+                }
+            });
+
+            /* ============================================================
+               Inspect tab
+               ============================================================ */
+            let inspectType = 'authData';
+            $('pk-inspect-type').addEventListener('click', e => {
+                const btn = e.target.closest('button[data-val]');
+                if (!btn) return;
+                inspectType = btn.dataset.val;
+                document.querySelectorAll('#pk-inspect-type button').forEach(b => b.classList.toggle('active', b === btn));
+            });
+
+            function parseInputBytes(raw) {
+                const s = raw.trim();
+                if (!s) throw new Error('paste a value first');
+                if (/^(0x)?[0-9a-fA-F\s]+$/.test(s) && s.replace(/^0x|\s+/g, '').length % 2 === 0 && s.replace(/^0x|\s+/g, '').length >= 8) {
+                    try { return fromHex(s.replace(/^0x/, '')); } catch { /* fall through to b64url */ }
+                }
+                return b64urlDecode(s);
+            }
+
+            $('pk-btn-decode').addEventListener('click', async () => {
+                const mount = $('pk-inspect-result');
+                try {
+                    const bytes = parseInputBytes($('pk-inspect-input').value);
+                    if (inspectType === 'authData') {
+                        const parsed = parseAuthenticatorData(bytes);
+                        const coseInfo = parsed.cosePublicKey ? coseToJwk(parsed.cosePublicKey) : null;
+                        mount.innerHTML = await authDataCardHtml(parsed, bytes, coseInfo, 'insp');
+                    } else if (inspectType === 'clientData') {
+                        const text = new TextDecoder().decode(bytes);
+                        const obj = JSON.parse(text);
+                        mount.innerHTML = dataCardHtml('clientDataJSON', jsonHtml(obj), bytes, 'insp-cd');
+                    } else if (inspectType === 'attestation') {
+                        const attObj = cborDecode(bytes);
+                        if (!(attObj instanceof Map) || !attObj.get('authData')) throw new Error('not an attestationObject (missing fmt/authData/attStmt map)');
+                        const authDataBytes = bytesOf(attObj.get('authData'));
+                        const parsed = parseAuthenticatorData(authDataBytes);
+                        const coseInfo = parsed.cosePublicKey ? coseToJwk(parsed.cosePublicKey) : null;
+                        mount.innerHTML = attestationCardHtml(attObj, null, bytes, null) + await authDataCardHtml(parsed, authDataBytes, coseInfo, 'insp-att');
+                    } else { // cose
+                        const cose = cborDecode(bytes);
+                        const info = coseToJwk(cose);
+                        let pem = null;
+                        try { pem = await jwkToPem(info.jwk); } catch { /* unsupported */ }
+                        mount.innerHTML = '<div class="card" data-pk="insp-cose"><div class="card-title">COSE key</div>' +
+                            '<div class="pk-row"><span class="pk-row-key">Type</span><span class="pk-row-val">' + info.kty + (info.crv ? ' · ' + info.crv : '') + '</span></div>' +
+                            '<div class="pk-row"><span class="pk-row-key">Algorithm</span><span class="pk-row-val">' + algName(info.alg) + ' (' + info.alg + ')</span></div>' +
+                            '<div class="pk-row"><span class="pk-row-key">JWK</span><span class="pk-row-val pk-copy">' + jsonHtml(info.jwk) + '</span></div>' +
+                            (pem ? '<div class="pk-row"><span class="pk-row-key">PEM</span><span class="pk-row-val pk-copy">' + escapeHtml(pem) + '</span></div>' : '') +
+                            '</div>';
+                    }
+                    bindViewToggles(mount);
+                } catch (err) {
+                    mount.innerHTML = errorCardHtml({ name: err.name === 'Error' || !err.name ? 'DecodeError' : err.name, message: err.message });
+                }
+            });
+
+            /* ============================================================
+               init
+               ============================================================ */
+            document.addEventListener('DOMContentLoaded', () => {
+                initEnvironment();
+                renderBanner();
+                renderPresets();
+                renderAdvanced();
+                refreshRegJson();
+                renderSigninAdvanced();
+                renderSaved();
+                refreshSigninJson();
+                renderSteps();
+            });
+
+            // Exposed for tests (test/passkey.test.mjs drives these directly)
+            window.PK = {
+                b64urlEncode, b64urlDecode, toHex, fromHex,
+                cborDecode, parseAuthenticatorData, coseToJwk, derToP1363,
+                verifyAssertionSignature, loadCreds,
+            };
+        })();
+    </script>
+</body>
+
+</html>

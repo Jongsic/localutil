@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
+    <title>Regex Tester (JavaScript) — LocalUtil</title>
+    <!-- social / favicon -->
+    <meta name="description" content="Test JavaScript regular expressions with live match highlighting and capture groups. Runs 100% in your browser — nothing is uploaded.">
+    <link rel="canonical" href="https://jongsic.github.io/localutil/regex.html">
+    <link rel="icon" href="favicon.ico" sizes="any">
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="LocalUtil">
+    <meta property="og:title" content="Regex Tester (JavaScript) — LocalUtil">
+    <meta property="og:description" content="Test JavaScript regular expressions with live match highlighting and capture groups. Runs 100% in your browser — nothing is uploaded.">
+    <meta property="og:image" content="https://jongsic.github.io/localutil/og.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:url" content="https://jongsic.github.io/localutil/regex.html">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:image" content="https://jongsic.github.io/localutil/og.png">
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebApplication","name":"Regex Tester (JavaScript)","url":"https://jongsic.github.io/localutil/regex.html","description":"Test JavaScript regular expressions with live match highlighting and capture groups. Runs 100% in your browser — nothing is uploaded.","applicationCategory":"DeveloperApplication","operatingSystem":"Any","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"isPartOf":{"@type":"WebSite","name":"LocalUtil","url":"https://jongsic.github.io/localutil/"}}</script>
+    <!-- /social -->
+    <script src="theme-init.js"></script>
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        .rx-pattern-row { display: flex; align-items: stretch; gap: 0; }
+        .rx-pattern-row .delim {
+            display: flex; align-items: center; padding: 0 12px;
+            background: var(--bg-subtle); border: 1px solid var(--border-color);
+            color: var(--text-faint); font-family: var(--font-mono); font-size: 1rem;
+        }
+        .rx-pattern-row .delim.left { border-radius: var(--r-sm) 0 0 var(--r-sm); border-right: none; }
+        .rx-pattern-row #rx-pattern {
+            border-radius: 0; font-family: var(--font-mono); flex: 1;
+        }
+        .rx-pattern-row .delim.right { border-radius: 0 var(--r-sm) var(--r-sm) 0; border-left: none; }
+        .rx-pattern-row.invalid .delim, .rx-pattern-row.invalid #rx-pattern { border-color: var(--danger); }
+
+        .rx-flags { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 12px; }
+        .rx-flags label { display: inline-flex; align-items: center; gap: 6px; margin: 0; font-weight: 500; cursor: pointer; font-size: 0.85rem; }
+        .rx-flags code { color: var(--text-muted); }
+
+        .rx-error { color: var(--danger); font-size: 0.85rem; margin-top: 8px; font-weight: 600; min-height: 1em; }
+        .rx-count { font-size: 0.85rem; font-weight: 600; color: var(--text-muted); }
+        .rx-count b { color: var(--success); }
+
+        #tool-regex textarea { min-height: 150px; }
+
+        .rx-highlight {
+            min-height: 120px;
+            padding: 14px;
+            background: var(--bg-input);
+            border: 1px solid var(--border-color);
+            border-radius: var(--r-sm);
+            font-family: var(--font-mono);
+            font-size: 0.85rem;
+            line-height: 1.6;
+            white-space: pre-wrap;
+            word-break: break-word;
+            overflow: auto;
+        }
+        .rx-highlight mark {
+            border-radius: 3px;
+            padding: 1px 0;
+            color: var(--text-main);
+        }
+        .rx-highlight mark.m0 { background: rgba(47, 107, 255, 0.32); box-shadow: 0 0 0 1px rgba(47,107,255,0.5); }
+        .rx-highlight mark.m1 { background: rgba(62, 207, 127, 0.32); box-shadow: 0 0 0 1px rgba(62,207,127,0.5); }
+
+        .rx-matches { margin-top: 4px; display: flex; flex-direction: column; gap: 10px; }
+        .rx-match {
+            padding: 12px 14px; background: var(--bg-input);
+            border: 1px solid var(--border-color); border-radius: var(--r-sm);
+            font-family: var(--font-mono); font-size: 0.82rem;
+        }
+        .rx-match .head { color: var(--text-faint); margin-bottom: 6px; font-size: 0.78rem; }
+        .rx-match .full { color: var(--text-main); word-break: break-all; }
+        .rx-group { margin-top: 5px; padding-left: 12px; border-left: 2px solid var(--border-color); color: var(--text-muted); word-break: break-all; }
+        .rx-group b { color: var(--primary); }
+    </style>
+</head>
+
+<body>
+    <div class="app-container">
+        <aside class="sidebar" id="app-sidebar"></aside>
+
+        <main class="main-content">
+            <header class="topbar" id="app-topbar">
+                <div class="topbar-title">
+                    <h1 id="current-tool-title">Regex Tester</h1>
+                    <p id="current-tool-desc" class="topbar-desc">Test regular expressions with live match highlighting</p>
+                </div>
+            </header>
+
+            <div class="tools-container">
+                <section id="tool-regex" class="tool-section active">
+                    <div class="card" style="padding:18px; margin-bottom:16px;">
+                        <label for="rx-pattern">Pattern</label>
+                        <div class="rx-pattern-row" id="rx-pattern-row">
+                            <span class="delim left">/</span>
+                            <input type="text" id="rx-pattern" placeholder="\b\w+@\w+\.\w+\b" autocomplete="off" spellcheck="false">
+                            <span class="delim right" id="rx-flags-label">/g</span>
+                        </div>
+                        <div class="rx-flags">
+                            <label><input type="checkbox" id="fl-g" checked> <code>g</code> global</label>
+                            <label><input type="checkbox" id="fl-i"> <code>i</code> ignore case</label>
+                            <label><input type="checkbox" id="fl-m"> <code>m</code> multiline</label>
+                            <label><input type="checkbox" id="fl-s"> <code>s</code> dotall</label>
+                            <label><input type="checkbox" id="fl-u"> <code>u</code> unicode</label>
+                            <label><input type="checkbox" id="fl-y"> <code>y</code> sticky</label>
+                        </div>
+                        <div class="rx-error" id="rx-error"></div>
+                    </div>
+
+                    <div class="split-pane">
+                        <div class="pane">
+                            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+                                <label for="rx-test">Test string</label>
+                                <span class="rx-count" id="rx-count"></span>
+                            </div>
+                            <div class="field-hint">Matches are highlighted below as you type — nothing is uploaded.</div>
+                            <textarea id="rx-test" placeholder="Paste text to search…"></textarea>
+                            <label style="margin-top:6px;">Highlighted matches</label>
+                            <div class="rx-highlight" id="rx-highlight"></div>
+                        </div>
+                        <div class="pane">
+                            <label>Match details</label>
+                            <div class="field-hint">Each match with its capture groups.</div>
+                            <div class="rx-matches" id="rx-matches"></div>
+
+                            <label for="rx-replace" style="margin-top:14px;">Replace with</label>
+                            <div class="field-hint">Supports <code>$1</code>, <code>$&lt;name&gt;</code> references.</div>
+                            <input type="text" id="rx-replace" placeholder="$1" autocomplete="off" spellcheck="false">
+                            <label style="margin-top:10px;">Result</label>
+                            <textarea id="rx-replace-out" readonly placeholder="Replacement result…" style="min-height:90px;"></textarea>
+                            <button class="btn btn-small copy-btn" data-clipboard-target="#rx-replace-out">Copy</button>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </div>
+
+    <div id="toast" class="toast">Copied to clipboard!</div>
+
+    <script src="app.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const patternIn = document.getElementById('rx-pattern');
+            const testIn = document.getElementById('rx-test');
+            const replaceIn = document.getElementById('rx-replace');
+            const replaceOut = document.getElementById('rx-replace-out');
+            const highlightEl = document.getElementById('rx-highlight');
+            const matchesEl = document.getElementById('rx-matches');
+            const errorEl = document.getElementById('rx-error');
+            const countEl = document.getElementById('rx-count');
+            const flagsLabel = document.getElementById('rx-flags-label');
+            const patternRow = document.getElementById('rx-pattern-row');
+            const flagBoxes = {
+                g: document.getElementById('fl-g'), i: document.getElementById('fl-i'),
+                m: document.getElementById('fl-m'), s: document.getElementById('fl-s'),
+                u: document.getElementById('fl-u'), y: document.getElementById('fl-y')
+            };
+
+            function currentFlags() {
+                return Object.keys(flagBoxes).filter(f => flagBoxes[f].checked).join('');
+            }
+
+            function esc(s) {
+                return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            }
+
+            function run() {
+                const flags = currentFlags();
+                flagsLabel.textContent = '/' + flags;
+                const pattern = patternIn.value;
+                errorEl.textContent = '';
+                patternRow.classList.remove('invalid');
+
+                if (!pattern) {
+                    highlightEl.textContent = testIn.value;
+                    matchesEl.innerHTML = '<div class="field-hint">Enter a pattern to see matches.</div>';
+                    countEl.textContent = '';
+                    replaceOut.value = '';
+                    return;
+                }
+
+                let re;
+                try {
+                    re = new RegExp(pattern, flags);
+                } catch (e) {
+                    patternRow.classList.add('invalid');
+                    errorEl.textContent = e.message;
+                    countEl.textContent = '';
+                    return;
+                }
+
+                const text = testIn.value;
+                const matches = collectMatches(re, text, flags.includes('g'));
+
+                // ---- Highlight (walk matches in order, escape gaps) ----
+                let html = '', cursor = 0;
+                matches.forEach((m, idx) => {
+                    html += esc(text.slice(cursor, m.index));
+                    html += '<mark class="m' + (idx % 2) + '">' + esc(m[0]) + '</mark>';
+                    cursor = m.index + m[0].length;
+                });
+                html += esc(text.slice(cursor));
+                highlightEl.innerHTML = html || '<span class="field-hint">No text.</span>';
+
+                // ---- Count ----
+                countEl.innerHTML = matches.length
+                    ? '<b>' + matches.length + '</b> match' + (matches.length === 1 ? '' : 'es')
+                    : 'No matches';
+
+                // ---- Match details ----
+                if (!matches.length) {
+                    matchesEl.innerHTML = '<div class="field-hint">No matches found.</div>';
+                } else {
+                    matchesEl.innerHTML = matches.map((m, i) => {
+                        let groups = '';
+                        for (let g = 1; g < m.length; g++) {
+                            groups += '<div class="rx-group"><b>Group ' + g + ':</b> ' +
+                                (m[g] === undefined ? '<span class="field-hint">undefined</span>' : esc(m[g])) + '</div>';
+                        }
+                        if (m.groups) {
+                            for (const [name, val] of Object.entries(m.groups)) {
+                                groups += '<div class="rx-group"><b>&lt;' + esc(name) + '&gt;:</b> ' +
+                                    (val === undefined ? '<span class="field-hint">undefined</span>' : esc(val)) + '</div>';
+                            }
+                        }
+                        return '<div class="rx-match"><div class="head">Match ' + (i + 1) + ' · index ' + m.index + '</div>' +
+                            '<div class="full">' + esc(m[0]) + '</div>' + groups + '</div>';
+                    }).join('');
+                }
+
+                // ---- Replace preview ----
+                try {
+                    replaceOut.value = text.replace(re, replaceIn.value);
+                } catch (e) {
+                    replaceOut.value = 'Error: ' + e.message;
+                }
+            }
+
+            // Collect matches safely, guarding against zero-length infinite loops.
+            function collectMatches(re, text, global) {
+                const out = [];
+                if (!global) {
+                    const m = re.exec(text);
+                    if (m) out.push(m);
+                    return out;
+                }
+                let m;
+                re.lastIndex = 0;
+                let guard = 0;
+                while ((m = re.exec(text)) !== null) {
+                    out.push(m);
+                    if (m[0] === '') re.lastIndex++;
+                    if (++guard > 100000) break;
+                }
+                return out;
+            }
+
+            [patternIn, testIn, replaceIn].forEach(el => el.addEventListener('input', run));
+            Object.values(flagBoxes).forEach(box => box.addEventListener('change', run));
+
+            // seed with a friendly example
+            testIn.value = 'Contact us at hello@localutil.app or support@example.com — we reply fast.';
+            run();
+        });
+    </script>
+</body>
+
+</html>
