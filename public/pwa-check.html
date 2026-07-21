@@ -33,6 +33,8 @@
 
         #pwa-src { min-height: 110px; }
         #pwa-manifest { min-height: 110px; }
+        #pwa-manifest-hint { margin-top: 6px; word-break: break-all; }
+        #pwa-manifest-hint a { color: var(--primary); }
         .pwa-inputs { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
         @media (max-width: 860px) { .pwa-inputs { grid-template-columns: 1fr; } }
 
@@ -191,6 +193,7 @@
                             <div class="flex-col" style="gap:10px;">
                                 <div class="pwa-url-row">
                                     <input type="text" id="pwa-url" placeholder="Page URL — e.g. https://example.com/app/ (optional, used to resolve relative paths)" autocomplete="off" spellcheck="false">
+                                    <button id="pwa-view-source" class="btn btn-small" disabled>Copy view-source link</button>
                                     <button id="btn-pwa-fetch" class="btn btn-small">Fetch (same-site only)</button>
                                 </div>
                                 <div class="pwa-inputs">
@@ -201,6 +204,7 @@
                                     <div>
                                         <label for="pwa-manifest">manifest.json</label>
                                         <textarea id="pwa-manifest" class="mono" placeholder="Paste the web app manifest JSON here…" spellcheck="false"></textarea>
+                                        <div class="field-hint" id="pwa-manifest-hint" style="display:none;"></div>
                                     </div>
                                 </div>
                                 <div class="flex-row gap-1">
@@ -289,6 +293,20 @@
                 return e;
             }
 
+            // ---------- URL row ----------
+            const viewSourceBtn = document.getElementById('pwa-view-source');
+            function syncUrlRow() {
+                viewSourceBtn.disabled = !parsedUrl(urlInput.value);
+            }
+
+            // No browser lets a page navigate to view-source: (Safari errors, Chrome
+            // silently blocks), so this only copies the address for manual pasting.
+            viewSourceBtn.addEventListener('click', () => {
+                const u = parsedUrl(urlInput.value);
+                if (!u) return;
+                copyText('view-source:' + u.href, 'Copied — open a new tab and paste it into the address bar');
+            });
+
             // ---------- fetch / example / clear ----------
             document.getElementById('btn-pwa-fetch').addEventListener('click', async () => {
                 const u = parsedUrl(urlInput.value);
@@ -356,11 +374,12 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js');
                 urlInput.value = '';
                 srcInput.value = '';
                 manInput.value = '';
+                syncUrlRow();
                 analyze();
                 urlInput.focus();
             });
 
-            urlInput.addEventListener('input', analyze);
+            urlInput.addEventListener('input', () => { syncUrlRow(); analyze(); });
             srcInput.addEventListener('input', analyze);
             manInput.addEventListener('input', analyze);
 
@@ -627,11 +646,38 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js');
                 else s.textContent = 'No register() call found in the pasted source — many apps register from bundled JS, so this does not prove anything either way.';
             }
 
+            // ---------- manifest link hint ----------
+            // Manifests served as .json/.webmanifest open as raw text in a tab,
+            // so a plain link is enough to grab the JSON from.
+            function renderManifestHint(h) {
+                const hint = document.getElementById('pwa-manifest-hint');
+                hint.innerHTML = '';
+                const href = h && h.manifestHref;
+                if (!href) { hint.style.display = 'none'; return; }
+                hint.appendChild(document.createTextNode('Manifest found in the HTML: '));
+                const abs = resolveUrl(href);
+                if (abs && /^https?:\/\//i.test(abs)) {
+                    const a = el('a', null, abs);
+                    a.href = abs;
+                    a.target = '_blank';
+                    a.rel = 'noopener nofollow';
+                    hint.appendChild(a);
+                    hint.appendChild(document.createTextNode(' — opens as raw JSON; copy it and paste above.'));
+                } else {
+                    hint.appendChild(document.createTextNode(href + ' (relative — enter the page URL above to make it a link)'));
+                }
+                hint.style.display = 'block';
+            }
+
             // ---------- main ----------
             function analyze() {
                 const src = srcInput.value.trim();
                 const manRaw = manInput.value.trim();
-                if (!src && !manRaw) { results.style.display = 'none'; return; }
+                if (!src && !manRaw) {
+                    results.style.display = 'none';
+                    renderManifestHint(null);
+                    return;
+                }
 
                 // DOMParser documents are inert: nothing loads, nothing executes.
                 const h = src ? extractHtml(new DOMParser().parseFromString(src, 'text/html'), src) : null;
@@ -648,12 +694,14 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js');
                 const manifestBase = (h && h.manifestHref && resolveUrl(h.manifestHref)) || urlInput.value.trim() || undefined;
 
                 runChecklist(h, man, manErr);
+                renderManifestHint(h);
                 renderIcons(man, manifestBase);
                 renderPrompt(man, manifestBase);
                 renderSwStatus(h);
                 results.style.display = 'flex';
             }
 
+            syncUrlRow();
             analyze();
         });
     </script>

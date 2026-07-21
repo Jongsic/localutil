@@ -157,6 +157,23 @@ test('service worker helper has copyable snippet and chrome:// address', async (
     assert.match(await env.page.$eval('#pwa-sw-status', e => e.textContent), /No register\(\) call/);
 });
 
+test('view-source copy enables with a URL; manifest link becomes clickable', async () => {
+    await env.goto('pwa-check.html');
+    assert.ok(await env.page.$eval('#pwa-view-source', e => e.disabled));
+    await env.page.fill('#pwa-url', 'https://example.com/app/');
+    assert.equal(await env.page.$eval('#pwa-view-source', e => e.disabled), false);
+
+    // Relative manifest href resolves against the URL and becomes a raw-JSON link.
+    await env.page.fill('#pwa-src', '<head><link rel="manifest" href="manifest.webmanifest"></head>');
+    const href = await env.page.$eval('#pwa-manifest-hint a', a => a.href);
+    assert.equal(href, 'https://example.com/app/manifest.webmanifest');
+
+    // Without a base URL the hint still names the path but has no link.
+    await env.page.fill('#pwa-url', '');
+    assert.equal(await env.page.$('#pwa-manifest-hint a'), null);
+    assert.match(await env.page.$eval('#pwa-manifest-hint', e => e.textContent), /relative — enter the page URL/);
+});
+
 test('no page errors', () => {
     assert.deepEqual(env.errors, []);
 });
