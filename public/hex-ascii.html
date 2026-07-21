@@ -26,6 +26,16 @@
     <!-- /social -->
     <script src="theme-init.js"></script>
     <link rel="stylesheet" href="styles.css">
+    <style>
+        /* Boxed sub-section for options that only shape Text → Hex output */
+        .opt-hex-out {
+            border: 1px solid var(--border-color);
+            border-radius: var(--r-sm);
+            background: var(--bg-subtle);
+            padding: 12px 14px;
+        }
+        .opt-hex-out .section-title { margin-top: 0; }
+    </style>
 </head>
 
 <body>
@@ -47,34 +57,38 @@
                     <div class="tool-shell">
                         <div class="card">
                             <div class="card-title">Conversion options</div>
-                            <div class="card-subtitle">Choose how text is encoded and how hex is formatted.</div>
-                            <div class="form-grid cols-3">
-                                <div class="field-group">
-                                    <label for="opt-encoding">Character encoding</label>
-                                    <select id="opt-encoding">
-                                        <option value="utf8" selected>UTF-8</option>
-                                        <option value="ascii">ASCII (7-bit)</option>
-                                        <option value="latin1">Latin-1 (ISO 8859-1)</option>
-                                    </select>
-                                    <div class="field-hint">How characters map to bytes.</div>
-                                </div>
-                                <div class="field-group">
-                                    <label for="opt-delimiter">Hex delimiter</label>
-                                    <select id="opt-delimiter">
-                                        <option value="space" selected>Space (48 65 6C)</option>
-                                        <option value="none">None (48656C)</option>
-                                        <option value="0x">0x prefix (0x48 0x65)</option>
-                                        <option value="\\x">\\x prefix (\\x48\\x65)</option>
-                                    </select>
-                                    <div class="field-hint">Separator used in hex output.</div>
-                                </div>
-                                <div class="field-group">
-                                    <label for="opt-case">Letter case</label>
-                                    <select id="opt-case">
-                                        <option value="lower" selected>Lowercase (4a)</option>
-                                        <option value="upper">Uppercase (4A)</option>
-                                    </select>
-                                    <div class="field-hint">Case of hex digits a–f.</div>
+                            <div class="card-subtitle">Encoding applies to both directions; the hex output format below only shapes Text → Hex.</div>
+                            <div class="field-group mb-2">
+                                <label for="opt-encoding">Character encoding</label>
+                                <select id="opt-encoding">
+                                    <option value="utf8" selected>UTF-8</option>
+                                    <option value="ascii">ASCII (7-bit)</option>
+                                    <option value="latin1">Latin-1 (ISO 8859-1)</option>
+                                </select>
+                                <div class="field-hint">How characters map to bytes — used for both Text → Hex and Hex → Text.</div>
+                            </div>
+                            <div class="opt-hex-out">
+                                <div class="section-title">Hex output format — Text → Hex only</div>
+                                <div class="field-hint mb-2">Hex → Text parses any of these styles automatically (spaces, <code>0x</code>, <code>\x</code>, commas, upper/lowercase), so they don't affect decoding.</div>
+                                <div class="form-grid">
+                                    <div class="field-group">
+                                        <label for="opt-delimiter">Hex delimiter</label>
+                                        <select id="opt-delimiter">
+                                            <option value="space" selected>Space (48 65 6C)</option>
+                                            <option value="none">None (48656C)</option>
+                                            <option value="0x">0x prefix (0x48 0x65)</option>
+                                            <option value="\\x">\\x prefix (\\x48\\x65)</option>
+                                        </select>
+                                        <div class="field-hint">Separator used in hex output.</div>
+                                    </div>
+                                    <div class="field-group">
+                                        <label for="opt-case">Letter case</label>
+                                        <select id="opt-case">
+                                            <option value="lower" selected>Lowercase (4a)</option>
+                                            <option value="upper">Uppercase (4A)</option>
+                                        </select>
+                                        <div class="field-hint">Case of hex digits a–f.</div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
