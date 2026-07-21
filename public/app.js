@@ -37,6 +37,7 @@ const ICONS = {
     resize: '<polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/>',
     svgimage: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="m8.5 9.5-2.5 2.5 2.5 2.5"/><path d="m15.5 9.5 2.5 2.5-2.5 2.5"/><path d="m13 8-2 8"/>',
     seocheck: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><circle cx="11" cy="14" r="2.5"/><path d="m13 16 2.5 2.5"/>',
+    pwacheck: '<rect x="7" y="2" width="10" height="20" rx="2"/><path d="M12 8v5"/><polyline points="9.5 11 12 13.5 14.5 11"/><line x1="10.5" y1="18" x2="13.5" y2="18"/>',
     // chrome
     search: '<circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>',
     sun: '<circle cx="12" cy="12" r="4"/><line x1="12" y1="2" x2="12" y2="4"/><line x1="12" y1="20" x2="12" y2="22"/><line x1="4.9" y1="4.9" x2="6.3" y2="6.3"/><line x1="17.7" y1="17.7" x2="19.1" y2="19.1"/><line x1="2" y1="12" x2="4" y2="12"/><line x1="20" y1="12" x2="22" y2="12"/><line x1="4.9" y1="19.1" x2="6.3" y2="17.7"/><line x1="17.7" y1="6.3" x2="19.1" y2="4.9"/>',
@@ -91,6 +92,7 @@ const TOOLS = [
     { file: 'cron.html', name: 'Cron Parser', desc: 'Explain cron expressions and preview next runs', icon: 'cron', cat: 'Utilities' },
     { file: 'tg-bot.html', name: 'Telegram Bot Logger', desc: 'Log and inspect Telegram bot updates', icon: 'telegram', cat: 'Utilities' },
     { file: 'seo-check.html', name: 'SEO Checker', desc: 'Audit SEO meta tags from page HTML — checklist, search and social previews', icon: 'seocheck', cat: 'Utilities' },
+    { file: 'pwa-check.html', name: 'PWA Checker', desc: 'Audit PWA install readiness from page HTML and manifest JSON — checklist, icons, install preview', icon: 'pwacheck', cat: 'Utilities' },
 ];
 
 function currentFile() {

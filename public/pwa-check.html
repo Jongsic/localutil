@@ -1,0 +1,662 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
+    <title>PWA Install Checker — LocalUtil</title>
+    <!-- social / favicon -->
+    <meta name="description" content="Audit PWA installability from page HTML and manifest JSON — install criteria checklist, icon previews, maskable safe zone, and service worker guidance. Runs in your browser.">
+    <link rel="canonical" href="https://jongsic.github.io/localutil/pwa-check.html">
+    <link rel="icon" href="favicon.ico" sizes="any">
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="LocalUtil">
+    <meta property="og:title" content="PWA Install Checker — LocalUtil">
+    <meta property="og:description" content="Audit PWA installability from page HTML and manifest JSON — install criteria checklist, icon previews, maskable safe zone, and service worker guidance. Runs in your browser.">
+    <meta property="og:image" content="https://jongsic.github.io/localutil/og.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:url" content="https://jongsic.github.io/localutil/pwa-check.html">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:image" content="https://jongsic.github.io/localutil/og.png">
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebApplication","name":"PWA Install Checker","url":"https://jongsic.github.io/localutil/pwa-check.html","description":"Audit PWA installability from page HTML and manifest JSON — install criteria checklist, icon previews, maskable safe zone, and service worker guidance. Runs in your browser.","applicationCategory":"DeveloperApplication","operatingSystem":"Any","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"isPartOf":{"@type":"WebSite","name":"LocalUtil","url":"https://jongsic.github.io/localutil/"}}</script>
+    <!-- /social -->
+    <script src="theme-init.js"></script>
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        .pwa-url-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+        .pwa-url-row input { flex: 1; min-width: 200px; }
+        .btn:disabled { opacity: 0.45; cursor: default; }
+
+        #pwa-src { min-height: 110px; }
+        #pwa-manifest { min-height: 110px; }
+        .pwa-inputs { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+        @media (max-width: 860px) { .pwa-inputs { grid-template-columns: 1fr; } }
+
+        /* --- checklist (same visual language as the SEO checker) --- */
+        .pwa-check-list { display: flex; flex-direction: column; }
+        .pwa-check-row {
+            display: flex;
+            gap: 10px;
+            align-items: baseline;
+            padding: 7px 0;
+            border-bottom: 1px solid var(--border-color);
+            font-size: 0.83rem;
+        }
+        .pwa-check-row:last-child { border-bottom: none; }
+        .pwa-check-status { flex: 0 0 18px; text-align: center; font-weight: 700; }
+        .pwa-check-row.ok .pwa-check-status { color: var(--success); }
+        .pwa-check-row.warn .pwa-check-status { color: var(--warning); }
+        .pwa-check-row.fail .pwa-check-status { color: var(--danger); }
+        .pwa-check-row.opt .pwa-check-status { color: var(--text-faint); }
+        .pwa-check-row.opt .pwa-check-label { color: var(--text-muted); }
+        .pwa-check-summary { font-weight: 600; margin: 8px 0 2px; }
+        .pwa-check-label { flex: 0 0 170px; font-weight: 600; }
+        .pwa-check-note { color: var(--text-muted); word-break: break-all; min-width: 0; }
+        .pwa-check-note a { color: var(--primary); }
+        .pwa-check-note code { font-size: 0.76rem; }
+        @media (max-width: 560px) {
+            .pwa-check-row { flex-wrap: wrap; }
+            .pwa-check-label { flex-basis: calc(100% - 28px); }
+            .pwa-check-note { margin-left: 28px; flex-basis: 100%; }
+        }
+
+        /* --- icon previews --- */
+        .pwa-icon-grid { display: flex; flex-wrap: wrap; gap: 14px; }
+        .pwa-icon-cell {
+            border: 1px solid var(--border-color);
+            border-radius: var(--r-sm);
+            background: var(--bg-input);
+            padding: 12px;
+            width: 150px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+        }
+        .pwa-icon-frame {
+            width: 96px;
+            height: 96px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            background:
+                repeating-conic-gradient(var(--bg-subtle) 0% 25%, transparent 0% 50%) 0 0 / 16px 16px;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        .pwa-icon-frame img { max-width: 96px; max-height: 96px; }
+        .pwa-icon-frame.maskable { border-radius: 50%; }
+        .pwa-icon-frame.maskable::after {
+            /* safe-zone circle: content must fit the inner 80% */
+            content: '';
+            position: absolute;
+            inset: 10%;
+            border: 1px dashed color-mix(in srgb, var(--primary) 70%, transparent);
+            border-radius: 50%;
+            pointer-events: none;
+        }
+        .pwa-icon-missing {
+            font-size: 0.68rem;
+            color: var(--text-faint);
+            text-align: center;
+            padding: 6px;
+        }
+        .pwa-icon-meta { font-size: 0.7rem; color: var(--text-muted); text-align: center; font-family: var(--font-mono); word-break: break-all; }
+        .pwa-icon-badge {
+            font-size: 0.66rem;
+            font-weight: 700;
+            color: var(--primary);
+            border: 1px solid var(--primary);
+            border-radius: var(--r-pill);
+            padding: 1px 8px;
+        }
+
+        /* --- install prompt preview --- */
+        .pwa-prompt {
+            max-width: 380px;
+            border: 1px solid var(--border-strong);
+            border-radius: var(--r-md);
+            background: var(--bg-input);
+            padding: 14px 16px;
+        }
+        .pwa-prompt-head { display: flex; gap: 12px; align-items: center; }
+        .pwa-prompt-icon {
+            flex: 0 0 48px; height: 48px;
+            border-radius: 10px;
+            background: var(--bg-subtle);
+            border: 1px solid var(--border-color);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 0.62rem; color: var(--text-faint);
+            overflow: hidden;
+        }
+        .pwa-prompt-icon img { width: 48px; height: 48px; object-fit: cover; }
+        .pwa-prompt-name { font-weight: 700; font-size: 0.95rem; }
+        .pwa-prompt-name .missing { color: var(--danger); font-style: italic; font-weight: 400; }
+        .pwa-prompt-origin { font-size: 0.75rem; color: var(--text-muted); word-break: break-all; }
+        .pwa-prompt-desc { font-size: 0.78rem; color: var(--text-muted); margin-top: 8px; }
+        .pwa-prompt-btn {
+            margin-top: 12px;
+            display: inline-block;
+            background: var(--primary);
+            color: #fff;
+            font-size: 0.8rem;
+            font-weight: 650;
+            border-radius: var(--r-pill);
+            padding: 6px 18px;
+        }
+
+        /* --- service worker helper --- */
+        .pwa-sw-snippet {
+            font-family: var(--font-mono);
+            font-size: 0.74rem;
+            background: var(--bg-subtle);
+            border: 1px solid var(--border-color);
+            border-radius: var(--r-sm);
+            padding: 10px 12px;
+            white-space: pre-wrap;
+            word-break: break-all;
+            color: var(--text-muted);
+        }
+        .pwa-sw-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 8px; }
+        .pwa-sw-row .mono { font-size: 0.76rem; color: var(--text-muted); }
+    </style>
+</head>
+
+<body>
+    <div class="app-container">
+        <aside class="sidebar" id="app-sidebar"></aside>
+
+        <main class="main-content">
+            <header class="topbar" id="app-topbar">
+                <div class="topbar-title">
+                    <h1 id="current-tool-title">PWA Checker</h1>
+                    <p id="current-tool-desc" class="topbar-desc">Audit install readiness from page HTML and manifest JSON — checklist, icons, install preview</p>
+                </div>
+            </header>
+
+            <div class="tools-container">
+                <section id="tool-pwa-check" class="tool-section active">
+                    <div class="tool-shell">
+
+                        <div class="card">
+                            <div class="card-title" style="margin:0;">Page source &amp; manifest</div>
+                            <div class="field-hint mb-2">Browsers can't fetch other sites' files from a page (CORS/CSP), so paste the
+                                page HTML and the manifest JSON. The URL is optional — it resolves relative paths, enables icon
+                                previews, and checks HTTPS.</div>
+                            <div class="flex-col" style="gap:10px;">
+                                <div class="pwa-url-row">
+                                    <input type="text" id="pwa-url" placeholder="Page URL — e.g. https://example.com/app/ (optional, used to resolve relative paths)" autocomplete="off" spellcheck="false">
+                                    <button id="btn-pwa-fetch" class="btn btn-small">Fetch (same-site only)</button>
+                                </div>
+                                <div class="pwa-inputs">
+                                    <div>
+                                        <label for="pwa-src">HTML source</label>
+                                        <textarea id="pwa-src" class="mono" placeholder="Paste the page's HTML source here…" spellcheck="false"></textarea>
+                                    </div>
+                                    <div>
+                                        <label for="pwa-manifest">manifest.json</label>
+                                        <textarea id="pwa-manifest" class="mono" placeholder="Paste the web app manifest JSON here…" spellcheck="false"></textarea>
+                                    </div>
+                                </div>
+                                <div class="flex-row gap-1">
+                                    <button id="btn-pwa-example" class="btn btn-small btn-ghost">Load example</button>
+                                    <button id="btn-pwa-clear" class="btn btn-small btn-ghost" style="margin-left:auto;">Clear</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="pwa-results" style="display:none; flex-direction:column; gap:16px;">
+
+                            <div class="card">
+                                <div class="card-title" style="margin:0;">Install readiness — what to fix, what is done</div>
+                                <div class="field-hint">Every install requirement and recommendation is listed, including what's
+                                    missing. ✕ blocks install &nbsp;·&nbsp; ! should fix &nbsp;·&nbsp; ○ optional, not set &nbsp;·&nbsp; ✓ done</div>
+                                <div class="field-hint pwa-check-summary" id="pwa-check-summary"></div>
+                                <div class="pwa-check-list" id="pwa-checklist"></div>
+                            </div>
+
+                            <div class="card" id="pwa-icons-card" style="display:none;">
+                                <div class="card-title" style="margin:0 0 4px;">Manifest icons</div>
+                                <div class="field-hint mb-2">Previews load straight from the icon URLs (needs the page URL for relative
+                                    paths). The dashed circle on maskable icons is the safe zone — everything important must fit inside it.</div>
+                                <div class="pwa-icon-grid" id="pwa-icon-grid"></div>
+                            </div>
+
+                            <div class="card" id="pwa-prompt-card" style="display:none;">
+                                <div class="card-title" style="margin:0 0 10px;">Install prompt preview</div>
+                                <div class="pwa-prompt" id="pwa-prompt"></div>
+                            </div>
+
+                            <div class="card">
+                                <div class="card-title" style="margin:0 0 4px;">Service worker — verify it live</div>
+                                <div class="field-hint mb-2" id="pwa-sw-status"></div>
+                                <div class="field-hint">Registration can only be confirmed on the running site. Open the site in a tab,
+                                    then run this in its DevTools console:</div>
+                                <div class="pwa-sw-snippet" id="pwa-sw-snippet">navigator.serviceWorker.getRegistrations().then(rs =>
+  console.log(rs.length
+    ? rs.map(r => r.scope + ' → ' + (r.active ? r.active.scriptURL : '(no active worker)'))
+    : 'no service worker registrations'))</div>
+                                <div class="pwa-sw-row">
+                                    <button id="btn-pwa-snippet" class="btn btn-small">Copy console snippet</button>
+                                    <button id="btn-pwa-swinternals" class="btn btn-small">Copy chrome://inspect/#service-workers</button>
+                                </div>
+                                <div class="pwa-sw-row">
+                                    <span class="mono">chrome:// pages can't be opened from a link — paste the copied address into a new tab.
+                                        Or use DevTools → Application → Service Workers / Manifest, or a
+                                        <a href="https://developer.chrome.com/docs/lighthouse/overview" target="_blank" rel="noopener">Lighthouse</a> audit.</span>
+                                </div>
+                            </div>
+
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </div>
+
+    <div id="toast" class="toast">Copied to clipboard</div>
+
+    <script src="app.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const urlInput = document.getElementById('pwa-url');
+            const srcInput = document.getElementById('pwa-src');
+            const manInput = document.getElementById('pwa-manifest');
+            const results = document.getElementById('pwa-results');
+            const checklist = document.getElementById('pwa-checklist');
+
+            // ---------- helpers ----------
+            function parsedUrl(v) {
+                try {
+                    const u = new URL(v.trim());
+                    return /^https?:$/.test(u.protocol) ? u : null;
+                } catch (e) { return null; }
+            }
+
+            function resolveUrl(href, base) {
+                try { return new URL(href, base || urlInput.value.trim() || undefined).href; } catch (e) { return null; }
+            }
+
+            function el(tag, className, text) {
+                const e = document.createElement(tag);
+                if (className) e.className = className;
+                if (text !== undefined) e.textContent = text;
+                return e;
+            }
+
+            // ---------- fetch / example / clear ----------
+            document.getElementById('btn-pwa-fetch').addEventListener('click', async () => {
+                const u = parsedUrl(urlInput.value);
+                if (!u) { showToast('Enter a valid http(s) URL first', true); return; }
+                try {
+                    srcInput.value = await (await fetch(u.href)).text();
+                    analyze();
+                    // Follow the manifest link too, while we're on the same origin.
+                    const doc = new DOMParser().parseFromString(srcInput.value, 'text/html');
+                    const link = doc.querySelector('link[rel="manifest" i]');
+                    const mu = link && resolveUrl(link.getAttribute('href'), u.href);
+                    if (mu) {
+                        try { manInput.value = await (await fetch(mu)).text(); analyze(); } catch (e) { /* manifest cross-origin/missing */ }
+                    }
+                    showToast('Fetched');
+                } catch (e) {
+                    showToast('Fetch blocked (CORS/CSP) — paste the source instead', true);
+                }
+            });
+
+            const EXAMPLE_HTML = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0b5cff">
+<title>Example PWA</title>
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+</head>
+<body>
+<script>
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js');
+<\/script>
+</body>
+</html>`;
+            const EXAMPLE_MANIFEST = JSON.stringify({
+                name: 'Example PWA',
+                short_name: 'Example',
+                id: '/',
+                start_url: '/',
+                scope: '/',
+                display: 'standalone',
+                theme_color: '#0b5cff',
+                background_color: '#ffffff',
+                description: 'A tiny example progressive web app.',
+                icons: [
+                    { src: '/icons/icon-192.png', sizes: '192x192', type: 'image/png' },
+                    { src: '/icons/icon-512.png', sizes: '512x512', type: 'image/png' },
+                    { src: '/icons/maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+                ],
+                screenshots: [
+                    { src: '/screens/home.png', sizes: '1080x1920', type: 'image/png' },
+                ],
+            }, null, 2);
+
+            document.getElementById('btn-pwa-example').addEventListener('click', () => {
+                urlInput.value = 'https://example.com/';
+                srcInput.value = EXAMPLE_HTML;
+                manInput.value = EXAMPLE_MANIFEST;
+                analyze();
+            });
+
+            document.getElementById('btn-pwa-clear').addEventListener('click', () => {
+                urlInput.value = '';
+                srcInput.value = '';
+                manInput.value = '';
+                analyze();
+                urlInput.focus();
+            });
+
+            urlInput.addEventListener('input', analyze);
+            srcInput.addEventListener('input', analyze);
+            manInput.addEventListener('input', analyze);
+
+            // ---------- copy buttons ----------
+            function copyText(text, msg) {
+                navigator.clipboard.writeText(text)
+                    .then(() => showToast(msg || 'Copied to clipboard'))
+                    .catch(() => showToast('Copy failed', true));
+            }
+            document.getElementById('btn-pwa-snippet').addEventListener('click', () =>
+                copyText(document.getElementById('pwa-sw-snippet').textContent,
+                    'Copied — run it in the DevTools console of the site you are checking'));
+            document.getElementById('btn-pwa-swinternals').addEventListener('click', () =>
+                copyText('chrome://inspect/#service-workers',
+                    'Copied — open a new tab and paste it into the address bar'));
+
+            // ---------- extraction ----------
+            function meta(doc, sel) {
+                const e = doc.querySelector(sel);
+                return e ? (e.getAttribute('content') || '').trim() : null;
+            }
+
+            function extractHtml(doc, raw) {
+                const d = {};
+                const link = doc.querySelector('link[rel="manifest" i]');
+                d.manifestHref = link ? (link.getAttribute('href') || '').trim() : null;
+                d.viewport = meta(doc, 'meta[name="viewport" i]');
+                d.themeColor = meta(doc, 'meta[name="theme-color" i]');
+                d.appleTouchIcon = doc.querySelector('link[rel^="apple-touch-icon" i]')?.getAttribute('href') || null;
+                d.appleCapable = meta(doc, 'meta[name="apple-mobile-web-app-capable" i]');
+                d.mobileCapable = meta(doc, 'meta[name="mobile-web-app-capable" i]');
+                // SW registration is a source-level heuristic: it may live in external JS.
+                const m = raw.match(/serviceWorker\s*\.\s*register\s*\(\s*(['"`])([^'"`]+)\1/);
+                d.swRegisterPath = m ? m[2] : null;
+                d.swMentioned = /serviceWorker/.test(raw);
+                return d;
+            }
+
+            // Parse "192x192 512x512" → largest square-ish size; "any" → Infinity (SVG).
+            function iconMaxSize(sizes) {
+                if (!sizes) return 0;
+                let max = 0;
+                for (const tok of sizes.trim().toLowerCase().split(/\s+/)) {
+                    if (tok === 'any') return Infinity;
+                    const m = tok.match(/^(\d+)x(\d+)$/);
+                    if (m) max = Math.max(max, Math.min(+m[1], +m[2]));
+                }
+                return max;
+            }
+            function iconPurposes(icon) {
+                return (icon.purpose || 'any').trim().toLowerCase().split(/\s+/);
+            }
+
+            // ---------- checklist ----------
+            const MARKS = { fail: '✕', warn: '!', opt: '○', ok: '✓' };
+            const RANK = { fail: 0, warn: 1, opt: 2, ok: 3 };
+            let checkItems = [];
+
+            function addCheck(status, label, note) {
+                checkItems.push({ status, label, note });
+            }
+
+            function renderChecklist() {
+                checklist.innerHTML = '';
+                const counts = { fail: 0, warn: 0, opt: 0, ok: 0 };
+                checkItems.forEach(i => counts[i.status]++);
+                const summary = [];
+                if (counts.fail) summary.push(counts.fail + ' blocking');
+                if (counts.warn) summary.push(counts.warn + ' to fix');
+                if (counts.opt) summary.push(counts.opt + ' optional not set');
+                summary.push(counts.ok + ' OK');
+                document.getElementById('pwa-check-summary').textContent = summary.join(' · ') + ' — worst first:';
+
+                checkItems
+                    .slice()
+                    .sort((a, b) => RANK[a.status] - RANK[b.status])
+                    .forEach(({ status, label, note }) => {
+                        const row = el('div', 'pwa-check-row ' + status);
+                        row.appendChild(el('span', 'pwa-check-status', MARKS[status]));
+                        row.appendChild(el('span', 'pwa-check-label', label));
+                        row.appendChild(el('span', 'pwa-check-note', note || ''));
+                        checklist.appendChild(row);
+                    });
+            }
+
+            function runChecklist(h, man, manErr) {
+                checkItems = [];
+
+                // --- security context ---
+                const u = parsedUrl(urlInput.value);
+                if (!u) addCheck('opt', 'HTTPS', 'enter the page URL to check — install requires a secure context (https:// or localhost)');
+                else if (u.protocol === 'https:' || u.hostname === 'localhost' || u.hostname === '127.0.0.1')
+                    addCheck('ok', 'HTTPS', u.protocol === 'https:' ? u.origin : u.origin + ' (localhost counts as secure)');
+                else addCheck('fail', 'HTTPS', u.origin + ' — plain http is never installable (localhost excepted)');
+
+                // --- HTML side ---
+                if (!h) {
+                    addCheck('warn', 'Page HTML', 'paste the page source to check the <link rel="manifest"> tag, viewport, and iOS tags');
+                } else {
+                    if (!h.manifestHref) addCheck('fail', 'Manifest link', 'no <link rel="manifest"> in the HTML — the browser never discovers the manifest');
+                    else addCheck('ok', 'Manifest link', h.manifestHref);
+
+                    if (!h.viewport) addCheck('warn', 'Viewport meta', 'missing — installed apps render zoomed-out without it');
+                    else addCheck('ok', 'Viewport meta', h.viewport);
+
+                    if (!h.appleTouchIcon) addCheck('warn', 'Apple touch icon', 'missing — iOS ignores manifest icons; add a 180×180 PNG <link rel="apple-touch-icon">');
+                    else addCheck('ok', 'Apple touch icon', h.appleTouchIcon);
+
+                    if (h.appleCapable || h.mobileCapable) addCheck('ok', 'iOS/legacy app metas', [h.appleCapable && 'apple-mobile-web-app-capable=' + h.appleCapable, h.mobileCapable && 'mobile-web-app-capable=' + h.mobileCapable].filter(Boolean).join(' · '));
+                    else addCheck('opt', 'iOS/legacy app metas', 'not set — apple-mobile-web-app-capable hides Safari UI when launched from the iOS home screen');
+                }
+
+                // --- manifest side ---
+                if (manErr) {
+                    addCheck('fail', 'Manifest JSON', 'invalid JSON: ' + manErr);
+                } else if (!man) {
+                    addCheck(h && h.manifestHref ? 'warn' : 'opt', 'Manifest JSON', 'paste the manifest to audit names, icons, display, and start_url');
+                } else {
+                    addCheck('ok', 'Manifest JSON', 'parsed');
+
+                    if (!man.name && !man.short_name) addCheck('fail', 'name / short_name', 'neither is set — the app has no install name');
+                    else {
+                        const note = [man.name && 'name: "' + man.name + '"', man.short_name && 'short_name: "' + man.short_name + '"'].filter(Boolean).join(' · ');
+                        if (man.short_name && man.short_name.length > 12) addCheck('warn', 'name / short_name', note + ' — short_name over ~12 chars gets truncated under the icon');
+                        else addCheck('ok', 'name / short_name', note);
+                    }
+
+                    const icons = Array.isArray(man.icons) ? man.icons : [];
+                    const anyIcons = icons.filter(i => iconPurposes(i).includes('any'));
+                    const best = Math.max(0, ...anyIcons.map(i => iconMaxSize(i.sizes)));
+                    if (!icons.length) addCheck('fail', 'Icons', 'no icons array — install requires at least a 192×192 icon');
+                    else if (best < 192) addCheck('fail', 'Icon ≥ 192px', 'largest purpose-"any" icon is ' + (best || 'unsized') + ' — Chrome requires at least 192×192');
+                    else addCheck('ok', 'Icon ≥ 192px', 'largest: ' + (best === Infinity ? 'any (SVG)' : best + 'px'));
+
+                    if (icons.length) {
+                        if (best !== Infinity && best < 512) addCheck('warn', 'Icon 512px', 'no 512×512 icon — splash screens upscale a smaller one and look blurry');
+                        else addCheck('ok', 'Icon 512px', 'present');
+
+                        if (!icons.some(i => iconPurposes(i).includes('maskable'))) addCheck('warn', 'Maskable icon', 'none — Android crops icons into shapes; without purpose:"maskable" yours sits shrunken on a white disc');
+                        else addCheck('ok', 'Maskable icon', 'present');
+                    }
+
+                    if (!man.display && !(Array.isArray(man.display_override) && man.display_override.length))
+                        addCheck('warn', 'display', 'not set — defaults to "browser", which is not installable; use "standalone"');
+                    else if (man.display === 'browser') addCheck('fail', 'display', '"browser" — explicitly not installable; use "standalone", "minimal-ui", or "fullscreen"');
+                    else addCheck('ok', 'display', man.display || ('display_override: ' + man.display_override.join(', ')));
+
+                    if (!man.start_url) addCheck('warn', 'start_url', 'not set — defaults to the manifest URL directory; set it explicitly (e.g. "/?source=pwa")');
+                    else {
+                        const su = u ? resolveUrl(man.start_url) : null;
+                        if (su && u && new URL(su).origin !== u.origin) addCheck('fail', 'start_url', man.start_url + ' resolves cross-origin — it must stay on ' + u.origin);
+                        else addCheck('ok', 'start_url', man.start_url);
+                    }
+
+                    if (man.scope && man.start_url) {
+                        const scope = resolveUrl(man.scope) || man.scope;
+                        const start = resolveUrl(man.start_url) || man.start_url;
+                        if (typeof scope === 'string' && typeof start === 'string' && !start.startsWith(scope))
+                            addCheck('fail', 'scope', 'start_url is outside scope (' + man.scope + ') — the browser ignores the manifest');
+                        else addCheck('ok', 'scope', man.scope);
+                    } else if (man.scope) addCheck('ok', 'scope', man.scope);
+                    else addCheck('opt', 'scope', 'not set — defaults to the manifest URL directory, which is usually fine');
+
+                    if (!man.id) addCheck('opt', 'id', 'not set — falls back to start_url; setting a stable id lets you change start_url later without becoming a "different app"');
+                    else addCheck('ok', 'id', man.id);
+
+                    if (!man.theme_color) addCheck('opt', 'theme_color', 'not set — tints the title bar of the installed app');
+                    else if (h && h.themeColor && h.themeColor.toLowerCase() !== String(man.theme_color).toLowerCase())
+                        addCheck('warn', 'theme_color', 'manifest says ' + man.theme_color + ' but <meta name="theme-color"> says ' + h.themeColor + ' — the browser bar flashes between them');
+                    else addCheck('ok', 'theme_color', man.theme_color);
+
+                    if (!man.background_color) addCheck('opt', 'background_color', 'not set — the splash screen behind the icon falls back to white');
+                    else addCheck('ok', 'background_color', man.background_color);
+
+                    if (!man.description || !(Array.isArray(man.screenshots) && man.screenshots.length))
+                        addCheck('opt', 'Richer install UI', 'description + screenshots unlock the bigger install dialog with previews on Chrome');
+                    else addCheck('ok', 'Richer install UI', man.screenshots.length + ' screenshot(s) + description');
+                }
+
+                // --- service worker (heuristic — see the card below for live checks) ---
+                if (!h) addCheck('opt', 'Service worker', 'paste the page HTML to scan for a register() call');
+                else if (h.swRegisterPath) addCheck('ok', 'Service worker', 'register("' + h.swRegisterPath + '") found in the page source — confirm it is live with the console snippet below');
+                else if (h.swMentioned) addCheck('warn', 'Service worker', 'serviceWorker is mentioned but no register() call found in the source — it may be registered from external JS; verify with the snippet below');
+                else addCheck('warn', 'Service worker', 'no registration found in the page source — often registered from bundled JS, so verify with the console snippet below; needed for offline support');
+
+                renderChecklist();
+            }
+
+            // ---------- icon previews ----------
+            function renderIcons(man, manifestBase) {
+                const card = document.getElementById('pwa-icons-card');
+                const grid = document.getElementById('pwa-icon-grid');
+                const icons = man && Array.isArray(man.icons) ? man.icons : [];
+                if (!icons.length) { card.style.display = 'none'; return; }
+                grid.innerHTML = '';
+                icons.forEach(icon => {
+                    const cell = el('div', 'pwa-icon-cell');
+                    const maskable = iconPurposes(icon).includes('maskable');
+                    const frame = el('div', 'pwa-icon-frame' + (maskable ? ' maskable' : ''));
+                    const abs = icon.src ? resolveUrl(icon.src, manifestBase) : null;
+                    if (abs && /^https?:\/\//i.test(abs)) {
+                        const img = document.createElement('img');
+                        img.alt = icon.src;
+                        img.addEventListener('error', () => {
+                            frame.innerHTML = '';
+                            frame.appendChild(el('div', 'pwa-icon-missing', 'could not load ' + abs));
+                        });
+                        img.src = abs;
+                        frame.appendChild(img);
+                    } else {
+                        frame.appendChild(el('div', 'pwa-icon-missing', icon.src ? 'relative path — enter the page URL above to preview' : 'no src'));
+                    }
+                    cell.appendChild(frame);
+                    if (maskable) cell.appendChild(el('span', 'pwa-icon-badge', 'maskable'));
+                    cell.appendChild(el('div', 'pwa-icon-meta', (icon.sizes || 'no sizes') + (icon.type ? ' · ' + String(icon.type).replace('image/', '') : '')));
+                    grid.appendChild(cell);
+                });
+                card.style.display = '';
+            }
+
+            // ---------- install prompt preview ----------
+            function renderPrompt(man, manifestBase) {
+                const card = document.getElementById('pwa-prompt-card');
+                const mount = document.getElementById('pwa-prompt');
+                if (!man) { card.style.display = 'none'; return; }
+                mount.innerHTML = '';
+
+                const head = el('div', 'pwa-prompt-head');
+                const iconBox = el('div', 'pwa-prompt-icon');
+                const icons = Array.isArray(man.icons) ? man.icons : [];
+                const bestIcon = icons.slice().sort((a, b) => iconMaxSize(b.sizes) - iconMaxSize(a.sizes))[0];
+                const abs = bestIcon && bestIcon.src ? resolveUrl(bestIcon.src, manifestBase) : null;
+                if (abs && /^https?:\/\//i.test(abs)) {
+                    const img = document.createElement('img');
+                    img.alt = '';
+                    img.addEventListener('error', () => { iconBox.innerHTML = ''; iconBox.textContent = 'icon'; });
+                    img.src = abs;
+                    iconBox.appendChild(img);
+                } else iconBox.textContent = 'icon';
+                head.appendChild(iconBox);
+
+                const names = el('div');
+                const nameEl = el('div', 'pwa-prompt-name');
+                const installName = man.short_name || man.name;
+                if (installName) nameEl.textContent = installName;
+                else nameEl.appendChild(el('span', 'missing', '(no name)'));
+                names.appendChild(nameEl);
+                let origin = '';
+                try { origin = new URL(urlInput.value.trim()).host; } catch (e) { /* keep empty */ }
+                names.appendChild(el('div', 'pwa-prompt-origin', origin || 'example.com'));
+                head.appendChild(names);
+                mount.appendChild(head);
+
+                if (man.description) mount.appendChild(el('div', 'pwa-prompt-desc', man.description));
+                mount.appendChild(el('span', 'pwa-prompt-btn', 'Install'));
+                card.style.display = '';
+            }
+
+            // ---------- service worker status line ----------
+            function renderSwStatus(h) {
+                const s = document.getElementById('pwa-sw-status');
+                if (!h) s.textContent = 'Paste the page HTML above to scan the source for a registration call.';
+                else if (h.swRegisterPath) s.textContent = 'Found in the source: navigator.serviceWorker.register("' + h.swRegisterPath + '").';
+                else s.textContent = 'No register() call found in the pasted source — many apps register from bundled JS, so this does not prove anything either way.';
+            }
+
+            // ---------- main ----------
+            function analyze() {
+                const src = srcInput.value.trim();
+                const manRaw = manInput.value.trim();
+                if (!src && !manRaw) { results.style.display = 'none'; return; }
+
+                // DOMParser documents are inert: nothing loads, nothing executes.
+                const h = src ? extractHtml(new DOMParser().parseFromString(src, 'text/html'), src) : null;
+
+                let man = null, manErr = null;
+                if (manRaw) {
+                    try {
+                        man = JSON.parse(manRaw);
+                        if (!man || typeof man !== 'object' || Array.isArray(man)) { man = null; manErr = 'top level must be an object'; }
+                    } catch (e) { manErr = e.message; }
+                }
+
+                // Relative icon/start_url paths resolve against the manifest's own URL.
+                const manifestBase = (h && h.manifestHref && resolveUrl(h.manifestHref)) || urlInput.value.trim() || undefined;
+
+                runChecklist(h, man, manErr);
+                renderIcons(man, manifestBase);
+                renderPrompt(man, manifestBase);
+                renderSwStatus(h);
+                results.style.display = 'flex';
+            }
+
+            analyze();
+        });
+    </script>
+</body>
+
+</html>
