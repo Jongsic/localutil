@@ -15,6 +15,8 @@ const TEST_PK_CHAINS = {
     // Full decode: version byte 00 ++ accountID ++ 4-byte checksum
     // (= ripple-address-codec@2 decode(address)).
     'XRP Address (hex)': '0x009b78039087bd663f20ace711f15be0eaf7d070052872c368',
+    // Cross-checked against @solana/web3.js Keypair.fromSeed().
+    'SOL Address': '9fijMemJYwXS5QD85Qxsq7iKqvSebgb6LvpGftgkeigk',
     'TON Public key (Ed25519)': '80c8c02fd8526709aff4b62492d9725940ee512c9ad36d49f2df8e6e0526875d',
     'TON Address (v4r2, bounceable)': 'EQDIQREPI-rtBaW2ls_CYABBk7ySORv5KQnF3K9QqaAsM5Q7',
     'TON Address (v4r2, non-bounceable)': 'UQDIQREPI-rtBaW2ls_CYABBk7ySORv5KQnF3K9QqaAsM8n-',

@@ -446,9 +446,23 @@
                 };
             }
 
+            // --- Ed25519 chains (Solana, TON) --------------------------------------
+            // Both chains use Ed25519, so the 32 private-key bytes are used as an
+            // Ed25519 seed.
+            function ed25519Pub(privKeyHex) {
+                if (!window.forge || !forge.pki || !forge.pki.ed25519) return null;
+                return forge.pki.ed25519.generateKeyPair({ seed: ethers.getBytes(privKeyHex) }).publicKey;
+            }
+
+            // Solana address: base58 (Bitcoin alphabet) of the raw Ed25519 public key.
+            function solanaAddress(pub) {
+                let leading = 0;
+                for (const b of pub) { if (b === 0) leading++; else break; }
+                return '1'.repeat(leading) + ethers.encodeBase58(pub);
+            }
+
             // --- TON helpers -------------------------------------------------------
-            // TON uses Ed25519, so the 32 private-key bytes are used as an Ed25519
-            // seed. Each address is the hash of the wallet contract's StateInit
+            // Each TON address is the hash of the wallet contract's StateInit
             // cell (workchain 0), shown in both user-friendly forms.
             const TON_WALLETS = {
                 v4r2: { codeHash: '0xfeb5ff6820e2ff0d9483e7e0d62c817d846789fb4ae580c878866d959dabd5c0', codeDepth: 7 },
@@ -471,11 +485,7 @@
                 return btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_');
             }
 
-            function tonInfo(privKeyHex) {
-                if (!window.forge || !forge.pki || !forge.pki.ed25519) return null;
-                const seed = ethers.getBytes(privKeyHex);
-                const pub = forge.pki.ed25519.generateKeyPair({ seed }).publicKey;
-
+            function tonInfo(pub) {
                 // StateInit cell: b{00110} (code + data present), refs = [code, data].
                 // repr = d1(2 refs) d2 data(0x34) ++ ref depths ++ ref hashes.
                 function walletAddresses(wallet, dataRepr) {
@@ -651,17 +661,20 @@
                     rows.push(['XRP Address', xrp.address]);
                     rows.push(['XRP Address (hex)', xrp.decodedHex]);
                 } catch (e) { /* keep the other rows */ }
-                let ton = null;
-                try { ton = tonInfo(privKeyHex); } catch (e) { /* keep the other rows */ }
-                if (ton) {
-                    rows.push(['TON Public key (Ed25519)', ton.publicKey]);
-                    rows.push(['TON Address (v4r2, bounceable)', ton.v4r2.bounceable]);
-                    rows.push(['TON Address (v4r2, non-bounceable)', ton.v4r2.nonBounceable]);
-                    rows.push(['TON Address (v3r2, bounceable)', ton.v3r2.bounceable]);
-                    rows.push(['TON Address (v3r2, non-bounceable)', ton.v3r2.nonBounceable]);
-                }
+                try {
+                    const edPub = ed25519Pub(privKeyHex);
+                    if (edPub) {
+                        rows.push(['SOL Address', solanaAddress(edPub)]);
+                        const ton = tonInfo(edPub);
+                        rows.push(['TON Public key (Ed25519)', ton.publicKey]);
+                        rows.push(['TON Address (v4r2, bounceable)', ton.v4r2.bounceable]);
+                        rows.push(['TON Address (v4r2, non-bounceable)', ton.v4r2.nonBounceable]);
+                        rows.push(['TON Address (v3r2, bounceable)', ton.v3r2.bounceable]);
+                        rows.push(['TON Address (v3r2, non-bounceable)', ton.v3r2.nonBounceable]);
+                    }
+                } catch (e) { /* keep the other rows */ }
                 return summaryCard('Root key & addresses', rows,
-                    'TON values use the 32 key bytes as an Ed25519 seed (wallet v4r2 / v3r2, workchain 0).');
+                    'Solana and TON values use the 32 key bytes as an Ed25519 seed (TON: wallet v4r2 / v3r2, workchain 0).');
             }
 
             function resetOutput() {
