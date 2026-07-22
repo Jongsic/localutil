@@ -5,31 +5,37 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
-    <title>JavaScript Minifier (Terser) — LocalUtil</title>
+    <title>JavaScript Beautifier &amp; Minifier (Terser) — LocalUtil</title>
     <!-- social / favicon -->
-    <meta name="description" content="Minify JavaScript with Terser to shrink file size, or beautify it back to readable code. Runs 100% in your browser — nothing is uploaded.">
+    <meta name="description" content="Beautify minified or messy JavaScript into readable code, minify it with Terser, and validate JSON with exact error locations. Runs 100% in your browser — nothing is uploaded.">
     <link rel="canonical" href="https://jongsic.github.io/localutil/js-minify.html">
     <link rel="icon" href="favicon.ico" sizes="any">
     <link rel="icon" type="image/png" href="favicon.png">
     <link rel="apple-touch-icon" href="apple-touch-icon.png">
     <meta property="og:type" content="website">
     <meta property="og:site_name" content="LocalUtil">
-    <meta property="og:title" content="JavaScript Minifier (Terser) — LocalUtil">
-    <meta property="og:description" content="Minify JavaScript with Terser to shrink file size, or beautify it back to readable code. Runs 100% in your browser — nothing is uploaded.">
+    <meta property="og:title" content="JavaScript Beautifier &amp; Minifier (Terser) — LocalUtil">
+    <meta property="og:description" content="Beautify minified or messy JavaScript into readable code, minify it with Terser, and validate JSON with exact error locations. Runs 100% in your browser — nothing is uploaded.">
     <meta property="og:image" content="https://jongsic.github.io/localutil/og.png">
     <meta property="og:image:width" content="1200">
     <meta property="og:image:height" content="630">
     <meta property="og:url" content="https://jongsic.github.io/localutil/js-minify.html">
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:image" content="https://jongsic.github.io/localutil/og.png">
-    <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebApplication","name":"JavaScript Minifier (Terser)","url":"https://jongsic.github.io/localutil/js-minify.html","description":"Minify JavaScript with Terser to shrink file size, or beautify it back to readable code. Runs 100% in your browser — nothing is uploaded.","applicationCategory":"DeveloperApplication","operatingSystem":"Any","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"isPartOf":{"@type":"WebSite","name":"LocalUtil","url":"https://jongsic.github.io/localutil/"}}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebApplication","name":"JavaScript Beautifier & Minifier (Terser)","url":"https://jongsic.github.io/localutil/js-minify.html","description":"Beautify minified or messy JavaScript into readable code, minify it with Terser, and validate JSON with exact error locations. Runs 100% in your browser — nothing is uploaded.","applicationCategory":"DeveloperApplication","operatingSystem":"Any","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"isPartOf":{"@type":"WebSite","name":"LocalUtil","url":"https://jongsic.github.io/localutil/"}}</script>
     <!-- /social -->
     <script src="theme-init.js"></script>
     <link rel="stylesheet" href="styles.css">
     <style>
-        /* Page-specific: taller editors for comfortable code work */
-        .jsm-editors { min-height: 460px; }
-        .jsm-editors textarea { min-height: 420px; }
+        /* Page-specific: taller editors, fixed default height so vertical
+           drag-resize sticks (the global rule uses flex:1 + resize:none) */
+        .jsm-editors textarea,
+        .jsm-editors .code-view {
+            flex: none;
+            height: 420px;
+            min-height: 160px;
+            resize: vertical;
+        }
         .jsm-controls-grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
@@ -63,6 +69,14 @@
             margin-bottom: 4px;
         }
         .jsm-stat strong { font-size: 1.05rem; font-weight: 700; }
+        .jsm-json-status {
+            margin-top: 10px;
+            font-size: 0.82rem;
+            font-weight: 600;
+            font-family: var(--font-mono);
+        }
+        .jsm-json-status.ok { color: var(--success); }
+        .jsm-json-status.err { color: var(--danger); }
         @media (max-width: 860px) {
             .jsm-controls-grid { grid-template-columns: 1fr; }
         }
@@ -71,6 +85,11 @@
     <script src="vendor/terser.bundle.min.js"></script>
     <!-- js-beautify for JS beautification -->
     <script src="vendor/beautify.min.js"></script>
+    <!-- PrismJS + wiring for the colorized output pane -->
+    <script src="vendor/prism.min.js"></script>
+    <script src="code-highlight.js"></script>
+    <!-- JSON validator with exact error locations -->
+    <script src="json-lint.js"></script>
 </head>
 
 <body>
@@ -82,8 +101,8 @@
         <main class="main-content">
             <header class="topbar" id="app-topbar">
                 <div class="topbar-title">
-                    <h1 id="current-tool-title">JS Minify</h1>
-                    <p id="current-tool-desc" class="topbar-desc">Minify or beautify JavaScript code</p>
+                    <h1 id="current-tool-title">JS Beautify / Minify</h1>
+                    <p id="current-tool-desc" class="topbar-desc">Beautify, minify &amp; validate JavaScript / JSON</p>
                 </div>
             </header>
 
@@ -96,7 +115,10 @@
                             <textarea id="jsm-input" placeholder="Paste JS code here…"></textarea>
                         </div>
                         <div class="pane">
-                            <label for="jsm-output">Output</label>
+                            <div class="pane-head">
+                                <label for="jsm-output">Output</label>
+                                <label class="colorize-check"><input type="checkbox" id="jsm-colorize" checked> Colorize</label>
+                            </div>
                             <div class="field-hint" style="margin-bottom:2px;">Your minified or beautified result.</div>
                             <textarea id="jsm-output" placeholder="Result will appear here…" readonly></textarea>
                             <button class="btn btn-small copy-btn" data-clipboard-target="#jsm-output">Copy</button>
@@ -147,7 +169,9 @@
                             </div>
                             <div class="jsm-action-row" style="margin-top:16px;">
                                 <button id="btn-jsm-beautify" class="btn btn-primary">Beautify &rarr;</button>
+                                <button id="btn-jsm-validate" class="btn">Validate JSON</button>
                             </div>
+                            <div id="jsm-json-status" class="jsm-json-status" hidden></div>
                         </div>
                     </div>
 
@@ -178,6 +202,7 @@
         document.addEventListener('DOMContentLoaded', () => {
             const input = document.getElementById('jsm-input');
             const output = document.getElementById('jsm-output');
+            const out = LocalUtilHighlight.attachColorizedOutput(output, document.getElementById('jsm-colorize'));
             const statsEl = document.getElementById('jsm-stats');
             const origSizeEl = document.getElementById('jsm-orig-size');
             const resultSizeEl = document.getElementById('jsm-result-size');
@@ -227,10 +252,31 @@
                 }
             }
 
+            function beautifyOptions() {
+                const indentConf = document.getElementById('jsm-indent').value;
+                let indent_size = 2;
+                let indent_char = ' ';
+                if (indentConf === '4') {
+                    indent_size = 4;
+                } else if (indentConf === 'tab') {
+                    indent_size = 1;
+                    indent_char = '\t';
+                }
+                return { indent_size, indent_char, space_in_empty_paren: true };
+            }
+
             // Minify using Terser
             document.getElementById('btn-jsm-minify').addEventListener('click', async () => {
                 const val = input.value;
                 if (!val) return;
+
+                // Bare JSON isn't a valid JS *program* (an object literal parses
+                // as a block statement), so compact valid JSON directly.
+                try {
+                    out.set(JSON.stringify(JSON.parse(val)));
+                    showStats(new Blob([val]).size, new Blob([output.value]).size);
+                    return;
+                } catch (e) { /* not JSON — fall through to Terser */ }
 
                 const mangle = document.getElementById('jsm-mangle').checked;
                 const compress = document.getElementById('jsm-compress').checked;
@@ -238,7 +284,7 @@
 
                 try {
                     if (typeof Terser === 'undefined') {
-                        output.value = 'Error: Terser library not loaded. Check your internet connection.';
+                        out.set('Error: Terser library not loaded. Check your internet connection.');
                         return;
                     }
 
@@ -252,14 +298,14 @@
                     const result = await Terser.minify(val, options);
 
                     if (result.error) {
-                        output.value = 'Error: ' + result.error.message;
+                        out.set('Error: ' + result.error.message);
                         return;
                     }
 
-                    output.value = result.code;
+                    out.set(result.code);
                     showStats(new Blob([val]).size, new Blob([result.code]).size);
                 } catch (e) {
-                    output.value = formatSyntaxError(val, e);
+                    out.set(formatSyntaxError(val, e));
                 }
             });
 
@@ -268,35 +314,55 @@
                 const val = input.value;
                 if (!val) return;
 
-                const indentConf = document.getElementById('jsm-indent').value;
-                let indent_size = 2;
-                let indent_char = ' ';
-                if (indentConf === '4') {
-                    indent_size = 4;
-                } else if (indentConf === 'tab') {
-                    indent_size = 1;
-                    indent_char = '\t';
-                }
-
                 try {
                     if (typeof js_beautify !== 'undefined') {
-                        output.value = js_beautify(val, {
-                            indent_size: indent_size,
-                            indent_char: indent_char,
-                            space_in_empty_paren: true
-                        });
+                        out.set(js_beautify(val, beautifyOptions()));
                         showStats(new Blob([val]).size, new Blob([output.value]).size);
                     } else {
                         // Fallback: try JSON formatting
                         try {
-                            output.value = JSON.stringify(JSON.parse(val), null, indentConf === 'tab' ? '\t' : indent_size);
+                            const opts = beautifyOptions();
+                            out.set(JSON.stringify(JSON.parse(val), null, opts.indent_char === '\t' ? '\t' : opts.indent_size));
                             showStats(new Blob([val]).size, new Blob([output.value]).size);
                         } catch (e) {
-                            output.value = 'Error: js-beautify library not loaded and input is not valid JSON.';
+                            out.set('Error: js-beautify library not loaded and input is not valid JSON.');
                         }
                     }
                 } catch (e) {
-                    output.value = 'Error: ' + e.message;
+                    out.set('Error: ' + e.message);
+                }
+            });
+
+            // Validate JSON: format first, then report locations against the
+            // formatted text — line numbers are meaningless on minified input.
+            const jsonStatus = document.getElementById('jsm-json-status');
+
+            function setJsonStatus(kind, text) {
+                jsonStatus.hidden = false;
+                jsonStatus.className = 'jsm-json-status ' + kind;
+                jsonStatus.textContent = text;
+            }
+
+            // Stale verdicts are worse than none — clear on any input change
+            input.addEventListener('input', () => { jsonStatus.hidden = true; });
+
+            document.getElementById('btn-jsm-validate').addEventListener('click', () => {
+                const val = input.value;
+                if (!val.trim()) {
+                    setJsonStatus('err', 'Nothing to validate — paste JSON into the input.');
+                    return;
+                }
+                const formatted = (typeof js_beautify !== 'undefined')
+                    ? js_beautify(val, beautifyOptions())
+                    : val;
+                const res = LocalUtilJsonLint.validate(formatted);
+                if (res.ok) {
+                    setJsonStatus('ok', '✓ Valid JSON');
+                    out.set(formatted);
+                    showStats(new Blob([val]).size, new Blob([formatted]).size);
+                } else {
+                    setJsonStatus('err', `✗ Invalid JSON — line ${res.line}, column ${res.col} (formatted output)`);
+                    out.set(LocalUtilJsonLint.snippet(formatted, res));
                 }
             });
         });

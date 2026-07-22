@@ -2,117 +2,112 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
     <loc>https://jongsic.github.io/localutil/base64.html</loc>
-    <lastmod>2026-07-19</lastmod>
+    <lastmod>2026-07-20</lastmod>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://jongsic.github.io/localutil/calldata.html</loc>
-    <lastmod>2026-07-19</lastmod>
+    <lastmod>2026-07-20</lastmod>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://jongsic.github.io/localutil/cron.html</loc>
-    <lastmod>2026-07-19</lastmod>
+    <lastmod>2026-07-20</lastmod>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://jongsic.github.io/localutil/csv-md.html</loc>
-    <lastmod>2026-07-19</lastmod>
+    <lastmod>2026-07-20</lastmod>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://jongsic.github.io/localutil/diff.html</loc>
-    <lastmod>2026-07-19</lastmod>
+    <lastmod>2026-07-20</lastmod>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://jongsic.github.io/localutil/epoch.html</loc>
-    <lastmod>2026-07-19</lastmod>
+    <lastmod>2026-07-20</lastmod>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://jongsic.github.io/localutil/gif.html</loc>
-    <lastmod>2026-07-19</lastmod>
+    <lastmod>2026-07-20</lastmod>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://jongsic.github.io/localutil/gpg.html</loc>
-    <lastmod>2026-07-19</lastmod>
+    <lastmod>2026-07-20</lastmod>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://jongsic.github.io/localutil/hash.html</loc>
-    <lastmod>2026-07-19</lastmod>
+    <lastmod>2026-07-20</lastmod>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://jongsic.github.io/localutil/hd-wallet.html</loc>
-    <lastmod>2026-07-19</lastmod>
+    <lastmod>2026-07-21</lastmod>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://jongsic.github.io/localutil/hex-ascii.html</loc>
-    <lastmod>2026-07-19</lastmod>
+    <lastmod>2026-07-21</lastmod>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://jongsic.github.io/localutil/ico.html</loc>
-    <lastmod>2026-07-19</lastmod>
+    <lastmod>2026-07-20</lastmod>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://jongsic.github.io/localutil/image-resize.html</loc>
-    <lastmod>2026-07-19</lastmod>
+    <lastmod>2026-07-20</lastmod>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://jongsic.github.io/localutil/</loc>
-    <lastmod>2026-07-19</lastmod>
+    <lastmod>2026-07-20</lastmod>
     <priority>1.0</priority>
   </url>
   <url>
-    <loc>https://jongsic.github.io/localutil/js-beautify.html</loc>
-    <lastmod>2026-07-19</lastmod>
-    <priority>0.8</priority>
-  </url>
-  <url>
     <loc>https://jongsic.github.io/localutil/js-minify.html</loc>
-    <lastmod>2026-07-19</lastmod>
+    <lastmod>2026-07-20</lastmod>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://jongsic.github.io/localutil/json.html</loc>
-    <lastmod>2026-07-19</lastmod>
+    <lastmod>2026-07-20</lastmod>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://jongsic.github.io/localutil/jwt.html</loc>
-    <lastmod>2026-07-19</lastmod>
+    <lastmod>2026-07-20</lastmod>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://jongsic.github.io/localutil/keystore.html</loc>
-    <lastmod>2026-07-19</lastmod>
+    <lastmod>2026-07-20</lastmod>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://jongsic.github.io/localutil/markdown-preview.html</loc>
-    <lastmod>2026-07-19</lastmod>
+    <lastmod>2026-07-20</lastmod>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://jongsic.github.io/localutil/passkey.html</loc>
-    <lastmod>2026-07-19</lastmod>
+    <lastmod>2026-07-20</lastmod>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://jongsic.github.io/localutil/passport-photo.html</loc>
-    <lastmod>2026-07-19</lastmod>
+    <lastmod>2026-07-20</lastmod>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://jongsic.github.io/localutil/password.html</loc>
-    <lastmod>2026-07-19</lastmod>
+    <lastmod>2026-07-20</lastmod>
     <priority>0.8</priority>
   </url>
   <url>
@@ -122,47 +117,47 @@
   </url>
   <url>
     <loc>https://jongsic.github.io/localutil/qr-generator.html</loc>
-    <lastmod>2026-07-19</lastmod>
+    <lastmod>2026-07-20</lastmod>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://jongsic.github.io/localutil/qr-reader.html</loc>
-    <lastmod>2026-07-19</lastmod>
+    <lastmod>2026-07-20</lastmod>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://jongsic.github.io/localutil/regex.html</loc>
-    <lastmod>2026-07-19</lastmod>
+    <lastmod>2026-07-20</lastmod>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://jongsic.github.io/localutil/seo-check.html</loc>
-    <lastmod>2026-07-19</lastmod>
+    <lastmod>2026-07-20</lastmod>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://jongsic.github.io/localutil/ssh-key.html</loc>
-    <lastmod>2026-07-19</lastmod>
+    <lastmod>2026-07-20</lastmod>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://jongsic.github.io/localutil/svg-to-image.html</loc>
-    <lastmod>2026-07-19</lastmod>
+    <lastmod>2026-07-20</lastmod>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://jongsic.github.io/localutil/tg-bot.html</loc>
-    <lastmod>2026-07-19</lastmod>
+    <lastmod>2026-07-20</lastmod>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://jongsic.github.io/localutil/totp.html</loc>
-    <lastmod>2026-07-19</lastmod>
+    <lastmod>2026-07-20</lastmod>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://jongsic.github.io/localutil/url-encode.html</loc>
-    <lastmod>2026-07-19</lastmod>
+    <lastmod>2026-07-20</lastmod>
     <priority>0.8</priority>
   </url>
 </urlset>

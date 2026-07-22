@@ -26,6 +26,10 @@
     <!-- /social -->
     <script src="theme-init.js"></script>
     <link rel="stylesheet" href="styles.css">
+    <!-- js-beautify: pretty-print broken JSON so error locations are readable -->
+    <script src="vendor/beautify.min.js"></script>
+    <!-- JSON validator with exact error locations -->
+    <script src="json-lint.js"></script>
     <style>
         .json-toolbar {
             display: flex;
@@ -39,8 +43,21 @@
         .json-toolbar-group select { width: auto; min-width: 120px; }
         .json-toolbar-actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
 
-        #tool-json .split-pane { min-height: 520px; }
-        #tool-json .pane textarea { min-height: 460px; }
+        /* Editors: fixed default height so vertical drag-resize sticks;
+           on desktop, fill the window height. */
+        #tool-json .pane textarea,
+        #tool-json .json-tree {
+            flex: none;
+            height: 460px;
+            min-height: 240px;
+            resize: vertical;
+        }
+        @media (min-width: 861px) {
+            #tool-json .pane textarea,
+            #tool-json .json-tree {
+                height: max(460px, calc(100vh - 310px));
+            }
+        }
 
         /* Validation status line */
         .json-status {
@@ -212,8 +229,42 @@
                 } catch (e) {
                     lastValid = false;
                     lastParsed = undefined;
-                    setStatus('err', 'Invalid JSON — ' + e.message);
+                    // Our own parser pinpoints the error; JSON.parse messages
+                    // don't reliably carry line/column across engines.
+                    const res = LocalUtilJsonLint.validate(input.value);
+                    setStatus('err', res.ok
+                        ? 'Invalid JSON — ' + e.message
+                        : `Invalid JSON — line ${res.line}, column ${res.col}: ${res.message}`);
                     return false;
+                }
+            }
+
+            // On broken input: pretty-print it anyway (js_beautify is lenient),
+            // locate the error in the formatted text, and show a caret snippet
+            // in the output pane / tree area.
+            let errorShown = false;
+            function showInvalidSnippet() {
+                const raw = input.value;
+                let pretty = raw;
+                // Skip pretty-printing huge inputs — this runs while typing
+                if (typeof js_beautify !== 'undefined' && raw.length < 300000) {
+                    const iv = indentValue();
+                    pretty = js_beautify(raw, iv === '\t'
+                        ? { indent_size: 1, indent_char: '\t' }
+                        : { indent_size: iv, indent_char: ' ' });
+                }
+                const res = LocalUtilJsonLint.validate(pretty);
+                if (res.ok) return;
+                const snip = LocalUtilJsonLint.snippet(pretty, res);
+                output.value = snip;
+                errorShown = true;
+                if (currentView === 'tree') {
+                    treeEl.innerHTML = '';
+                    const pre = document.createElement('pre');
+                    pre.style.margin = '0';
+                    pre.style.fontFamily = 'inherit';
+                    pre.textContent = snip;
+                    treeEl.appendChild(pre);
                 }
             }
 
@@ -228,13 +279,13 @@
             }
 
             function format() {
-                if (!parse()) return;
+                if (!parse()) { showInvalidSnippet(); return; }
                 output.value = JSON.stringify(lastParsed, null, indentValue());
                 if (currentView === 'tree') switchView('text');
             }
 
             function minify() {
-                if (!parse()) return;
+                if (!parse()) { showInvalidSnippet(); return; }
                 output.value = JSON.stringify(lastParsed);
                 if (currentView === 'tree') switchView('text');
             }
@@ -294,10 +345,22 @@
                 treeEl.style.display = treeMode ? '' : 'none';
                 output.style.display = treeMode ? 'none' : '';
                 render();
+                if (!lastValid && errorShown) showInvalidSnippet();
             }
 
             // ---- Wiring ----
-            input.addEventListener('input', () => { parse(); if (currentView === 'tree') render(); });
+            input.addEventListener('input', () => {
+                const ok = parse();
+                if (currentView === 'tree') render();
+                clearTimeout(showInvalidSnippet._t);
+                if (!ok && input.value.trim()) {
+                    // Debounced: pretty-printing every keystroke would be wasteful
+                    showInvalidSnippet._t = setTimeout(showInvalidSnippet, 150);
+                } else if (errorShown) {
+                    errorShown = false;
+                    output.value = ok ? JSON.stringify(lastParsed, null, indentValue()) : '';
+                }
+            });
             indentSel.addEventListener('change', () => { if (currentView === 'text' && lastValid && output.value) format(); });
             document.getElementById('btn-json-format').addEventListener('click', format);
             document.getElementById('btn-json-minify').addEventListener('click', minify);

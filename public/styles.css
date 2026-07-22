@@ -514,7 +514,7 @@ textarea {
     font-family: var(--font-mono);
     font-size: 0.875rem;
     line-height: 1.55;
-    resize: none;
+    resize: vertical;
 }
 
 textarea.mono,
@@ -781,6 +781,75 @@ input[type="checkbox"]:focus-visible { box-shadow: 0 0 0 3px var(--primary-ring)
     z-index: 2;
 }
 .copy-btn:hover { opacity: 1; }
+
+/* ------------------------------------------------------------
+   Colorized code output (code-highlight.js)
+   ------------------------------------------------------------ */
+.pane-head {
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+}
+.pane-head label { margin-bottom: 0; }
+
+.colorize-check {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.78rem;
+    font-weight: 500;
+    color: var(--text-muted);
+    margin: 0;
+    cursor: pointer;
+    user-select: none;
+}
+.colorize-check input { accent-color: var(--primary); cursor: pointer; }
+
+.code-view {
+    margin: 0;
+    padding: 10px 13px;
+    background-color: var(--bg-input);
+    color: var(--text-main);
+    border: 1px solid var(--border-color);
+    border-radius: var(--r-sm);
+    font-family: var(--font-mono);
+    font-size: 0.875rem;
+    line-height: 1.55;
+    white-space: pre-wrap;
+    word-break: break-word;
+    overflow: auto;
+    resize: vertical;
+    min-height: 120px;
+}
+
+/* PrismJS token colors, theme-aware (GitHub-ish palette) */
+.code-view .token.keyword { color: #cf222e; }
+.code-view .token.string,
+.code-view .token.template-string,
+.code-view .token.char { color: #0a3069; }
+.code-view .token.regex { color: #116329; }
+.code-view .token.number { color: #0550ae; }
+.code-view .token.boolean,
+.code-view .token.constant { color: #8250df; }
+.code-view .token.function { color: #6639ba; }
+.code-view .token.class-name { color: #953800; }
+.code-view .token.comment { color: #59636e; font-style: italic; }
+.code-view .token.operator,
+.code-view .token.punctuation { color: var(--text-muted); }
+.code-view .token.interpolation-punctuation { color: #cf222e; }
+
+[data-theme="dark"] .code-view .token.keyword { color: #ff7b72; }
+[data-theme="dark"] .code-view .token.string,
+[data-theme="dark"] .code-view .token.template-string,
+[data-theme="dark"] .code-view .token.char { color: #a5d6ff; }
+[data-theme="dark"] .code-view .token.regex { color: #7ee787; }
+[data-theme="dark"] .code-view .token.number { color: #79c0ff; }
+[data-theme="dark"] .code-view .token.boolean,
+[data-theme="dark"] .code-view .token.constant { color: #d2a8ff; }
+[data-theme="dark"] .code-view .token.function { color: #d2a8ff; }
+[data-theme="dark"] .code-view .token.class-name { color: #ffa657; }
+[data-theme="dark"] .code-view .token.comment { color: #8b949e; }
+[data-theme="dark"] .code-view .token.interpolation-punctuation { color: #ff7b72; }
 
 /* ------------------------------------------------------------
    Landing / tool grid

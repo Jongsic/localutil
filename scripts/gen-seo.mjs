@@ -44,13 +44,9 @@ const SEO = {
         title: 'Hex to ASCII / ASCII to Hex Converter',
         desc: `Convert hexadecimal to ASCII text and ASCII text to hex bytes. ${LOCAL}`,
     },
-    'js-beautify.html': {
-        title: 'JavaScript Beautifier / Formatter',
-        desc: `Format minified or messy JavaScript into readable, indented code. ${LOCAL}`,
-    },
     'js-minify.html': {
-        title: 'JavaScript Minifier (Terser)',
-        desc: `Minify JavaScript with Terser to shrink file size, or beautify it back to readable code. ${LOCAL}`,
+        title: 'JavaScript Beautifier & Minifier (Terser)',
+        desc: `Beautify minified or messy JavaScript into readable code, minify it with Terser, and validate JSON with exact error locations. ${LOCAL}`,
     },
     'markdown-preview.html': {
         title: 'Markdown Preview Online',

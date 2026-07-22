@@ -64,8 +64,7 @@ const TOOLS = [
     { file: 'base64.html', name: 'Base64', desc: 'Encode & decode Base64 text', icon: 'base64', cat: 'Encoding' },
     { file: 'url-encode.html', name: 'URL Encode / Decode', desc: 'Percent-encode & decode URLs and components', icon: 'url', cat: 'Encoding' },
     { file: 'hex-ascii.html', name: 'Hex / ASCII', desc: 'Convert between hexadecimal and ASCII text', icon: 'hex', cat: 'Encoding' },
-    { file: 'js-beautify.html', name: 'JS Beautifier', desc: 'Format and prettify JavaScript', icon: 'beautify', cat: 'Text & Data' },
-    { file: 'js-minify.html', name: 'JS Minify', desc: 'Minify or beautify JavaScript code', icon: 'minify', cat: 'Text & Data' },
+    { file: 'js-minify.html', name: 'JS Beautify / Minify', desc: 'Beautify, minify & validate JavaScript / JSON', icon: 'beautify', cat: 'Text & Data' },
     { file: 'markdown-preview.html', name: 'Markdown Preview', desc: 'Paste Markdown and preview the formatted result', icon: 'markdown', cat: 'Text & Data' },
     { file: 'json.html', name: 'JSON Formatter', desc: 'Format, validate & explore JSON as a tree', icon: 'json', cat: 'Text & Data' },
     { file: 'csv-md.html', name: 'CSV ⇄ Markdown', desc: 'Convert between CSV and Markdown tables', icon: 'tablecsv', cat: 'Text & Data' },
@@ -109,7 +108,18 @@ document.addEventListener('DOMContentLoaded', () => {
     initNavCollapse();
     initSearch();
     initCopyButtons();
+    initTextareaResize();
 });
+
+// Textareas are user-resizable (resize: vertical), but the default flex:1
+// stretch would snap a drag-shrunk textarea back to fill its pane — once the
+// user has dragged a size (the browser stores it as inline height), pin it.
+function initTextareaResize() {
+    document.addEventListener('pointerup', e => {
+        const t = e.target;
+        if (t instanceof HTMLTextAreaElement && t.style.height) t.style.flex = '0 0 auto';
+    });
+}
 
 // ------------------------------------------------------------
 // Sidebar
