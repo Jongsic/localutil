@@ -21,6 +21,11 @@
     <priority>0.8</priority>
   </url>
   <url>
+    <loc>https://jongsic.github.io/localutil/deeplink.html</loc>
+    <lastmod>2026-07-23</lastmod>
+    <priority>0.8</priority>
+  </url>
+  <url>
     <loc>https://jongsic.github.io/localutil/diff.html</loc>
     <lastmod>2026-07-20</lastmod>
     <priority>0.8</priority>
@@ -72,12 +77,12 @@
   </url>
   <url>
     <loc>https://jongsic.github.io/localutil/js-minify.html</loc>
-    <lastmod>2026-07-20</lastmod>
+    <lastmod>2026-07-22</lastmod>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://jongsic.github.io/localutil/json.html</loc>
-    <lastmod>2026-07-20</lastmod>
+    <lastmod>2026-07-22</lastmod>
     <priority>0.8</priority>
   </url>
   <url>
@@ -112,7 +117,7 @@
   </url>
   <url>
     <loc>https://jongsic.github.io/localutil/pwa-check.html</loc>
-    <lastmod>2026-07-21</lastmod>
+    <lastmod>2026-07-22</lastmod>
     <priority>0.8</priority>
   </url>
   <url>

@@ -116,6 +116,10 @@ const SEO = {
         title: 'QR Code Reader from Image',
         desc: 'Read and decode a QR code from an image file or screenshot. Runs 100% in your browser — images are never uploaded.',
     },
+    'deeplink.html': {
+        title: 'Deep Link & Universal Link Tester',
+        desc: `Build custom-scheme, universal / app link, and Android intent URLs for any path, each with a QR code, and share the whole set as a link or QR. ${LOCAL}`,
+    },
     'ico.html': {
         title: 'ICO Converter (PNG to ICO)',
         desc: 'Convert PNG images into a multi-resolution Windows .ico favicon file, or inspect an existing .ico. Runs 100% in your browser — images are never uploaded.',

@@ -1,0 +1,657 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
+    <title>Deep Link &amp; Universal Link Tester — LocalUtil</title>
+    <!-- social / favicon -->
+    <meta name="description" content="Build custom-scheme, universal / app link, and Android intent URLs for any path, each with a QR code, and share the whole set as a link or QR. Runs 100% in your browser — nothing is uploaded.">
+    <link rel="canonical" href="https://jongsic.github.io/localutil/deeplink.html">
+    <link rel="icon" href="favicon.ico" sizes="any">
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="LocalUtil">
+    <meta property="og:title" content="Deep Link &amp; Universal Link Tester — LocalUtil">
+    <meta property="og:description" content="Build custom-scheme, universal / app link, and Android intent URLs for any path, each with a QR code, and share the whole set as a link or QR. Runs 100% in your browser — nothing is uploaded.">
+    <meta property="og:image" content="https://jongsic.github.io/localutil/og.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:url" content="https://jongsic.github.io/localutil/deeplink.html">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:image" content="https://jongsic.github.io/localutil/og.png">
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebApplication","name":"Deep Link & Universal Link Tester","url":"https://jongsic.github.io/localutil/deeplink.html","description":"Build custom-scheme, universal / app link, and Android intent URLs for any path, each with a QR code, and share the whole set as a link or QR. Runs 100% in your browser — nothing is uploaded.","applicationCategory":"DeveloperApplication","operatingSystem":"Any","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"isPartOf":{"@type":"WebSite","name":"LocalUtil","url":"https://jongsic.github.io/localutil/"}}</script>
+    <!-- /social -->
+    <script src="theme-init.js"></script>
+    <link rel="stylesheet" href="styles.css">
+    <script src="vendor/qr-code-styling.js"></script>
+    <style>
+        /* Platform banner */
+        .dl-banner {
+            display: flex;
+            gap: 10px;
+            align-items: flex-start;
+            padding: 12px 14px;
+            border: 1px solid var(--border-color);
+            border-left: 3px solid var(--primary);
+            border-radius: var(--r-sm);
+            background-color: var(--bg-subtle);
+            font-size: 0.82rem;
+            line-height: 1.5;
+            color: var(--text-muted);
+        }
+        .dl-banner b { color: var(--text-color); }
+        .dl-badge {
+            display: inline-block;
+            font-family: var(--font-mono);
+            font-size: 0.72rem;
+            padding: 1px 7px;
+            border-radius: 999px;
+            border: 1px solid var(--border-strong);
+            color: var(--text-muted);
+            white-space: nowrap;
+        }
+
+        /* Config grid */
+        .dl-config-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+        @media (max-width: 620px) { .dl-config-grid { grid-template-columns: 1fr; } }
+        .dl-paths textarea { min-height: 132px; font-family: var(--font-mono); font-size: 0.82rem; }
+        .dl-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+
+        /* Advanced (collapsible) */
+        details.dl-advanced { margin-top: 12px; }
+        details.dl-advanced > summary {
+            cursor: pointer; font-size: 0.82rem; font-weight: 600;
+            color: var(--text-muted); user-select: none;
+        }
+        details.dl-advanced[open] > summary { margin-bottom: 10px; }
+
+        /* Inspector table */
+        .dl-kv { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+        .dl-kv td { padding: 5px 8px; border-bottom: 1px solid var(--border-color); vertical-align: top; word-break: break-all; }
+        .dl-kv tr:last-child td { border-bottom: none; }
+        .dl-kv td.k { color: var(--text-muted); white-space: nowrap; width: 1%; font-family: var(--font-mono); }
+        .dl-kv td.v { font-family: var(--font-mono); }
+
+        /* Per-path output card */
+        .dl-path-card { padding: 16px; }
+        .dl-path-card + .dl-path-card { margin-top: 14px; }
+        .dl-path-head {
+            font-family: var(--font-mono); font-size: 0.9rem; font-weight: 700;
+            color: var(--text-color); word-break: break-all; margin-bottom: 4px;
+        }
+        .dl-variant {
+            display: flex; gap: 14px; align-items: flex-start;
+            padding: 12px 0; border-top: 1px solid var(--border-color);
+        }
+        .dl-variant-main { flex: 1; min-width: 0; }
+        .dl-variant-label { font-size: 0.72rem; font-weight: 700; letter-spacing: .02em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 4px; }
+        .dl-variant-uri {
+            font-family: var(--font-mono); font-size: 0.8rem; color: var(--text-color);
+            word-break: break-all; margin-bottom: 8px; display: block;
+        }
+        .dl-variant-btns { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+        .dl-open-result { font-size: 0.74rem; font-family: var(--font-mono); color: var(--text-muted); }
+        .dl-qr {
+            flex: 0 0 auto; width: 120px; height: 120px; padding: 8px;
+            background: #fff; border-radius: var(--r-xs); cursor: zoom-in;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .dl-qr svg, .dl-qr canvas { width: 100% !important; height: 100% !important; display: block; }
+        @media (max-width: 520px) {
+            .dl-variant { flex-direction: column; }
+            .dl-qr { align-self: flex-start; }
+        }
+
+        /* Event log */
+        .dl-log { font-family: var(--font-mono); font-size: 0.76rem; max-height: 180px; overflow: auto; }
+        .dl-log div { padding: 2px 0; border-bottom: 1px dashed var(--border-color); color: var(--text-muted); }
+        .dl-log div:last-child { border-bottom: none; }
+
+        /* Fullscreen QR modal */
+        .dl-modal {
+            position: fixed; inset: 0; background: rgba(0,0,0,.62);
+            display: none; align-items: center; justify-content: center; z-index: 1000; padding: 24px;
+        }
+        .dl-modal.show { display: flex; }
+        .dl-modal-inner {
+            background: #fff; padding: 16px; border-radius: var(--r-md);
+            max-width: min(94vw, 800px); max-height: 92vh; overflow: auto;
+        }
+        .dl-modal-bar {
+            display: flex; align-items: center; justify-content: center; gap: 10px; margin-bottom: 12px;
+        }
+        .dl-modal-bar button {
+            width: 34px; height: 34px; border-radius: var(--r-xs); border: 1px solid #ccc;
+            background: #f4f4f5; color: #111; font-size: 1.2rem; line-height: 1; cursor: pointer;
+        }
+        .dl-modal-bar button:hover { background: #e7e7ea; }
+        .dl-modal-zoom { font-family: var(--font-mono); font-size: 0.78rem; color: #333; min-width: 64px; text-align: center; }
+        /* Zoom is capped to what fits the viewport (see maxFit in JS), so the QR is always
+           fully visible at once — never wider than the dialog, no horizontal scroll. */
+        #dl-modal-qr { display: flex; justify-content: center; }
+        .dl-modal-cap {
+            margin: 12px auto 0; font-family: var(--font-mono); font-size: 0.74rem; color: #333;
+            text-align: center; max-width: 100%; word-break: break-all; overflow-wrap: anywhere;
+        }
+
+        .dl-empty { color: var(--text-muted); font-size: 0.85rem; padding: 8px 0; }
+
+        /* Caveats list */
+        .dl-notes { margin: 0; padding-left: 18px; }
+        .dl-notes li { font-size: 0.82rem; line-height: 1.55; color: var(--text-muted); margin-bottom: 8px; }
+        .dl-notes li:last-child { margin-bottom: 0; }
+        .dl-notes b { color: var(--text-color); }
+    </style>
+</head>
+
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar" id="app-sidebar"></aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <header class="topbar" id="app-topbar">
+                <div class="topbar-title">
+                    <h1 id="current-tool-title">Deep Link Tester</h1>
+                    <p id="current-tool-desc" class="topbar-desc">Build custom-scheme, universal / app link &amp; intent URLs with a QR for each</p>
+                </div>
+            </header>
+
+            <div class="tools-container">
+                <section id="tool-deeplink" class="tool-section active">
+                    <div class="tool-shell">
+
+                        <!-- Platform banner -->
+                        <div class="dl-banner" id="dl-banner">
+                            <span class="dl-badge" id="dl-platform">detecting…</span>
+                            <span id="dl-banner-text"></span>
+                        </div>
+
+                        <!-- Inspector: how this page was opened -->
+                        <details class="card" id="dl-inspector" style="padding:16px;">
+                            <summary style="cursor:pointer;font-weight:600;">How this page was opened (inspector)</summary>
+                            <div class="field-hint mb-2" style="margin-top:10px;">Handy as the landing page a universal link points at — shows exactly what it was opened with.</div>
+                            <table class="dl-kv"><tbody id="dl-inspector-body"></tbody></table>
+                            <div class="flex-row" style="margin-top:10px;">
+                                <button class="btn btn-small" id="dl-copy-entry">Copy entry info</button>
+                            </div>
+                        </details>
+
+                        <!-- Config -->
+                        <div class="card" style="padding:16px;">
+                            <div class="section-title" style="margin-top:0;">Target</div>
+                            <div class="field-hint mb-2">Enter the scheme and domain once — every path below is combined into each link form.</div>
+                            <div class="dl-config-grid">
+                                <div class="field-group">
+                                    <label for="dl-scheme">Custom scheme</label>
+                                    <input type="text" id="dl-scheme" placeholder="myapp" autocapitalize="off" autocorrect="off" spellcheck="false">
+                                    <div class="field-hint">Without <code>://</code>. e.g. <code>myapp</code> → <code>myapp://…</code></div>
+                                </div>
+                                <div class="field-group">
+                                    <label for="dl-host">Universal / App link host</label>
+                                    <input type="text" id="dl-host" placeholder="example.com" autocapitalize="off" autocorrect="off" spellcheck="false">
+                                    <div class="field-hint">One https domain. e.g. <code>example.com</code></div>
+                                </div>
+                            </div>
+                            <div class="field-group dl-paths" style="margin-top:14px;">
+                                <label for="dl-paths">Paths — one per line (query <code>?</code> and hash <code>#</code> allowed)</label>
+                                <textarea id="dl-paths" placeholder="/&#10;/rooms&#10;/clubs/123?tab=members&#10;/invite/ABC#ref=x"></textarea>
+                            </div>
+
+                            <details class="dl-advanced">
+                                <summary>Advanced (global — applied to every path)</summary>
+                                <div class="dl-config-grid">
+                                    <div class="field-group">
+                                        <label for="dl-pkg">Android package</label>
+                                        <input type="text" id="dl-pkg" placeholder="com.example.app" autocapitalize="off" autocorrect="off" spellcheck="false">
+                                        <div class="field-hint">Adds <code>package=</code> + browser fallback to the <code>intent://</code> form.</div>
+                                    </div>
+                                    <div class="field-group">
+                                        <label for="dl-store-ios">Store fallback (optional)</label>
+                                        <input type="text" id="dl-store-ios" placeholder="iOS App Store URL" autocapitalize="off" autocorrect="off" spellcheck="false" style="margin-bottom:6px;">
+                                        <input type="text" id="dl-store-android" placeholder="Play Store URL" autocapitalize="off" autocorrect="off" spellcheck="false">
+                                        <div class="field-hint">Enables a “try scheme → else store” button per path.</div>
+                                    </div>
+                                </div>
+                            </details>
+
+                            <div class="dl-actions">
+                                <button class="btn btn-small btn-primary" id="dl-share">Share config (copy URL)</button>
+                                <button class="btn btn-small" id="dl-share-qr">Config QR</button>
+                                <button class="btn btn-small btn-ghost" id="dl-example" style="margin-left:auto;">Load example</button>
+                                <button class="btn btn-small btn-ghost" id="dl-clear">Clear</button>
+                            </div>
+                        </div>
+
+                        <!-- Output -->
+                        <div id="dl-output"></div>
+
+                        <!-- Event log -->
+                        <div class="card" style="padding:16px;">
+                            <div class="log-header mb-2">
+                                <div>
+                                    <div class="card-title" style="margin:0;">Event log</div>
+                                    <div class="field-hint">App-switch heuristic: focus/visibility change right after an Open.</div>
+                                </div>
+                                <button id="dl-log-clear" class="btn btn-small">Clear</button>
+                            </div>
+                            <div class="dl-log" id="dl-log"></div>
+                        </div>
+
+                        <!-- Caveats -->
+                        <div class="card" style="padding:16px;">
+                            <div class="card-title" style="margin:0 0 8px;">Gotchas to keep in mind</div>
+                            <ul class="dl-notes">
+                                <li><b>Two apps sharing one scheme.</b> If a device has two builds registering the
+                                    same custom scheme (e.g. prod and QA both use <code>myapp://</code>), a
+                                    <code>scheme://</code> link is <b>ambiguous</b> — iOS picks one arbitrarily and
+                                    Android shows a chooser. Tell the environments apart with the
+                                    <b>universal / app link</b> instead (distinct hosts), which is unambiguous.</li>
+                                <li><b>iOS: tapping a universal link inside a browser won’t open the app.</b> Apple
+                                    suppresses universal links for in-page taps in Safari/Chrome (and same-domain
+                                    navigations never hand off). To open the app: <b>scan the QR with the Camera</b>,
+                                    tap the link from another app (Notes/Messages/Mail), or long-press it and choose
+                                    “Open in …”. A <code>scheme://</code> link <i>does</i> open from the address bar.</li>
+                            </ul>
+                        </div>
+
+                    </div>
+                </section>
+            </div>
+        </main>
+    </div>
+
+    <!-- Fullscreen QR modal -->
+    <div class="dl-modal" id="dl-modal">
+        <div class="dl-modal-inner" id="dl-modal-inner">
+            <div class="dl-modal-bar">
+                <button type="button" id="dl-zoom-out" title="Smaller">−</button>
+                <span class="dl-modal-zoom" id="dl-zoom-label"></span>
+                <button type="button" id="dl-zoom-in" title="Larger">+</button>
+            </div>
+            <div id="dl-modal-qr"></div>
+            <div class="dl-modal-cap" id="dl-modal-cap"></div>
+        </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="toast">Copied to clipboard!</div>
+
+    <script src="app.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // ---- base64url (unicode-safe) ----
+            const b64url = {
+                enc: (s) => btoa(unescape(encodeURIComponent(s))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''),
+                dec: (s) => {
+                    s = s.replace(/-/g, '+').replace(/_/g, '/');
+                    while (s.length % 4) s += '=';
+                    return decodeURIComponent(escape(atob(s)));
+                },
+            };
+
+            const $ = (id) => document.getElementById(id);
+            const els = {
+                scheme: $('dl-scheme'), host: $('dl-host'), paths: $('dl-paths'),
+                pkg: $('dl-pkg'), storeIos: $('dl-store-ios'), storeAndroid: $('dl-store-android'),
+                output: $('dl-output'), log: $('dl-log'),
+                platform: $('dl-platform'), banner: $('dl-banner-text'),
+                inspectorBody: $('dl-inspector-body'), inspector: $('dl-inspector'),
+                modal: $('dl-modal'), modalQr: $('dl-modal-qr'), modalCap: $('dl-modal-cap'),
+            };
+
+            // ---- platform detection ----
+            const ua = navigator.userAgent;
+            const isIOS = /iPad|iPhone|iPod/.test(ua) || (/Macintosh/.test(ua) && 'ontouchend' in document);
+            const isAndroid = /Android/.test(ua);
+            const platform = isIOS ? 'iOS' : isAndroid ? 'Android' : 'desktop';
+            els.platform.textContent = platform;
+            els.banner.innerHTML = isIOS
+                ? 'On iOS, tapping a universal link <b>inside a browser does not open the app</b> — scan the QR with the Camera app, or open the link from Notes/Messages.'
+                : isAndroid
+                    ? 'On Android, verified App Links may still stay in Chrome when tapped in-page. Scanning the QR from the Camera, or opening from another app, is the reliable path.'
+                    : 'Desktop: use the QR codes below — scan them from a phone. Custom-scheme links can also be clicked to check registration prompts.';
+
+            // ---- inspector: how this page was opened ----
+            (function fillInspector() {
+                const u = new URL(location.href);
+                const rows = [
+                    ['href', location.href],
+                    ['origin', u.origin],
+                    ['pathname', u.pathname],
+                    ['search', u.search || '(none)'],
+                    ['hash', u.hash || '(none)'],
+                    ['referrer', document.referrer || '(none)'],
+                    ['platform', platform],
+                    ['userAgent', ua],
+                    ['loaded at', new Date().toString()],
+                ];
+                els.inspectorBody.innerHTML = '';
+                rows.forEach(([k, v]) => {
+                    const tr = document.createElement('tr');
+                    const tdk = document.createElement('td'); tdk.className = 'k'; tdk.textContent = k;
+                    const tdv = document.createElement('td'); tdv.className = 'v'; tdv.textContent = v;
+                    tr.append(tdk, tdv); els.inspectorBody.appendChild(tr);
+                });
+            })();
+            $('dl-copy-entry').addEventListener('click', () => {
+                const text = [...els.inspectorBody.querySelectorAll('tr')]
+                    .map(tr => tr.children[0].textContent + ': ' + tr.children[1].textContent).join('\n');
+                navigator.clipboard.writeText(text).then(() => window.showToast('Copied to clipboard'))
+                    .catch(() => window.showToast('Copy failed', true));
+            });
+
+            // ---- state <-> URL ----
+            function readState() {
+                return {
+                    scheme: els.scheme.value.trim().replace(/:\/*$/, ''),
+                    host: els.host.value.trim().replace(/^https?:\/\//, '').replace(/\/+$/, ''),
+                    paths: els.paths.value.split('\n').map(s => s.trim()).filter(Boolean),
+                    pkg: els.pkg.value.trim(),
+                    store: { ios: els.storeIos.value.trim(), android: els.storeAndroid.value.trim() },
+                };
+            }
+            function applyState(s) {
+                els.scheme.value = s.scheme || '';
+                els.host.value = s.host || '';
+                els.paths.value = (s.paths || []).join('\n');
+                els.pkg.value = s.pkg || '';
+                els.storeIos.value = (s.store && s.store.ios) || '';
+                els.storeAndroid.value = (s.store && s.store.android) || '';
+            }
+            function shareUrl() {
+                const json = JSON.stringify(readState());
+                return location.origin + location.pathname + '#c=' + b64url.enc(json);
+            }
+            function syncHash() {
+                try { history.replaceState(null, '', '#c=' + b64url.enc(JSON.stringify(readState()))); } catch (_) {}
+            }
+
+            function initFromUrl() {
+                let s = null;
+                const h = new URLSearchParams(location.hash.replace(/^#/, ''));
+                if (h.get('c')) {
+                    try { s = JSON.parse(b64url.dec(h.get('c'))); } catch (_) { s = null; }
+                }
+                const q = new URLSearchParams(location.search);
+                const merge = s || {};
+                if (q.get('scheme')) merge.scheme = q.get('scheme');
+                if (q.get('host')) merge.host = q.get('host');
+                const paths = q.getAll('path').flatMap(p => p.split(',')).map(x => x.trim()).filter(Boolean);
+                if (paths.length) merge.paths = (merge.paths || []).concat(paths);
+                if (q.get('pkg')) merge.pkg = q.get('pkg');
+                if (Object.keys(merge).length) applyState(merge);
+            }
+
+            // ---- link builders ----
+            const normPath = (p) => (p.startsWith('/') ? p : '/' + p);
+            function buildVariants(rawPath, st) {
+                const P = normPath(rawPath);
+                const out = [];
+                if (st.host) out.push({
+                    label: 'Universal / App link',
+                    uri: `https://${st.host}${P}`,
+                    hint: 'Opened via iOS Universal Links / Android App Links (needs AASA / assetlinks verified).',
+                });
+                if (st.scheme) {
+                    out.push({
+                        label: 'Custom scheme — host form',
+                        uri: `${st.scheme}://${P.replace(/^\/+/, '')}`,
+                        hint: 'First path segment becomes the URI authority (host). e.g. rooms is the “host”.',
+                    });
+                    out.push({
+                        label: 'Custom scheme — path form',
+                        uri: `${st.scheme}://${P}`,
+                        hint: 'Empty authority (extra slash) — the whole thing stays in the path. Some apps only match one of the two forms.',
+                    });
+                }
+                if (st.host) {
+                    let intent = `intent://${st.host}${P}#Intent;scheme=https;`;
+                    if (st.pkg) intent += `package=${st.pkg};`;
+                    intent += `S.browser_fallback_url=${encodeURIComponent(`https://${st.host}${P}`)};end`;
+                    out.push({
+                        label: 'Android intent://',
+                        uri: intent,
+                        hint: st.pkg
+                            ? `Targets ${st.pkg} directly; if not installed, falls back to the https URL.`
+                            : 'No package set → resolves the https URL like the App Link. Add a package (Advanced) to target the app directly.',
+                    });
+                }
+                return out;
+            }
+
+            // ---- QR rendering (vendor: qr-code-styling) ----
+            function renderQR(container, text, size) {
+                container.innerHTML = '';
+                try {
+                    const qr = new QRCodeStyling({
+                        width: size, height: size, type: 'svg', data: text, margin: 4,
+                        qrOptions: { errorCorrectionLevel: 'M' },
+                        dotsOptions: { color: '#000', type: 'square' },
+                        backgroundOptions: { color: '#fff' },
+                    });
+                    qr.append(container);
+                } catch (e) {
+                    container.textContent = 'QR error';
+                }
+            }
+
+            // ---- app-switch heuristic ----
+            let pendingOpen = null; // { uri, at, resultEl }
+            function armHeuristic(uri, resultEl) {
+                pendingOpen = { uri, at: Date.now(), resultEl };
+                resultEl.textContent = 'opening…';
+                setTimeout(() => {
+                    if (pendingOpen && pendingOpen.resultEl === resultEl) {
+                        resultEl.textContent = '⚠ stayed in browser (no handler / suppressed)';
+                        pendingOpen = null;
+                    }
+                }, 1600);
+            }
+            function noteHidden() {
+                if (pendingOpen && Date.now() - pendingOpen.at < 1800) {
+                    pendingOpen.resultEl.textContent = '✅ switched away (app likely opened)';
+                    logEvent('switched away after: ' + pendingOpen.uri);
+                    pendingOpen = null;
+                }
+            }
+            document.addEventListener('visibilitychange', () => { if (document.hidden) noteHidden(); });
+            window.addEventListener('pagehide', noteHidden);
+            window.addEventListener('blur', noteHidden);
+
+            function logEvent(msg) {
+                const d = document.createElement('div');
+                d.textContent = new Date().toLocaleTimeString() + '  ' + msg;
+                els.log.prepend(d);
+            }
+            $('dl-log-clear').addEventListener('click', () => { els.log.innerHTML = ''; });
+
+            // ---- render output ----
+            function render() {
+                const st = readState();
+                els.output.innerHTML = '';
+                if (!st.scheme && !st.host) {
+                    const c = document.createElement('div');
+                    c.className = 'card'; c.style.padding = '16px';
+                    c.innerHTML = '<div class="dl-empty">Enter a scheme and/or host, then add paths above.</div>';
+                    els.output.appendChild(c);
+                    return;
+                }
+                if (!st.paths.length) st.paths = ['/'];
+
+                st.paths.forEach((rawPath) => {
+                    const card = document.createElement('div');
+                    card.className = 'card dl-path-card';
+                    const head = document.createElement('div');
+                    head.className = 'dl-path-head';
+                    head.textContent = normPath(rawPath);
+                    card.appendChild(head);
+
+                    buildVariants(rawPath, st).forEach((v) => {
+                        const row = document.createElement('div');
+                        row.className = 'dl-variant';
+
+                        const main = document.createElement('div');
+                        main.className = 'dl-variant-main';
+                        const lab = document.createElement('div');
+                        lab.className = 'dl-variant-label'; lab.textContent = v.label;
+                        const a = document.createElement('a');
+                        a.className = 'dl-variant-uri'; a.href = v.uri; a.textContent = v.uri;
+                        a.rel = 'noopener';
+                        const hint = document.createElement('div');
+                        hint.className = 'field-hint'; hint.style.marginBottom = '8px'; hint.textContent = v.hint || '';
+                        const btns = document.createElement('div');
+                        btns.className = 'dl-variant-btns';
+
+                        const openBtn = document.createElement('a');
+                        openBtn.className = 'btn btn-small btn-primary'; openBtn.textContent = 'Open';
+                        openBtn.href = v.uri; openBtn.rel = 'noopener';
+                        const result = document.createElement('span');
+                        result.className = 'dl-open-result';
+                        const isScheme = v.uri.startsWith(st.scheme + '://') || v.uri.startsWith('intent://');
+                        openBtn.addEventListener('click', () => {
+                            logEvent('open: ' + v.uri);
+                            if (isScheme) armHeuristic(v.uri, result);
+                        });
+
+                        const copyBtn = document.createElement('button');
+                        copyBtn.className = 'btn btn-small'; copyBtn.textContent = 'Copy';
+                        copyBtn.addEventListener('click', () => {
+                            navigator.clipboard.writeText(v.uri).then(() => window.showToast('Copied to clipboard'))
+                                .catch(() => window.showToast('Copy failed', true));
+                        });
+
+                        btns.append(openBtn, copyBtn, result);
+                        main.append(lab, a, hint, btns);
+
+                        const qr = document.createElement('div');
+                        qr.className = 'dl-qr';
+                        qr.title = 'Tap to enlarge';
+                        renderQR(qr, v.uri, 110);
+                        qr.addEventListener('click', () => openModal(v.uri));
+
+                        row.append(main, qr);
+                        card.appendChild(row);
+                    });
+
+                    // Scheme -> store fallback tester. Always shown when a scheme is set; the
+                    // store jump only happens once a Store URL (Advanced) is filled in.
+                    if (st.scheme) {
+                        const storeUrl = isIOS ? st.store.ios : isAndroid ? st.store.android : (st.store.ios || st.store.android);
+                        const schemeUri = `${st.scheme}://${normPath(rawPath).replace(/^\/+/, '')}`;
+                        const row = document.createElement('div');
+                        row.className = 'dl-variant';
+                        const main = document.createElement('div'); main.className = 'dl-variant-main';
+                        const lab = document.createElement('div'); lab.className = 'dl-variant-label';
+                        lab.textContent = 'Scheme → store fallback';
+                        const uri = document.createElement('span');
+                        uri.className = 'dl-variant-uri'; uri.textContent = schemeUri;
+                        const hint = document.createElement('div');
+                        hint.className = 'field-hint'; hint.style.marginBottom = '8px';
+                        hint.textContent = storeUrl
+                            ? `Tries the scheme above; if the app doesn’t open in ~1.2s, goes to: ${storeUrl}`
+                            : 'Tries the scheme above only. Add a Store URL in Advanced to enable the → store fallback.';
+                        const btns = document.createElement('div'); btns.className = 'dl-variant-btns';
+                        const go = document.createElement('button');
+                        go.className = 'btn btn-small';
+                        go.textContent = storeUrl ? 'Try scheme → else store' : 'Try scheme (no store set)';
+                        const result = document.createElement('span'); result.className = 'dl-open-result';
+                        go.addEventListener('click', () => {
+                            logEvent('fallback try: ' + schemeUri + (storeUrl ? ' (→ store if no app)' : ' (no store fallback)'));
+                            armHeuristic(schemeUri, result);
+                            if (storeUrl) {
+                                const t = setTimeout(() => { window.location.href = storeUrl; }, 1200);
+                                document.addEventListener('visibilitychange', () => { if (document.hidden) clearTimeout(t); }, { once: true });
+                            }
+                            window.location.href = schemeUri;
+                        });
+                        btns.append(go, result);
+                        main.append(lab, uri, hint, btns);
+                        row.appendChild(main);
+                        card.appendChild(row);
+                    }
+
+                    els.output.appendChild(card);
+                });
+            }
+
+            // ---- fullscreen QR modal (with zoom) ----
+            const ZOOM_MIN = 160, ZOOM_STEP = 60;
+            let modalText = '', modalSize = 360;
+            // 뷰포트에 한 번에 다 들어가는 최대 크기 — 가로 스크롤 없이 항상 전체가 보이도록 상한.
+            function maxFit() {
+                const w = Math.min(window.innerWidth * 0.9, 768);   // 다이얼로그 내용 폭 상한
+                const h = window.innerHeight * 0.72;                 // 상단 바 + 캡션 여유
+                return Math.max(ZOOM_MIN, Math.floor(Math.min(w, h)));
+            }
+            function drawModal() {
+                const mx = maxFit();
+                if (modalSize > mx) modalSize = mx;
+                renderQR(els.modalQr, modalText, modalSize);
+                $('dl-zoom-label').textContent = modalSize + 'px';
+                $('dl-zoom-out').disabled = modalSize <= ZOOM_MIN;
+                $('dl-zoom-in').disabled = modalSize >= mx;
+            }
+            function openModal(text) {
+                modalText = text;
+                modalSize = maxFit();          // 처음엔 화면에 들어가는 최대 크기로
+                els.modalCap.textContent = text;
+                drawModal();
+                els.modal.classList.add('show');
+            }
+            function zoom(delta) {
+                modalSize = Math.max(ZOOM_MIN, Math.min(maxFit(), modalSize + delta));
+                drawModal();
+            }
+            $('dl-zoom-in').addEventListener('click', () => zoom(ZOOM_STEP));
+            $('dl-zoom-out').addEventListener('click', () => zoom(-ZOOM_STEP));
+            window.addEventListener('resize', () => { if (els.modal.classList.contains('show')) drawModal(); });
+            // 배경 클릭만 닫기 — 내부(버튼/QR/캡션) 클릭은 유지.
+            $('dl-modal-inner').addEventListener('click', (e) => e.stopPropagation());
+            els.modal.addEventListener('click', () => els.modal.classList.remove('show'));
+
+            // ---- config actions ----
+            $('dl-share').addEventListener('click', () => {
+                const url = shareUrl();
+                navigator.clipboard.writeText(url).then(() => window.showToast('Config URL copied'))
+                    .catch(() => window.showToast('Copy failed', true));
+            });
+            $('dl-share-qr').addEventListener('click', () => openModal(shareUrl()));
+            $('dl-example').addEventListener('click', () => {
+                applyState({
+                    scheme: 'moitto', host: 'moitto.com',
+                    paths: ['/', '/rooms', '/clubs/CLUBID', '/meetups/MEETUPID', '/invite/CODE', '/qr/login?sid=TESTSID'],
+                    pkg: 'com.moitto.app',
+                    store: {
+                        ios: 'https://apps.apple.com/app/id6777927087',
+                        android: 'https://play.google.com/store/apps/details?id=com.moitto.app',
+                    },
+                });
+                onChange();
+            });
+            $('dl-clear').addEventListener('click', () => {
+                applyState({ scheme: '', host: '', paths: [], pkg: '', store: { ios: '', android: '' } });
+                try { history.replaceState(null, '', location.pathname); } catch (_) {}
+                render();
+            });
+
+            // ---- wire inputs ----
+            function onChange() { syncHash(); render(); }
+            ['dl-scheme', 'dl-host', 'dl-paths', 'dl-pkg', 'dl-store-ios', 'dl-store-android']
+                .forEach(id => $(id).addEventListener('input', onChange));
+
+            // ---- boot ----
+            initFromUrl();
+            if (location.hash.includes('c=') || location.search) {
+                els.inspector.open = false;
+            }
+            render();
+        });
+    </script>
+</body>
+
+</html>
