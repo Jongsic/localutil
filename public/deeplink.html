@@ -363,20 +363,48 @@
                 els.storeIos.value = (s.store && s.store.ios) || '';
                 els.storeAndroid.value = (s.store && s.store.android) || '';
             }
-            function shareUrl() {
-                const json = JSON.stringify(readState());
-                return location.origin + location.pathname + '#c=' + b64url.enc(json);
+            // ---- config codec ----
+            // New share links deflate the JSON (#z=…) so QRs stay small and the
+            // ~2,300-char QR capacity is much harder to hit. Legacy plain
+            // base64url links (#c=…) keep decoding forever; browsers without
+            // CompressionStream keep writing them too.
+            const canZip = typeof CompressionStream !== 'undefined' && typeof DecompressionStream !== 'undefined';
+            async function zipEnc(s) {
+                const stream = new Blob([s]).stream().pipeThrough(new CompressionStream('deflate-raw'));
+                const bytes = new Uint8Array(await new Response(stream).arrayBuffer());
+                let bin = '';
+                bytes.forEach(b => { bin += String.fromCharCode(b); });
+                return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
             }
-            function syncHash() {
-                try { history.replaceState(null, '', '#c=' + b64url.enc(JSON.stringify(readState()))); } catch (_) {}
+            async function zipDec(s) {
+                s = s.replace(/-/g, '+').replace(/_/g, '/');
+                while (s.length % 4) s += '=';
+                const bytes = Uint8Array.from(atob(s), c => c.charCodeAt(0));
+                const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+                return new Response(stream).text();
             }
 
-            function initFromUrl() {
+            function shareUrl() {
+                // syncHash keeps location.hash current on every input; share
+                // handlers await syncHash() first so this is never stale.
+                return location.origin + location.pathname + location.hash;
+            }
+            let syncSeq = 0;
+            async function syncHash() {
+                const seq = ++syncSeq;
+                const json = JSON.stringify(readState());
+                const hash = canZip ? '#z=' + await zipEnc(json) : '#c=' + b64url.enc(json);
+                if (seq !== syncSeq) return; // a newer edit already superseded this one
+                try { history.replaceState(null, '', hash); } catch (_) {}
+            }
+
+            async function initFromUrl() {
                 let s = null;
                 const h = new URLSearchParams(location.hash.replace(/^#/, ''));
-                if (h.get('c')) {
-                    try { s = JSON.parse(b64url.dec(h.get('c'))); } catch (_) { s = null; }
-                }
+                try {
+                    if (h.get('z') && canZip) s = JSON.parse(await zipDec(h.get('z')));
+                    else if (h.get('c')) s = JSON.parse(b64url.dec(h.get('c')));
+                } catch (_) { s = null; }
                 const q = new URLSearchParams(location.search);
                 const merge = s || {};
                 if (q.get('scheme')) merge.scheme = q.get('scheme');
@@ -417,8 +445,10 @@
                         label: 'Android intent://',
                         uri: intent,
                         hint: st.pkg
-                            ? `Targets ${st.pkg} directly; if not installed, falls back to the https URL.`
-                            : 'No package set → resolves the https URL like the App Link. Add a package (Advanced) to target the app directly.',
+                            ? `Targets ${st.pkg} directly; falls back to the https URL if not installed.`
+                            : 'No package set → resolves the https URL like the App Link (add a package in Advanced to target the app directly).',
+                        // Kept as its own text node so the i18n runtime can translate it.
+                        hint2: 'Chromium browsers only (Chrome, Samsung Internet, Edge, Brave…) when tapped as a link. NOT scannable — Camera/QR scanners and other apps hand the raw intent: URI to the OS and get “no app can handle this”; Firefox is unsupported too.',
                     });
                 }
                 return out;
@@ -453,7 +483,14 @@
                     if (qr._svgDrawingPromise) qr._svgDrawingPromise.then(dedupeIds);
                     else dedupeIds();
                 } catch (e) {
-                    container.textContent = 'QR error';
+                    // Explicit inline color: these boxes are white even in dark mode.
+                    const msg = document.createElement('div');
+                    msg.style.cssText = 'color:#111;font-size:0.75rem;line-height:1.4;padding:10px;text-align:center;';
+                    const tr = window.t || (s => s);
+                    msg.textContent = /overflow/i.test(String(e))
+                        ? tr('URL is too long for a QR code — remove some paths.')
+                        : tr('QR error');
+                    container.appendChild(msg);
                 }
             }
 
@@ -521,6 +558,11 @@
                         a.rel = 'noopener';
                         const hint = document.createElement('div');
                         hint.className = 'field-hint'; hint.style.marginBottom = '8px'; hint.textContent = v.hint || '';
+                        if (v.hint2) {
+                            const warn = document.createElement('div');
+                            warn.textContent = v.hint2;
+                            hint.appendChild(warn);
+                        }
                         const btns = document.createElement('div');
                         btns.className = 'dl-variant-btns';
 
@@ -632,12 +674,15 @@
             els.modal.addEventListener('click', () => els.modal.classList.remove('show'));
 
             // ---- config actions ----
-            $('dl-share').addEventListener('click', () => {
-                const url = shareUrl();
-                navigator.clipboard.writeText(url).then(() => window.showToast('Config URL copied'))
+            $('dl-share').addEventListener('click', async () => {
+                await syncHash();
+                navigator.clipboard.writeText(shareUrl()).then(() => window.showToast('Config URL copied'))
                     .catch(() => window.showToast('Copy failed', true));
             });
-            $('dl-share-qr').addEventListener('click', () => openModal(shareUrl()));
+            $('dl-share-qr').addEventListener('click', async () => {
+                await syncHash();
+                openModal(shareUrl());
+            });
             $('dl-example').addEventListener('click', () => {
                 applyState({
                     scheme: 'moitto', host: 'moitto.com',
@@ -662,11 +707,10 @@
                 .forEach(id => $(id).addEventListener('input', onChange));
 
             // ---- boot ----
-            initFromUrl();
-            if (location.hash.includes('c=') || location.search) {
+            if (location.hash.includes('c=') || location.hash.includes('z=') || location.search) {
                 els.inspector.open = false;
             }
-            render();
+            initFromUrl().then(render);
         });
     </script>
 </body>
