@@ -425,6 +425,12 @@
             }
 
             // ---- QR rendering (vendor: qr-code-styling) ----
+            // qr-code-styling emits fixed clipPath ids (clip-path-dot-color …).
+            // This page draws many QRs at once, and url(#…) resolves against the
+            // whole document — every code would render clipped by the FIRST svg's
+            // dot pattern (all QRs look identical; the big modal one shows tiny).
+            // So after each draw, prefix that svg's clipPath ids to keep them unique.
+            let qrSeq = 0;
             function renderQR(container, text, size) {
                 container.innerHTML = '';
                 try {
@@ -435,6 +441,17 @@
                         backgroundOptions: { color: '#fff' },
                     });
                     qr.append(container);
+                    const uid = 'qr' + (++qrSeq) + '-';
+                    const dedupeIds = () => {
+                        const svg = container.querySelector('svg');
+                        if (!svg) return;
+                        svg.querySelectorAll('clipPath[id]').forEach(cp => { cp.id = uid + cp.id; });
+                        svg.querySelectorAll('[clip-path]').forEach(el => {
+                            el.setAttribute('clip-path', el.getAttribute('clip-path').replace('#', '#' + uid));
+                        });
+                    };
+                    if (qr._svgDrawingPromise) qr._svgDrawingPromise.then(dedupeIds);
+                    else dedupeIds();
                 } catch (e) {
                     container.textContent = 'QR error';
                 }
