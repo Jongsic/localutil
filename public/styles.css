@@ -367,6 +367,30 @@ body {
     border-color: var(--border-strong);
 }
 
+/* Language selector in the topbar */
+.lang-select {
+    appearance: none;
+    -webkit-appearance: none;
+    padding: 6px 10px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background-color: transparent;
+    color: var(--text-muted);
+    font-size: 0.82rem;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+}
+.lang-select:hover {
+    background-color: var(--bg-hover);
+    color: var(--text-main);
+    border-color: var(--border-strong);
+}
+.lang-select option {
+    background-color: var(--bg-panel);
+    color: var(--text-main);
+}
+
 .tools-container {
     flex: 1;
     overflow-y: auto;
@@ -913,7 +937,8 @@ input[type="checkbox"]:focus-visible { box-shadow: 0 0 0 3px var(--primary-ring)
 .tool-card-icon svg { width: 21px; height: 21px; }
 
 .tool-card-body { min-width: 0; }
-.tool-card-name { font-weight: 650; font-size: 0.95rem; margin-bottom: 3px; }
+.tool-card-name { display: block; font-weight: 650; font-size: 0.95rem; margin-bottom: 3px; }
+.tool-card-desc { display: block; }
 .tool-card-desc { font-size: 0.83rem; color: var(--text-muted); line-height: 1.45; }
 
 .landing-footer {

@@ -37,6 +37,18 @@ node scripts/gen-seo.mjs
 
 Run it after adding or renaming a tool page, and add the new page's title/description to the `SEO` map at the top of that script (it warns about pages missing an entry).
 
+## Localization
+
+Pages are authored in English; other languages are applied at runtime by the i18n runtime in `app.js`. A per-language dictionary (`public/i18n/<code>.js`, English text as the key) is loaded on demand, applied to rendered text nodes and `placeholder`/`title`/`aria-label` attributes, and a MutationObserver re-applies it to anything page scripts render later — tool pages need no i18n markup at all. The language selector lives in the topbar; the choice persists in `localStorage` and the browser language is auto-detected on first visit. English is always the fallback for strings missing from a dictionary. SEO metadata stays English.
+
+To add or update a language:
+
+1. Extract the current UI strings: `node scripts/gen-i18n.mjs strings.json` (uses the test harness — run `cd test && npm run setup` once first).
+2. Translate them into `public/i18n/<code>.js` following the format of `public/i18n/ko.js` (keys are the English strings, whitespace collapsed).
+3. Register the language in the `LANGS` array in `public/app.js`.
+
+Live values, code snippets, `<textarea>`/`<pre>`/`<code>` content and anything under a `data-i18n-skip` attribute are never translated.
+
 ## Deployment
 
 Pushing to `main` triggers the [GitHub Pages workflow](.github/workflows/deploy.yml), which uploads `public/` and publishes it — no build required.

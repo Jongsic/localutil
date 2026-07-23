@@ -101,7 +101,116 @@ function currentFile() {
     return f && f.length ? f : 'index.html';
 }
 
+// ------------------------------------------------------------
+// i18n — pages stay authored in English; a per-language dictionary
+// (i18n/<code>.js, English text as the key) is loaded on demand and
+// applied to text nodes at runtime. A MutationObserver re-applies it
+// to anything page scripts render later, so tool pages need no edits.
+// ------------------------------------------------------------
+const LANGS = [
+    { code: 'en', label: 'English' },
+    { code: 'ko', label: '한국어' },
+];
+
+const I18N = { lang: 'en', dict: null };
+
+function currentLang() {
+    let lang = localStorage.getItem('localutil-lang');
+    if (!lang) lang = (navigator.language || '').toLowerCase().startsWith('ko') ? 'ko' : 'en';
+    return LANGS.some(l => l.code === lang) ? lang : 'en';
+}
+
+function i18nKey(s) {
+    return s.replace(/\s+/g, ' ').trim();
+}
+
+function t(s) {
+    return (I18N.dict && I18N.dict[i18nKey(s)]) || s;
+}
+window.t = t;
+
+const I18N_SKIP = { SCRIPT: 1, STYLE: 1, TEXTAREA: 1, PRE: 1, CODE: 1 };
+
+function i18nSkipped(el) {
+    for (let e = el; e; e = e.parentElement) {
+        if (I18N_SKIP[e.tagName] || e.hasAttribute('data-i18n-skip')) return true;
+    }
+    return false;
+}
+
+function translateTextNode(node) {
+    const key = i18nKey(node.nodeValue || '');
+    if (!key) return;
+    const tr = I18N.dict[key];
+    if (!tr || tr === key) return;
+    const m = node.nodeValue.match(/^(\s*)[\s\S]*?(\s*)$/);
+    node.nodeValue = m[1] + tr + m[2];
+}
+
+const I18N_ATTRS = ['placeholder', 'title', 'aria-label'];
+
+function translateAttrs(el) {
+    I18N_ATTRS.forEach(a => {
+        const v = el.getAttribute && el.getAttribute(a);
+        if (!v) return;
+        const tr = I18N.dict[i18nKey(v)];
+        if (tr && tr !== v) el.setAttribute(a, tr);
+    });
+}
+
+function translateTree(root) {
+    if (root.nodeType === Node.TEXT_NODE) {
+        if (root.parentElement && !i18nSkipped(root.parentElement)) translateTextNode(root);
+        return;
+    }
+    if (root.nodeType !== Node.ELEMENT_NODE || i18nSkipped(root)) return;
+    translateAttrs(root);
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT, {
+        acceptNode: n => {
+            if (n.nodeType === Node.ELEMENT_NODE) {
+                return I18N_SKIP[n.tagName] || n.hasAttribute('data-i18n-skip')
+                    ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_SKIP;
+            }
+            return NodeFilter.FILTER_ACCEPT;
+        },
+    });
+    for (let n = walker.nextNode(); n; n = walker.nextNode()) translateTextNode(n);
+    root.querySelectorAll('[placeholder], [title], [aria-label]').forEach(el => {
+        if (!i18nSkipped(el)) translateAttrs(el);
+    });
+}
+
+function initI18n() {
+    I18N.lang = currentLang();
+    document.documentElement.lang = I18N.lang;
+    if (I18N.lang === 'en') return;
+
+    const s = document.createElement('script');
+    s.src = 'i18n/' + I18N.lang + '.js';
+    s.onload = () => {
+        const dict = (window.LOCALUTIL_I18N || {})[I18N.lang];
+        if (!dict) return;
+        I18N.dict = dict;
+        translateTree(document.body);
+        // Re-translate whatever page scripts render or update later.
+        new MutationObserver(muts => {
+            muts.forEach(m => {
+                if (m.type === 'childList') m.addedNodes.forEach(n => translateTree(n));
+                else if (m.type === 'characterData') {
+                    const p = m.target.parentElement;
+                    if (p && !i18nSkipped(p)) translateTextNode(m.target);
+                } else if (m.type === 'attributes' && !i18nSkipped(m.target)) translateAttrs(m.target);
+            });
+        }).observe(document.body, {
+            childList: true, subtree: true, characterData: true,
+            attributes: true, attributeFilter: I18N_ATTRS,
+        });
+    };
+    document.head.appendChild(s);
+}
+
 document.addEventListener('DOMContentLoaded', () => {
+    initI18n();
     renderSidebar();
     renderHeaderChrome();
     renderHeaderTitle();
@@ -232,6 +341,26 @@ function renderHeaderChrome() {
     ghLink.title = 'Star or fork LocalUtil on GitHub';
     ghLink.innerHTML = svg('github', 16) + '<span>Star on GitHub</span>' + svg('star', 14);
     actions.appendChild(ghLink);
+
+    const langSel = document.createElement('select');
+    langSel.className = 'lang-select';
+    langSel.id = 'lang-select';
+    langSel.title = 'Language';
+    langSel.setAttribute('aria-label', 'Language');
+    // Option labels are each language's own name — never translated.
+    langSel.setAttribute('data-i18n-skip', '');
+    LANGS.forEach(l => {
+        const o = document.createElement('option');
+        o.value = l.code;
+        o.textContent = l.label;
+        if (l.code === I18N.lang) o.selected = true;
+        langSel.appendChild(o);
+    });
+    langSel.addEventListener('change', () => {
+        localStorage.setItem('localutil-lang', langSel.value);
+        location.reload();
+    });
+    actions.appendChild(langSel);
 
     const themeBtn = document.createElement('button');
     themeBtn.className = 'btn-icon';
@@ -365,7 +494,8 @@ function initSearch() {
         document.querySelectorAll('.nav-group').forEach(group => {
             let groupVisible = false;
             group.querySelectorAll('.nav-item').forEach(item => {
-                const match = !val || item.getAttribute('data-name').includes(val);
+                const match = !val || item.getAttribute('data-name').includes(val) ||
+                    item.textContent.toLowerCase().includes(val);
                 item.style.display = match ? '' : 'none';
                 if (match) groupVisible = true;
             });
