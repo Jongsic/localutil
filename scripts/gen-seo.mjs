@@ -81,8 +81,8 @@ const SEO = {
         desc: 'Extract the public key from an SSH private key and convert between OpenSSH / PEM and PuTTY .ppk formats. Runs 100% in your browser — keys never leave your machine.',
     },
     'keystore.html': {
-        title: 'Java / Android Keystore Inspector',
-        desc: 'Read a Java or Android keystore (.jks / .keystore): aliases, certificates, and SHA-1 / SHA-256 signing fingerprints. Runs 100% in your browser — keystores never leave your machine.',
+        title: 'Keystore & Certificate Inspector (JKS / P12 / CRT / CSR)',
+        desc: 'Read a Java or Android keystore (.jks / .p12) or a certificate file (.crt / .pem / .der / .csr / .p7b): subject, SAN, and SHA-1 / SHA-256 fingerprints with and without colons. Runs 100% in your browser.',
     },
     'password.html': {
         title: 'Password Generator',

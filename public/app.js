@@ -75,7 +75,7 @@ const TOOLS = [
     { file: 'jwt.html', name: 'JWT Decode', desc: 'Decode and inspect JSON Web Tokens', icon: 'jwt', cat: 'Crypto & Auth' },
     { file: 'gpg.html', name: 'GPG Key Inspector', desc: 'Inspect GPG / PGP key details', icon: 'gpg', cat: 'Crypto & Auth' },
     { file: 'ssh-key.html', name: 'SSH Key Converter', desc: 'Extract public keys and convert between PEM and PuTTY .ppk', icon: 'key', cat: 'Crypto & Auth' },
-    { file: 'keystore.html', name: 'Keystore Inspector', desc: 'Read Android / Java keystore contents and signing SHA-1 / SHA-256 fingerprints', icon: 'keystore', cat: 'Crypto & Auth' },
+    { file: 'keystore.html', name: 'Keystore Inspector', desc: 'Read keystores, certificates (CRT / PEM / DER), and CSRs — SHA-1 / SHA-256 fingerprints', icon: 'keystore', cat: 'Crypto & Auth' },
     { file: 'password.html', name: 'Password Generator', desc: 'Create strong, random passwords', icon: 'password', cat: 'Crypto & Auth' },
     { file: 'hash.html', name: 'Hash & HMAC', desc: 'MD5, SHA & HMAC digests computed locally', icon: 'hash', cat: 'Crypto & Auth' },
     { file: 'totp.html', name: 'TOTP Generator', desc: 'Generate 2FA codes from a TOTP secret', icon: 'totp', cat: 'Crypto & Auth' },
