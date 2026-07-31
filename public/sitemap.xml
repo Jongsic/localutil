@@ -11,6 +11,11 @@
     <priority>0.8</priority>
   </url>
   <url>
+    <loc>https://jongsic.github.io/localutil/cidr.html</loc>
+    <lastmod>2026-07-31</lastmod>
+    <priority>0.8</priority>
+  </url>
+  <url>
     <loc>https://jongsic.github.io/localutil/cron.html</loc>
     <lastmod>2026-07-20</lastmod>
     <priority>0.8</priority>

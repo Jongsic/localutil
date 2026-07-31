@@ -12,7 +12,7 @@ A collection of small, self-contained developer utilities that run entirely in t
 - **Formatting** — JS Beautifier, JS Minify, Markdown Preview, JSON Formatter, CSV ⇄ Markdown
 - **Crypto & Auth** — JWT Decode, GPG Key Inspector, Password Generator, Hash & HMAC, TOTP Generator, Passkey Debugger
 - **Web3** — Ethereum ABI, HD Wallet Deriver
-- **Utilities** — Epoch Converter, QR Generator, QR Reader, ICO Converter, GIF Studio, Image Resizer, SVG to Image, Diff/Compare, Regex Tester, Cron Parser, Telegram Bot Logger, SEO Checker
+- **Utilities** — Epoch Converter, CIDR Calculator, QR Generator, QR Reader, ICO Converter, GIF Studio, Image Resizer, SVG to Image, Diff/Compare, Regex Tester, Cron Parser, Telegram Bot Logger, SEO Checker
 
 ## How it works
 

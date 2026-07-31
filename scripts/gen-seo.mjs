@@ -148,6 +148,10 @@ const SEO = {
         title: 'Cron Expression Parser',
         desc: `Explain a cron expression in plain English and preview its next run times. ${LOCAL}`,
     },
+    'cidr.html': {
+        title: 'CIDR Calculator (IPv4 / IPv6 Subnet)',
+        desc: `Calculate network, broadcast, host range, netmask and wildcard from a CIDR — with adjacent blocks, subnet splitting, IP membership check, and IP range to CIDR. ${LOCAL}`,
+    },
     'seo-check.html': {
         title: 'SEO Meta Tag Checker',
         desc: 'Audit title, description, canonical, robots, Open Graph, and JSON-LD from a page URL or pasted HTML — with search and social previews. Runs in your browser.',
