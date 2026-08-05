@@ -327,6 +327,7 @@
                                         <label for="cd-dec-data">Calldata / event data</label>
                                         <textarea id="cd-dec-data" rows="4" class="mono"
                                             placeholder="0xa9059cbb… (function calldata)&#10;or the log's data hex when decoding an event"></textarea>
+                                        <div class="field-hint"><code>0x</code> prefix is optional, and whitespace or line breaks are ignored.</div>
                                     </div>
                                     <div class="field-group mt-2">
                                         <label for="cd-dec-topics">Topics (event logs only)</label>
@@ -546,15 +547,43 @@
                         item.appendChild(row);
                     }
 
+                    if (entry.decoded) {
+                        if (entry.input) {
+                            const t = document.createElement('div');
+                            t.className = 'cd-log-block-title';
+                            t.textContent = entry.decoded.type === 'event' ? 'Input log (topics + data)' : 'Input calldata';
+                            item.appendChild(t);
+                            const row = document.createElement('div');
+                            row.className = 'cd-log-data';
+                            row.appendChild(hexBlock(entry.input, entry.decoded.type === 'event' ? 0 : 4));
+                            row.appendChild(copyBtn(entry.input));
+                            item.appendChild(row);
+                        }
+                        const t = document.createElement('div');
+                        t.className = 'cd-log-block-title';
+                        t.textContent = entry.decoded.type === 'event' ? 'Decoded event log' : 'Decoded function call';
+                        item.appendChild(t);
+                        const row = document.createElement('div');
+                        row.className = 'cd-log-data';
+                        const json = JSON.stringify(entry.decoded, null, 2);
+                        row.appendChild(hexBlock(json, 0));
+                        row.appendChild(copyBtn(json, 'Copy'));
+                        item.appendChild(row);
+                    }
+
                     logEl.appendChild(item);
                 });
             }
 
-            function addLog(sig, argSummaries, calldata, event) {
-                logs.unshift({ sig, args: argSummaries, calldata, event, time: new Date().toLocaleTimeString() });
+            function pushLog(entry) {
+                logs.unshift(Object.assign({ time: new Date().toLocaleTimeString() }, entry));
                 if (logs.length > MAX_LOG) logs.length = MAX_LOG;
                 saveLogs();
                 renderLogs();
+            }
+
+            function addLog(sig, argSummaries, calldata, event) {
+                pushLog({ sig, args: argSummaries, calldata, event });
             }
 
             document.getElementById('btn-cd-clear-log').addEventListener('click', () => {
@@ -871,18 +900,32 @@
                 return out;
             }
 
+            // Accepts hex with or without a 0x prefix, any case, and any internal
+            // whitespace or newlines (block explorers wrap long calldata).
+            function normalizeHex(raw, label) {
+                const v = String(raw == null ? '' : raw).replace(/\s+/g, '');
+                if (!v) return '0x';
+                const body = /^0[xX]/.test(v) ? v.slice(2) : v;
+                if (!/^[0-9a-fA-F]*$/.test(body)) throw new Error(label + ' is not valid hex.');
+                if (body.length % 2) throw new Error(label + ' has an odd number of hex digits — each byte needs two.');
+                return '0x' + body.toLowerCase();
+            }
+
             function parseTopics(raw) {
                 const v = raw.trim();
                 if (!v) return null;
+                let list = null;
                 try {
                     const arr = JSON.parse(v);
-                    if (Array.isArray(arr)) return arr.map(String);
+                    if (Array.isArray(arr)) list = arr.map(String);
                 } catch (e) { /* fall through to line/space splitting */ }
-                return v.split(/[\s,]+/).map(s => s.replace(/^["']|["'],?$/g, '')).filter(Boolean);
+                if (!list) list = v.split(/[\s,]+/).map(s => s.replace(/^["']|["'],?$/g, '')).filter(Boolean);
+                list = list.map((t, i) => normalizeHex(t, 'Topic ' + i));
+                return list.length ? list : null;
             }
 
-            function findMember(kind) {
-                return members.find(m => m.kind === kind) || null;
+            function membersOfKind(kind) {
+                return members.filter(m => m.kind === kind);
             }
 
             function decode() {
@@ -890,56 +933,85 @@
                 decodeNote.style.display = 'none';
                 decodedGroup.style.display = 'none';
 
-                const data = decData.value.trim() || '0x';
-                const topics = parseTopics(decTopics.value);
-
                 try {
-                    let result;
+                    const data = normalizeHex(decData.value, 'Calldata / event data');
+                    const topics = parseTopics(decTopics.value);
+
+                    let result, logInput;
                     if (topics) {
                         // ---- event log decode ----
+                        const evs = membersOfKind('event');
+                        if (!evs.length) throw new Error('No event definition — provide an event signature or an ABI containing this event.');
+
                         let frag = null;
                         let note = '';
                         if (abiIface) {
-                            let found = null;
-                            try { found = abiIface.getEvent(topics[0]); } catch (e) { /* not in this ABI */ }
-                            if (found) { frag = found; note = 'Matched event ' + found.format('sighash') + ' from the ABI by topic0.'; }
+                            try { frag = abiIface.getEvent(topics[0]); } catch (e) { frag = null; }
                         }
-                        if (!frag) { const m = findMember('event'); frag = m && m.frag; }
-                        if (!frag) throw new Error('No event definition — provide an event signature or an ABI containing this event.');
-                        if (frag.topicHash !== topics[0]) {
-                            note = 'Warning: topic0 (' + topics[0].slice(0, 12) + '…) does not match this event (' + frag.topicHash.slice(0, 12) + '…). Decoding anyway.';
-                            const decoded = new ethers.Interface([frag]).decodeEventLog(frag, data, [frag.topicHash, ...topics.slice(1)]);
-                            result = { type: 'event', name: frag.name, signature: frag.format('sighash'), topic0: frag.topicHash, args: namedArgs(frag, decoded) };
+                        if (!frag) {
+                            const hit = evs.find(m => m.frag.topicHash === topics[0]);
+                            if (hit) frag = hit.frag;
+                        }
+                        let logTopics = topics;
+                        if (frag) {
+                            note = 'Matched event ' + frag.format('sighash') + ' by topic0 ' + topics[0].slice(0, 12) + '….';
+                        } else if (evs.length === 1) {
+                            frag = evs[0].frag;
+                            note = 'Warning: topic0 ' + topics[0].slice(0, 12) + '… does not match ' + frag.format('sighash')
+                                + ' (' + frag.topicHash.slice(0, 12) + '…). Decoding the remaining topics and data as its arguments anyway.';
+                            logTopics = [frag.topicHash, ...topics.slice(1)];
                         } else {
-                            const decoded = new ethers.Interface([frag]).decodeEventLog(frag, data, topics);
-                            result = { type: 'event', name: frag.name, signature: frag.format('sighash'), topic0: frag.topicHash, args: namedArgs(frag, decoded) };
+                            throw new Error('topic0 ' + topics[0] + ' does not match any of the ' + evs.length
+                                + ' events defined above. Check the ABI, or paste only the event you meant.');
                         }
+                        const decoded = new ethers.Interface([frag]).decodeEventLog(frag, data, logTopics);
+                        result = { type: 'event', name: frag.name, signature: frag.format('sighash'), topic0: frag.topicHash, args: namedArgs(frag, decoded) };
+                        logInput = JSON.stringify({ topics, data }, null, 2);
                         if (note) { decodeNote.textContent = note; decodeNote.style.display = 'block'; }
                     } else {
                         // ---- function calldata decode ----
-                        if (!data || data === '0x') throw new Error('Paste the calldata to decode.');
+                        if (data === '0x') throw new Error('Paste the calldata to decode.');
+                        if (data.length < 10) throw new Error('Calldata must start with a 4-byte function selector.');
+                        const fns = membersOfKind('function');
+                        if (!fns.length) throw new Error('No function definition — provide a function signature or an ABI containing this function.');
+
                         const selector = data.slice(0, 10);
                         let frag = null;
                         let note = '';
                         if (abiIface) {
-                            let found = null;
-                            try { found = abiIface.getFunction(selector); } catch (e) { /* not in this ABI */ }
-                            if (found) { frag = found; note = 'Matched function ' + found.format('sighash') + ' from the ABI by selector.'; }
+                            try { frag = abiIface.getFunction(selector); } catch (e) { frag = null; }
                         }
-                        if (!frag) { const m = findMember('function'); frag = m && m.frag; }
-                        if (!frag) throw new Error('No function definition — provide a function signature or an ABI containing this function.');
+                        if (!frag) {
+                            const hit = fns.find(m => m.frag.selector === selector);
+                            if (hit) frag = hit.frag;
+                        }
                         let payload = data;
-                        if (frag.selector !== selector) {
-                            note = 'Warning: selector ' + selector + ' does not match this function (' + frag.selector + '). Decoding anyway.';
+                        if (frag) {
+                            note = 'Matched function ' + frag.format('sighash') + ' by selector ' + selector + '.';
+                        } else if (fns.length === 1) {
+                            frag = fns[0].frag;
+                            note = 'Warning: selector ' + selector + ' does not match ' + frag.format('sighash')
+                                + ' (' + frag.selector + '). Decoding the remaining bytes as its arguments anyway.';
                             payload = frag.selector + data.slice(10);
+                        } else {
+                            throw new Error('Selector ' + selector + ' does not match any of the ' + fns.length
+                                + ' functions defined above. Check the ABI, or paste only the function you meant.');
                         }
                         const decoded = new ethers.Interface([frag]).decodeFunctionData(frag, payload);
                         result = { type: 'function', name: frag.name, signature: frag.format('sighash'), selector: frag.selector, args: namedArgs(frag, decoded) };
+                        logInput = data;
                         if (note) { decodeNote.textContent = note; decodeNote.style.display = 'block'; }
                     }
 
                     decodedEl.textContent = JSON.stringify(result, null, 2);
                     decodedGroup.style.display = '';
+                    pushLog({
+                        sig: result.signature,
+                        args: Object.entries(result.args).map(([k, v]) =>
+                            k + '=' + (v !== null && typeof v === 'object' ? JSON.stringify(v) : String(v))),
+                        decoded: result,
+                        input: logInput
+                    });
                 } catch (e) {
                     decodeError.textContent = 'Decoding failed: ' + ((e && e.shortMessage) || (e && e.message) || e);
                     decodeError.style.display = 'block';

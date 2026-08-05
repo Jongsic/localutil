@@ -140,6 +140,94 @@ test('ABI mode: members list, filter, auto-match on decode', async () => {
     assert.match(await env.page.$eval('#cd-decode-note', e => e.textContent), /Matched function/);
 });
 
+const MULTI_ABI = [
+    'function transfer(address to, uint256 amount) returns (bool)',
+    'function approve(address spender, uint256 amount) returns (bool)',
+    'function balanceOf(address owner) view returns (uint256)',
+    'event Transfer(address indexed from, address indexed to, uint256 value)',
+    'event Approval(address indexed owner, address indexed spender, uint256 value)',
+].join('\n');
+
+async function abiPage(abi = MULTI_ABI) {
+    await freshPage();
+    await env.page.click('#cd-def-mode button[data-mode="abi"]');
+    await env.page.fill('#cd-abi', abi);
+    await env.page.waitForSelector('.cd-member');
+}
+
+test('decode: 0x prefix and whitespace are optional, and the result is logged', async () => {
+    await abiPage();
+    const calldata = await env.page.evaluate(([a]) =>
+        new ethers.Interface(['function approve(address,uint256)'])
+            .encodeFunctionData('approve', [a, '12345']), [ADDR_A]);
+
+    // paste as copied off a block explorer: no 0x, wrapped across lines
+    await env.page.fill('#cd-dec-data', calldata.slice(2).replace(/(.{40})/g, '$1\n'));
+    await env.page.click('#btn-cd-decode');
+    await env.page.waitForSelector('#cd-decoded-group', { state: 'visible' });
+
+    const decoded = JSON.parse(await env.page.$eval('#cd-decoded', e => e.textContent));
+    assert.equal(decoded.name, 'approve', 'must match by selector, not fall back to the first function');
+    assert.equal(decoded.selector, '0x095ea7b3');
+    assert.equal(decoded.args.spender, ADDR_A);
+    assert.equal(decoded.args.amount, '12345');
+    assert.match(await env.page.$eval('#cd-decode-note', e => e.textContent), /Matched function approve/);
+
+    // …and it lands in the Generated log, input + decoded JSON
+    const titles = await env.page.$$eval('.cd-log-item:first-child .cd-log-block-title', els => els.map(e => e.textContent));
+    assert.deepEqual(titles, ['Input calldata', 'Decoded function call']);
+    const hexes = await env.page.$$eval('.cd-log-item:first-child .cd-log-hex', els => els.map(e => e.textContent));
+    assert.equal(hexes[0], calldata, 'input is normalized back to 0x-prefixed hex');
+    assert.deepEqual(JSON.parse(hexes[1]), decoded);
+});
+
+test('decode: event topics without 0x match by topic0, and log as an event', async () => {
+    await abiPage();
+    const log = await env.page.evaluate(([a, b]) =>
+        new ethers.Interface(['event Approval(address indexed owner, address indexed spender, uint256 value)'])
+            .encodeEventLog('Approval', [a, b, 999n]), [ADDR_A, ADDR_B]);
+
+    await env.page.fill('#cd-dec-data', log.data.slice(2));
+    await env.page.fill('#cd-dec-topics', log.topics.map(t => t.slice(2)).join('\n'));
+    await env.page.click('#btn-cd-decode');
+    await env.page.waitForSelector('#cd-decoded-group', { state: 'visible' });
+
+    const decoded = JSON.parse(await env.page.$eval('#cd-decoded', e => e.textContent));
+    assert.equal(decoded.name, 'Approval', 'must match by topic0, not fall back to the first event');
+    assert.equal(decoded.args.owner, ADDR_A);
+    assert.equal(decoded.args.spender, ADDR_B);
+    assert.equal(decoded.args.value, '999');
+
+    const titles = await env.page.$$eval('.cd-log-item:first-child .cd-log-block-title', els => els.map(e => e.textContent));
+    assert.deepEqual(titles, ['Input log (topics + data)', 'Decoded event log']);
+});
+
+test('decode: unmatched selector/topic0 in a multi-member ABI errors instead of guessing', async () => {
+    await abiPage();
+
+    await env.page.fill('#cd-dec-data', '0xdeadbeef' + '11'.repeat(64));
+    await env.page.click('#btn-cd-decode');
+    assert.match(await env.page.$eval('#cd-decode-error', e => e.textContent),
+        /0xdeadbeef does not match any of the 3 functions/);
+    assert.equal(await env.page.$eval('#cd-decoded-group', e => e.style.display), 'none');
+    assert.equal(await env.page.$$eval('.cd-log-item', els => els.length), 0, 'a failed decode must not be logged');
+
+    await env.page.fill('#cd-dec-data', '0x' + '00'.repeat(32));
+    await env.page.fill('#cd-dec-topics', '0x' + 'ab'.repeat(32));
+    await env.page.click('#btn-cd-decode');
+    assert.match(await env.page.$eval('#cd-decode-error', e => e.textContent),
+        /does not match any of the 2 events/);
+
+    // malformed hex is reported as such
+    await env.page.fill('#cd-dec-topics', '');
+    await env.page.fill('#cd-dec-data', '0xa9059cb');
+    await env.page.click('#btn-cd-decode');
+    assert.match(await env.page.$eval('#cd-decode-error', e => e.textContent), /odd number of hex digits/);
+    await env.page.fill('#cd-dec-data', 'nothexatall');
+    await env.page.click('#btn-cd-decode');
+    assert.match(await env.page.$eval('#cd-decode-error', e => e.textContent), /not valid hex/);
+});
+
 test('well-known ABI picker: fills the editor, includes permit/safe/uniswap', async () => {
     await freshPage();
     await env.page.click('#cd-def-mode button[data-mode="abi"]');
