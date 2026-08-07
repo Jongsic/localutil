@@ -394,51 +394,23 @@
 
     <div id="toast" class="toast">Copied to clipboard</div>
     <script src="app.js"></script>
+    <script src="webauthn-core.js"></script>
     <script>
         (() => {
             'use strict';
 
             /* ============================================================
-               utils — base64url / hex / bytes
+               WebAuthn primitives — base64url/hex, CBOR, authData, COSE and
+               signature verification all live in webauthn-core.js so this page
+               and sign.html share one implementation.
                ============================================================ */
-            function bytesOf(buf) { return buf instanceof Uint8Array ? buf : new Uint8Array(buf); }
-
-            function b64urlEncode(buf) {
-                const b = bytesOf(buf);
-                let s = '';
-                for (let i = 0; i < b.length; i += 0x4000) s += String.fromCharCode.apply(null, b.subarray(i, i + 0x4000));
-                return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-            }
-
-            function b64urlDecode(str) {
-                let s = String(str).trim().replace(/-/g, '+').replace(/_/g, '/');
-                if (/[^A-Za-z0-9+/=]/.test(s)) throw new Error('not valid base64url');
-                while (s.length % 4) s += '=';
-                const bin = atob(s);
-                const out = new Uint8Array(bin.length);
-                for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
-                return out;
-            }
-
-            function toHex(buf) { return Array.from(bytesOf(buf), b => b.toString(16).padStart(2, '0')).join(''); }
-            function fromHex(str) {
-                const s = str.replace(/\s+/g, '');
-                if (!/^[0-9a-fA-F]*$/.test(s) || s.length % 2) throw new Error('not valid hex');
-                const out = new Uint8Array(s.length / 2);
-                for (let i = 0; i < out.length; i++) out[i] = parseInt(s.substr(i * 2, 2), 16);
-                return out;
-            }
-
-            function bytesEqual(a, b) {
-                a = bytesOf(a); b = bytesOf(b);
-                if (a.length !== b.length) return false;
-                let diff = 0;
-                for (let i = 0; i < a.length; i++) diff |= a[i] ^ b[i];
-                return diff === 0;
-            }
-
-            function randomBytes(n) { return crypto.getRandomValues(new Uint8Array(n)); }
-            async function sha256(buf) { return new Uint8Array(await crypto.subtle.digest('SHA-256', bytesOf(buf))); }
+            const {
+                bytesOf, b64urlEncode, b64urlDecode, toHex, fromHex, bytesEqual,
+                randomBytes, sha256,
+                cborDecode, parseAuthenticatorData,
+                algName, coseToJwk, importParamsFor, jwkToPem,
+                derToP1363, verifyAssertionSignature,
+            } = window.LocalUtilWebAuthn;
 
             function uuidFormat(bytes) {
                 const h = toHex(bytes);
@@ -470,67 +442,6 @@
                 ).join(',\n') + '\n' + ind + '}';
             }
 
-            /* ============================================================
-               cbor — minimal decoder (definite-length only; enough for
-               attestationObject / COSE keys / authData extensions)
-               ============================================================ */
-            function cborItem(bytes, offset) {
-                if (offset >= bytes.length) throw new Error('CBOR: unexpected end of data');
-                const ib = bytes[offset];
-                const major = ib >> 5;
-                const info = ib & 0x1f;
-                let len, off = offset + 1;
-
-                if (info < 24) len = info;
-                else if (info === 24) { len = bytes[off]; off += 1; }
-                else if (info === 25) { len = (bytes[off] << 8) | bytes[off + 1]; off += 2; }
-                else if (info === 26) { len = (bytes[off] * 0x1000000) + (bytes[off + 1] << 16 | bytes[off + 2] << 8 | bytes[off + 3]); off += 4; }
-                else if (info === 27) throw new Error('CBOR: 64-bit lengths not supported');
-                else if (info === 31) throw new Error('CBOR: indefinite length not supported');
-                else throw new Error('CBOR: reserved length encoding');
-
-                switch (major) {
-                    case 0: return [len, off];                       // unsigned int
-                    case 1: return [-1 - len, off];                  // negative int
-                    case 2: {                                        // byte string
-                        if (off + len > bytes.length) throw new Error('CBOR: byte string overruns data');
-                        return [bytes.slice(off, off + len), off + len];
-                    }
-                    case 3: {                                        // text string
-                        if (off + len > bytes.length) throw new Error('CBOR: text string overruns data');
-                        return [new TextDecoder().decode(bytes.slice(off, off + len)), off + len];
-                    }
-                    case 4: {                                        // array
-                        const arr = [];
-                        for (let i = 0; i < len; i++) { const [v, next] = cborItem(bytes, off); arr.push(v); off = next; }
-                        return [arr, off];
-                    }
-                    case 5: {                                        // map
-                        const map = new Map();
-                        for (let i = 0; i < len; i++) {
-                            const [k, koff] = cborItem(bytes, off);
-                            const [v, voff] = cborItem(bytes, koff);
-                            map.set(k, v); off = voff;
-                        }
-                        return [map, off];
-                    }
-                    case 6: return cborItem(bytes, off);             // tag: unwrap
-                    case 7: {                                        // simple values
-                        if (info === 20) return [false, off];
-                        if (info === 21) return [true, off];
-                        if (info === 22) return [null, off];
-                        throw new Error('CBOR: floats / simple value ' + info + ' not supported');
-                    }
-                }
-                throw new Error('CBOR: unreachable');
-            }
-
-            function cborDecode(bytes) {
-                const [value, end] = cborItem(bytesOf(bytes), 0);
-                if (end !== bytes.length) throw new Error('CBOR: ' + (bytes.length - end) + ' trailing bytes');
-                return value;
-            }
-
             // Render a decoded CBOR value (Maps, bytes) as display-friendly JSON.
             function cborToDisplay(v) {
                 if (v instanceof Map) {
@@ -541,127 +452,6 @@
                 if (v instanceof Uint8Array) return 'b64url:' + b64urlEncode(v);
                 if (Array.isArray(v)) return v.map(cborToDisplay);
                 return v;
-            }
-
-            /* ============================================================
-               authData — binary layout parser
-               ============================================================ */
-            function parseAuthenticatorData(bytes) {
-                bytes = bytesOf(bytes);
-                if (bytes.length < 37) throw new Error('authenticatorData must be at least 37 bytes (got ' + bytes.length + ')');
-                const flagsByte = bytes[32];
-                const flags = {
-                    up: !!(flagsByte & 0x01), uv: !!(flagsByte & 0x04),
-                    be: !!(flagsByte & 0x08), bs: !!(flagsByte & 0x10),
-                    at: !!(flagsByte & 0x40), ed: !!(flagsByte & 0x80),
-                };
-                const out = {
-                    rpIdHash: bytes.slice(0, 32),
-                    flagsByte, flags,
-                    signCount: new DataView(bytes.buffer, bytes.byteOffset + 33, 4).getUint32(0),
-                };
-                let off = 37;
-                if (flags.at) {
-                    if (bytes.length < off + 18) throw new Error('authenticatorData: attested credential data truncated');
-                    out.aaguid = bytes.slice(off, off + 16);
-                    const idLen = (bytes[off + 16] << 8) | bytes[off + 17];
-                    off += 18;
-                    if (bytes.length < off + idLen) throw new Error('authenticatorData: credential ID truncated');
-                    out.credentialId = bytes.slice(off, off + idLen);
-                    off += idLen;
-                    const [coseKey, next] = cborItem(bytes, off);
-                    out.cosePublicKey = coseKey;
-                    off = next;
-                }
-                if (flags.ed) {
-                    const [ext, next] = cborItem(bytes, off);
-                    out.extensions = ext;
-                    off = next;
-                }
-                return out;
-            }
-
-            /* ============================================================
-               cose — COSE key → JWK / algorithm names
-               ============================================================ */
-            const ALG_NAMES = { '-7': 'ES256', '-8': 'EdDSA', '-257': 'RS256' };
-            function algName(alg) { return ALG_NAMES[String(alg)] || ('COSE alg ' + alg); }
-
-            function coseToJwk(cose) {
-                if (!(cose instanceof Map)) throw new Error('COSE key must be a CBOR map');
-                const kty = cose.get(1), alg = cose.get(3);
-                if (kty === 2) { // EC2
-                    const crv = cose.get(-1);
-                    if (crv !== 1) throw new Error('unsupported EC curve (COSE crv ' + crv + ')');
-                    return { jwk: { kty: 'EC', crv: 'P-256', x: b64urlEncode(cose.get(-2)), y: b64urlEncode(cose.get(-3)) }, kty: 'EC2', crv: 'P-256', alg };
-                }
-                if (kty === 3) { // RSA
-                    return { jwk: { kty: 'RSA', n: b64urlEncode(cose.get(-1)), e: b64urlEncode(cose.get(-2)) }, kty: 'RSA', crv: null, alg };
-                }
-                if (kty === 1) { // OKP
-                    const crv = cose.get(-1);
-                    if (crv !== 6) throw new Error('unsupported OKP curve (COSE crv ' + crv + ')');
-                    return { jwk: { kty: 'OKP', crv: 'Ed25519', x: b64urlEncode(cose.get(-2)) }, kty: 'OKP', crv: 'Ed25519', alg };
-                }
-                throw new Error('unsupported COSE key type ' + kty);
-            }
-
-            function importParamsFor(jwk, alg) {
-                if (jwk.kty === 'EC') return { imp: { name: 'ECDSA', namedCurve: 'P-256' }, ver: { name: 'ECDSA', hash: 'SHA-256' } };
-                if (jwk.kty === 'RSA') return { imp: { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' }, ver: { name: 'RSASSA-PKCS1-v1_5' } };
-                if (jwk.kty === 'OKP') return { imp: { name: 'Ed25519' }, ver: { name: 'Ed25519' } };
-                throw new Error('unsupported key type ' + jwk.kty);
-            }
-
-            async function jwkToPem(jwk) {
-                const { imp } = importParamsFor(jwk);
-                const key = await crypto.subtle.importKey('jwk', jwk, imp, true, ['verify']);
-                const spki = new Uint8Array(await crypto.subtle.exportKey('spki', key));
-                let b64 = btoa(String.fromCharCode.apply(null, spki));
-                let pem = '-----BEGIN PUBLIC KEY-----\n';
-                for (let i = 0; i < b64.length; i += 64) pem += b64.slice(i, i + 64) + '\n';
-                return pem + '-----END PUBLIC KEY-----';
-            }
-
-            /* ============================================================
-               verify — DER→P1363 + WebCrypto signature check
-               ============================================================ */
-            function derToP1363(der, size) {
-                der = bytesOf(der); size = size || 32;
-                let off = 0;
-                if (der[off++] !== 0x30) throw new Error('DER: expected SEQUENCE');
-                if (der[off] & 0x80) off += 1 + (der[off] & 0x7f); else off += 1; // sequence length
-                function readInt() {
-                    if (der[off++] !== 0x02) throw new Error('DER: expected INTEGER');
-                    let len = der[off++];
-                    if (len & 0x80) { const n = len & 0x7f; len = 0; for (let i = 0; i < n; i++) len = (len << 8) | der[off++]; }
-                    let v = der.slice(off, off + len); off += len;
-                    while (v.length > 1 && v[0] === 0x00) v = v.slice(1); // strip sign padding
-                    if (v.length > size) throw new Error('DER: integer larger than curve size');
-                    const out = new Uint8Array(size);
-                    out.set(v, size - v.length);
-                    return out;
-                }
-                const r = readInt(), s = readInt();
-                const sig = new Uint8Array(size * 2);
-                sig.set(r, 0); sig.set(s, size);
-                return sig;
-            }
-
-            async function verifyAssertionSignature(jwk, authData, clientDataJSON, signature) {
-                const { imp, ver } = importParamsFor(jwk);
-                let key;
-                try {
-                    key = await crypto.subtle.importKey('jwk', jwk, imp, false, ['verify']);
-                } catch (e) {
-                    return { supported: false, valid: false, reason: (jwk.kty === 'OKP' ? 'Ed25519 not supported by this browser’s WebCrypto' : e.message) };
-                }
-                const clientHash = await sha256(clientDataJSON);
-                const signed = new Uint8Array(authData.length + 32);
-                signed.set(bytesOf(authData), 0); signed.set(clientHash, authData.length);
-                const sig = jwk.kty === 'EC' ? derToP1363(signature, 32) : bytesOf(signature);
-                const valid = await crypto.subtle.verify(ver, key, sig, signed);
-                return { supported: true, valid };
             }
 
             /* ============================================================
