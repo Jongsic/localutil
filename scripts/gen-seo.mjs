@@ -100,6 +100,14 @@ const SEO = {
         title: 'Passkey / WebAuthn Debugger & Tester',
         desc: 'Create and test WebAuthn passkeys against a simulated local server: decode authenticatorData, CBOR and COSE keys, and verify signatures step by step. Runs 100% in your browser — credentials never leave your machine.',
     },
+    'encrypt.html': {
+        title: 'Encrypt / Decrypt Text & Files (Security Key, Password, or Public Key)',
+        desc: `Encrypt and decrypt text or files with AES-256-GCM, keyed by a YubiKey / security key via the WebAuthn PRF extension, a password, a raw 32-byte key, or an RSA / EC key pair. The key is derived from the source you pick, so whatever locks the data is what unlocks it, and the ciphertext comes out separately from the salt / iteration / IV parameters. ${LOCAL}`,
+    },
+    'sign.html': {
+        title: 'Sign & Verify Text with a Security Key or Private Key',
+        desc: `Sign any text with a WebAuthn security key or an EC / RSA / Ed25519 private key, in standard formats only: a compact JWS (RFC 7515) for keys, and the WebAuthn authentication response JSON for security keys. Then verify it check by check — challenge-to-message binding, rpIdHash, authenticator flags and signature. ${LOCAL}`,
+    },
     'hd-wallet.html': {
         title: 'HD Wallet Deriver (BIP-39 Seed Phrase)',
         desc: 'Derive HD wallet accounts from a BIP-39 seed phrase or raw hex root key: addresses, public and private keys. Runs 100% in your browser — keys never leave your machine.',

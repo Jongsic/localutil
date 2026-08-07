@@ -1,0 +1,603 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
+    <title>Encrypt / Decrypt Text &amp; Files (Security Key, Password, or Public Key) — LocalUtil</title>
+    <!-- social / favicon -->
+    <meta name="description" content="Encrypt and decrypt text or files with AES-256-GCM, keyed by a YubiKey / security key via the WebAuthn PRF extension, a password, a raw 32-byte key, or an RSA / EC key pair. The key is derived from the source you pick, so whatever locks the data is what unlocks it, and the ciphertext comes out separately from the salt / iteration / IV parameters. Runs 100% in your browser — nothing is uploaded.">
+    <link rel="canonical" href="https://jongsic.github.io/localutil/encrypt.html">
+    <link rel="icon" href="favicon.ico" sizes="any">
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="LocalUtil">
+    <meta property="og:title" content="Encrypt / Decrypt Text &amp; Files (Security Key, Password, or Public Key) — LocalUtil">
+    <meta property="og:description" content="Encrypt and decrypt text or files with AES-256-GCM, keyed by a YubiKey / security key via the WebAuthn PRF extension, a password, a raw 32-byte key, or an RSA / EC key pair. The key is derived from the source you pick, so whatever locks the data is what unlocks it, and the ciphertext comes out separately from the salt / iteration / IV parameters. Runs 100% in your browser — nothing is uploaded.">
+    <meta property="og:image" content="https://jongsic.github.io/localutil/og.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:url" content="https://jongsic.github.io/localutil/encrypt.html">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:image" content="https://jongsic.github.io/localutil/og.png">
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebApplication","name":"Encrypt / Decrypt Text & Files (Security Key, Password, or Public Key)","url":"https://jongsic.github.io/localutil/encrypt.html","description":"Encrypt and decrypt text or files with AES-256-GCM, keyed by a YubiKey / security key via the WebAuthn PRF extension, a password, a raw 32-byte key, or an RSA / EC key pair. The key is derived from the source you pick, so whatever locks the data is what unlocks it, and the ciphertext comes out separately from the salt / iteration / IV parameters. Runs 100% in your browser — nothing is uploaded.","applicationCategory":"DeveloperApplication","operatingSystem":"Any","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"isPartOf":{"@type":"WebSite","name":"LocalUtil","url":"https://jongsic.github.io/localutil/"}}</script>
+    <!-- /social -->
+    <script src="theme-init.js"></script>
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        /* Source row (“lock with”) */
+        .ks-row {
+            border: 1px solid var(--border-color);
+            border-radius: var(--r-sm);
+            padding: 12px 13px;
+            margin-bottom: 10px;
+            background: var(--bg-subtle);
+        }
+        .ks-row-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+        /* Shrinkable: width:auto sizes a select to its longest option label,
+           which overflows a phone viewport. min-width:0 lets flex shrink it. */
+        .ks-row-head select { flex: 1 1 240px; min-width: 0; max-width: 340px; }
+        .ks-row-head .ks-spacer { flex: 1; }
+        .ks-row-body { margin-top: 10px; }
+        .ks-row-body input[type="password"],
+        .ks-row-body input[type="text"] { width: 100%; }
+        .ks-row-body textarea { width: 100%; min-height: 96px; font-family: var(--font-mono); font-size: 0.8rem; }
+        .ks-row-note { font-size: 0.8rem; color: var(--text-muted); margin-top: 8px; }
+        .ks-row-note.err { color: var(--danger); }
+        .ks-row-note.ok { color: var(--success); }
+
+        /* Badges */
+        .ks-badge {
+            display: inline-block; padding: 2px 8px; border-radius: var(--r-pill);
+            font-size: 0.72rem; font-weight: 700; font-family: var(--font-mono);
+            border: 1px solid var(--border-strong); color: var(--text-faint);
+        }
+        .ks-badge.on { background: var(--primary-soft); border-color: var(--primary); color: var(--primary); }
+        .ks-badge.warn { border-color: var(--warning); color: var(--warning); }
+        .ks-badge.bad { border-color: var(--danger); color: var(--danger); }
+
+        /* Capability notice */
+        .ks-cap { font-size: 0.85rem; line-height: 1.55; }
+        .ks-cap b { color: var(--text-main); }
+        .ks-cap-list { margin: 8px 0 0; padding-left: 18px; color: var(--text-muted); }
+        .ks-cap-list li { margin: 3px 0; }
+
+        /* Drop zone */
+        .ks-drop {
+            border: 1.5px dashed var(--border-strong);
+            border-radius: var(--r-sm);
+            padding: 14px;
+            text-align: center;
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            cursor: pointer;
+        }
+        .ks-drop.over { border-color: var(--primary); color: var(--primary); background: var(--primary-soft); }
+        .ks-file { font-family: var(--font-mono); font-size: 0.8rem; color: var(--text-main); }
+
+        .ks-out { min-height: 64px; white-space: pre-wrap; }
+        .ks-out.placeholder { color: var(--text-faint); font-family: inherit; }
+        textarea.ks-input { width: 100%; min-height: 120px; }
+        textarea.ks-params { width: 100%; min-height: 92px; font-family: var(--font-mono); font-size: 0.8rem; }
+        .ks-params-out { white-space: pre; overflow-x: auto; }
+    </style>
+</head>
+
+<body>
+    <div class="app-container">
+        <aside class="sidebar" id="app-sidebar"></aside>
+
+        <main class="main-content">
+            <header class="topbar" id="app-topbar">
+                <div class="topbar-title">
+                    <h1 id="current-tool-title">Encrypt / Decrypt</h1>
+                    <p id="current-tool-desc" class="topbar-desc">Protect text or files with a security key, a password, a raw key, or a key pair — whatever locks it is what unlocks it</p>
+                </div>
+            </header>
+
+            <div class="tools-container">
+                <section id="tool-encrypt" class="tool-section active">
+                    <div class="tool-shell">
+
+                        <div class="card">
+                            <div class="segmented" id="ec-mode" role="tablist">
+                                <button type="button" data-mode="encrypt" class="active">Encrypt</button>
+                                <button type="button" data-mode="decrypt">Decrypt</button>
+                            </div>
+                            <div class="card-subtitle" style="margin-top:10px;">
+                                AES-256-GCM, keyed by whichever source you choose. Everything happens in this tab —
+                                no plaintext, password, or key ever leaves the page.
+                            </div>
+                        </div>
+
+                        <!-- ============ input ============ -->
+                        <div class="card">
+                            <div class="card-title" style="margin:0;" id="ec-in-title">Plaintext</div>
+                            <div class="card-subtitle" id="ec-in-sub">Type or paste the text to protect, or drop a file.</div>
+                            <textarea class="ks-input" id="ec-input" spellcheck="false" autocomplete="off"
+                                placeholder="Text to encrypt…"></textarea>
+                            <div class="flex-row gap-1 mt-1 items-center">
+                                <div class="ks-drop flex-1" id="ec-drop">Drop a file here, or click to choose one</div>
+                                <button class="btn btn-small" id="ec-clear-file" style="display:none;">Clear file</button>
+                            </div>
+                            <div class="field-hint" id="ec-file-info"></div>
+
+                            <div id="ec-params-in-wrap" style="display:none;" class="mt-2">
+                                <label class="field-hint" for="ec-params-in">Decryption parameters</label>
+                                <textarea class="ks-params" id="ec-params-in" spellcheck="false" autocomplete="off"
+                                    placeholder="kdf=PBKDF2-SHA256&#10;iters=600000&#10;salt=…&#10;iv=…"></textarea>
+                                <div class="field-hint">The values you were given alongside the ciphertext. They are not
+                                    secret, but they are required — and they are authenticated, so an altered line makes
+                                    decryption fail rather than silently produce garbage.</div>
+                            </div>
+                        </div>
+
+                        <!-- ============ sources ============ -->
+                        <div class="card">
+                            <div class="card-title" style="margin:0;" id="ec-src-title">Lock with</div>
+                            <div class="card-subtitle" id="ec-src-sub">
+                                Whatever you lock this with is what unlocks it — there is no second way in, so do not
+                                lose it.
+                            </div>
+                            <div id="ec-rows"></div>
+                        </div>
+
+                        <!-- ============ action + output ============ -->
+                        <div class="card">
+                            <div class="flex-row gap-1 items-center">
+                                <button class="btn btn-primary" id="ec-run">Encrypt</button>
+                                <button class="btn" id="ec-copy">Copy</button>
+                                <button class="btn" id="ec-download">Download</button>
+                                <span class="field-hint" id="ec-status"></span>
+                            </div>
+                            <div class="result-box ks-out placeholder mt-2" id="ec-output">Nothing yet.</div>
+                            <div class="field-hint" id="ec-out-note"></div>
+
+                            <div id="ec-params-out-wrap" style="display:none;" class="mt-2">
+                                <div class="flex-row gap-1 items-center">
+                                    <div class="card-title" style="margin:0;font-size:0.9rem;">Decryption parameters</div>
+                                    <button class="btn btn-small" id="ec-copy-params">Copy parameters</button>
+                                </div>
+                                <div class="field-hint">Keep these with whoever decrypts — separately from the
+                                    ciphertext. Nothing above reveals them.</div>
+                                <div class="result-box ks-params-out mt-1" id="ec-params-out"></div>
+                            </div>
+                        </div>
+
+                        <!-- ============ how it works ============ -->
+                        <div class="card">
+                            <div class="card-title" style="margin:0;">What comes out, and why it is split</div>
+                            <div class="ks-cap">
+                                <p class="card-subtitle" style="margin-top:6px;">
+                                    The ciphertext is nothing but AES-256-GCM output — no header, no marker, nothing that
+                                    says how it was produced. The derivation parameters come out separately, to be agreed
+                                    out of band. They are still authenticated as the GCM additional data, so presenting
+                                    different parameters fails instead of decrypting to garbage.
+                                </p>
+                                <ul class="ks-cap-list">
+                                    <li><b>Security key</b> — WebAuthn PRF (CTAP2 hmac-secret) output → HKDF-SHA-256. Parameters: credential id, salt.
+                                        The credential is created non-discoverable, so it occupies none of the key’s
+                                        credential slots; naming it by id at assertion time is enough.</li>
+                                    <li><b>Password</b> — PBKDF2-HMAC-SHA-256, 600,000 iterations. Parameters: salt, iteration count, so it can be raised later.</li>
+                                    <li><b>Raw key</b> — 32 bytes of hex or base64 → HKDF-SHA-256. Parameters: salt.</li>
+                                    <li><b>Public key</b> — EC (P-256/384/521) uses ephemeral-static ECDH-ES + HKDF, so only an ephemeral
+                                        public key travels. RSA-OAEP-SHA-256 is the one case that cannot agree on a key and
+                                        must carry a wrapped one.</li>
+                                </ul>
+                                <p class="field-hint" style="margin-top:10px;">
+                                    The parameters are the GCM additional data, built in a fixed field order with every
+                                    name and value length-prefixed. Reordering the lines or changing their spacing is
+                                    harmless; changing a <i>value</i> — swapping a salt, lowering the PBKDF2 count — makes
+                                    decryption fail instead of silently weakening the result. Values are bound exactly as
+                                    written, so re-padding a base64 value (<code>AAAA</code> vs <code>AAAA=</code>) also
+                                    fails: pass them through unaltered. File names are never stored.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </div>
+
+    <div id="toast" class="toast">Copied to clipboard!</div>
+
+    <script src="app.js"></script>
+    <script src="webauthn-core.js"></script>
+    <script src="keysource.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const K = window.LocalUtilKeySource;
+            const W = window.LocalUtilWebAuthn;
+            const $ = id => document.getElementById(id);
+            const enc = new TextEncoder(), dec = new TextDecoder();
+
+            let mode = 'encrypt';
+            let fileBytes = null, fileName = '';
+            let lastOutput = null;      // {bytes|text, isText, suggestedName}
+            let lastParams = null;      // the parameters text shown after encrypting
+            let rowSeq = 0;
+
+            /* ---------------- capability text ----------------
+               Reported separately from what the authenticator can actually do:
+               the browser flag says nothing about the key in your hand. */
+            let capability = { webauthn: false, reported: null, webkit: null };
+            K.browserPrfCapability().then(c => { capability = c; renderRows(); });
+
+            function capabilityHtml() {
+                if (!capability.webauthn) {
+                    return '<span class="ks-badge bad">no WebAuthn</span> This browser has no WebAuthn support.';
+                }
+                const wk = capability.webkit;
+                if (wk) {
+                    return '<span class="ks-badge bad">not supported here</span> ' + wk.reason
+                        + ' <b>Use desktop Chrome, Edge, or Firefox 139+ for a security key</b> — or pick '
+                        + 'Password / Raw key / Public key below, which work in every browser.';
+                }
+                const rep = capability.reported;
+                const badge = rep === false
+                    ? '<span class="ks-badge warn">browser reports no PRF</span>'
+                    : '<span class="ks-badge on">PRF available</span>';
+                return badge + ' Browser-level support only — whether your key can do it is confirmed when you '
+                    + 'register, from the authenticator’s own response.';
+            }
+
+            /* ---------------- source rows ---------------- */
+            const SOURCES = [
+                { v: 'webauthn', label: 'Security key (WebAuthn PRF)' },
+                { v: 'password', label: 'Password' },
+                { v: 'rawkey', label: 'Raw key (hex / base64, 32 bytes)' },
+                { v: 'pem', label: 'Public key (PEM)' },
+            ];
+            // One source per container: what locks it is what unlocks it.
+            let rows = [];
+
+            function addRow(type) {
+                rows = [{ id: ++rowSeq, type: type || 'password', password: '', key: '', pem: '', wa: null, note: null, discoverable: false }];
+                renderRows();
+            }
+
+            function rowBodyHtml(r) {
+                if (r.type === 'password') {
+                    // Informational only — nothing here refuses a short password.
+                    const meter = mode === 'encrypt'
+                        ? '<div class="ks-row-note">' + esc(strengthText(r.password)) + '</div>' : '';
+                    return '<label class="field-hint" for="ks-pw-' + r.id + '">Password</label>'
+                        + '<input type="password" id="ks-pw-' + r.id + '" data-f="password" autocomplete="off"'
+                        + ' placeholder="A long passphrase" value="' + esc(r.password) + '">' + meter;
+                }
+                if (r.type === 'rawkey') {
+                    return '<label class="field-hint" for="ks-rk-' + r.id + '">32-byte key</label>'
+                        + '<input type="text" id="ks-rk-' + r.id + '" data-f="key" spellcheck="false" autocomplete="off"'
+                        + ' placeholder="64 hex chars, or base64" value="' + esc(r.key) + '">';
+                }
+                if (r.type === 'pem') {
+                    const forDecrypt = mode === 'decrypt';
+                    return '<label class="field-hint" for="ks-pem-' + r.id + '">'
+                        + (forDecrypt ? 'PRIVATE key (PKCS#8)' : 'PUBLIC key (SPKI)') + '</label>'
+                        + '<textarea id="ks-pem-' + r.id + '" data-f="pem" spellcheck="false" autocomplete="off"'
+                        + ' placeholder="-----BEGIN ' + (forDecrypt ? 'PRIVATE' : 'PUBLIC') + ' KEY-----">'
+                        + esc(r.pem) + '</textarea>'
+                        + '<div class="ks-row-note">RSA → RSA-OAEP. EC P-256/384/521 → ECDH-ES. '
+                        + 'Ed25519 cannot encrypt (no key agreement).</div>';
+                }
+                // webauthn
+                let body = '<div class="ks-cap">' + capabilityHtml() + '</div>';
+                const disabled = (!capability.webauthn || capability.webkit) ? ' disabled' : '';
+                if (r.wa) {
+                    body += '<div class="flex-row gap-1 items-center mt-1">'
+                        + '<span class="ks-badge on ks-badge-mode">'
+                        + (r.wa.mode === 'one-shot' ? 'one-shot' : r.wa.mode === 'two-touch' ? 'two-touch' : 'ready')
+                        + '</span>'
+                        + (r.wa.slot === 'used' ? '<span class="ks-badge warn">uses a key slot</span>'
+                            : r.wa.slot ? '<span class="ks-badge">slot-free</span>' : '')
+                        + '<span class="ks-file">' + esc(r.wa.credIdB64.slice(0, 16)) + '…</span>'
+                        + '<button class="btn btn-small" data-act="wa-forget">Forget</button></div>';
+                } else {
+                    body += '<div class="flex-row gap-1 mt-1">'
+                        + '<button class="btn btn-small btn-primary" data-act="wa-register"' + disabled + '>'
+                        + (mode === 'decrypt' ? 'Use security key' : 'Register security key') + '</button></div>';
+                    if (mode === 'encrypt') {
+                        body += '<div class="option-item mt-1"><input type="checkbox" id="ks-disc-' + r.id + '"'
+                            + ' data-act="disc"' + (r.discoverable ? ' checked' : '') + disabled + '>'
+                            + '<label for="ks-disc-' + r.id + '">Store the credential on the key (uses a slot)</label></div>'
+                            + '<div class="ks-row-note">Off by default: nothing is written to the key, so none of its '
+                            + 'limited credential slots is used. The credential id is one of the decryption parameters, '
+                            + 'which is all an assertion needs. Turn it on only if you want the credential to live on the '
+                            + 'key itself — it does not make decryption any easier.</div>';
+                    }
+                }
+                return body;
+            }
+
+            function renderRows() {
+                const mount = $('ec-rows');
+                mount.innerHTML = '';
+                rows.forEach(r => {
+                    const el = document.createElement('div');
+                    el.className = 'ks-row';
+                    el.dataset.id = r.id;
+                    el.innerHTML =
+                        '<div class="ks-row-head">'
+                        + '<select data-act="type" aria-label="Source type">'
+                        + SOURCES.map(s => '<option value="' + s.v + '"' + (s.v === r.type ? ' selected' : '') + '>'
+                            + s.label + '</option>').join('')
+                        + '</select><span class="ks-spacer"></span>'
+                        + '</div>'
+                        + '<div class="ks-row-body">' + rowBodyHtml(r) + '</div>'
+                        + (r.note ? '<div class="ks-row-note ' + (r.note.kind === 'err' ? 'err'
+                            : r.note.kind === 'ok' ? 'ok' : '') + '">' + esc(r.note.text) + '</div>' : '');
+                    mount.appendChild(el);
+                });
+            }
+
+            // A number, not a verdict: no threshold, no colour, nothing blocked.
+            function strengthText(pw) {
+                if (!pw) return 'PBKDF2-HMAC-SHA-256, 600,000 iterations.';
+                return 'PBKDF2-HMAC-SHA-256, 600,000 iterations · roughly '
+                    + K.passwordStrength(pw).bits + ' bits of entropy in this password.';
+            }
+
+            function esc(s) {
+                return String(s == null ? '' : s)
+                    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+                    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+            }
+
+            // The decryption parameters as typed, or null if they aren't readable
+            // yet. Used to find the credential id before an assertion.
+            function pastedParams() {
+                const text = $('ec-params-in').value;
+                if (!text.trim()) return null;
+                try { return K.paramsFromText(text); } catch (_) { return null; }
+            }
+            function rowOf(el) {
+                const host = el.closest('.ks-row');
+                return rows.find(r => String(r.id) === host.dataset.id);
+            }
+            function setNote(r, kind, text) { r.note = text ? { kind, text } : null; renderRows(); }
+
+            $('ec-rows').addEventListener('input', e => {
+                const f = e.target.dataset.f;
+                if (!f) return;
+                const r = rowOf(e.target);
+                r[f] = e.target.value;
+                // Update the strength note in place: a re-render would steal focus.
+                if (f === 'password' && mode === 'encrypt') {
+                    const note = e.target.parentElement.querySelector('.ks-row-note');
+                    if (note) note.textContent = strengthText(r.password);
+                }
+            });
+            $('ec-rows').addEventListener('change', e => {
+                if (e.target.dataset.act !== 'type') return;
+                const r = rowOf(e.target);
+                r.type = e.target.value; r.note = null;
+                renderRows();
+            });
+            $('ec-rows').addEventListener('click', async e => {
+                const act = e.target.dataset.act;
+                if (!act) return;
+                const r = rowOf(e.target);
+                if (act === 'wa-forget') { r.wa = null; renderRows(); return; }
+                if (act === 'disc') { r.discoverable = e.target.checked; return; }
+                if (act === 'wa-register') {
+                    e.target.disabled = true;
+                    try {
+                        let res;
+                        if (mode === 'decrypt') {
+                            // A slot-free credential can only be used if we name
+                            // it, and the container header is where its id lives.
+                            const p = pastedParams();
+                            if (!p) {
+                                throw new Error('Paste the decryption parameters first — the credential id is one of them.');
+                            }
+                            if (p.kdf !== 'WEBAUTHN-PRF') {
+                                throw new Error('Those parameters are not for a security key (kdf=' + p.kdf + ').');
+                            }
+                            const credId = W.b64urlDecode(p.cred);
+                            res = await K.prfEvaluate({
+                                credId, rpId: p.rpId, expectCredId: credId,
+                                onStep: (k, m) => setNote(r, '', m),
+                            });
+                        } else {
+                            res = await K.prfRegister({
+                                discoverable: !!r.discoverable,
+                                onStep: (k, m) => setNote(r, '', m),
+                            });
+                        }
+                        r.wa = {
+                            secret: res.secret, credIdB64: res.credIdB64,
+                            rpId: res.rpId || location.hostname, mode: res.mode || 'assert',
+                            slot: res.slot,
+                        };
+                        setNote(r, 'ok', res.mode === 'one-shot'
+                            ? 'Derived in a single touch — this authenticator supports hmac-secret-mc (YubiKey firmware 5.8+).'
+                            : res.mode === 'two-touch'
+                                ? 'Derived. This authenticator returns PRF output only during assertions, so it took two touches.'
+                                : 'Key derived from your security key.');
+                    } catch (err) {
+                        setNote(r, 'err', err.message || String(err));
+                    }
+                }
+            });
+
+            /* ---------------- file input ---------------- */
+            const drop = $('ec-drop');
+            const picker = document.createElement('input');
+            picker.type = 'file';
+            picker.style.display = 'none';
+            document.body.appendChild(picker);
+
+            async function takeFile(file) {
+                if (!file) return;
+                fileBytes = new Uint8Array(await file.arrayBuffer());
+                fileName = file.name;
+                $('ec-file-info').textContent = fileName + ' · ' + fileBytes.length.toLocaleString() + ' bytes'
+                    + ' — the text box is ignored while a file is loaded.';
+                $('ec-clear-file').style.display = '';
+                $('ec-input').disabled = true;
+            }
+            drop.addEventListener('click', () => picker.click());
+            picker.addEventListener('change', () => takeFile(picker.files[0]));
+            ['dragenter', 'dragover'].forEach(ev => drop.addEventListener(ev, e => {
+                e.preventDefault(); drop.classList.add('over');
+            }));
+            ['dragleave', 'drop'].forEach(ev => drop.addEventListener(ev, e => {
+                e.preventDefault(); drop.classList.remove('over');
+            }));
+            drop.addEventListener('drop', e => takeFile(e.dataTransfer.files[0]));
+            function clearFile() {
+                fileBytes = null; fileName = '';
+                $('ec-file-info').textContent = '';
+                $('ec-clear-file').style.display = 'none';
+                $('ec-input').disabled = false;
+                picker.value = '';
+            }
+            $('ec-clear-file').addEventListener('click', clearFile);
+
+            /* ---------------- mode ---------------- */
+            function setMode(m) {
+                // A file picked in one mode means something different in the other,
+                // so it must not carry over silently.
+                if (m !== mode) clearFile();
+                mode = m;
+                $('ec-mode').querySelectorAll('button').forEach(b => b.classList.toggle('active', b.dataset.mode === m));
+                const encMode = m === 'encrypt';
+                $('ec-in-title').textContent = encMode ? 'Plaintext' : 'Ciphertext';
+                $('ec-in-sub').textContent = encMode
+                    ? 'Type or paste the text to protect, or drop a file.'
+                    : 'Paste the base64url ciphertext, or drop the raw .enc file.';
+                $('ec-input').placeholder = encMode ? 'Text to encrypt…' : 'Ciphertext (base64url)…';
+                $('ec-src-title').textContent = encMode ? 'Lock with' : 'Unlock with';
+                $('ec-src-sub').textContent = encMode
+                    ? 'Whatever you lock this with is what unlocks it — there is no second way in, so do not lose it.'
+                    : 'The same source the ciphertext was locked with.';
+                $('ec-run').textContent = encMode ? 'Encrypt' : 'Decrypt';
+                $('ec-params-in-wrap').style.display = encMode ? 'none' : '';
+                $('ec-params-out-wrap').style.display = 'none';
+                rows.forEach(r => { r.note = null; });
+                clearOutput();
+                renderRows();
+            }
+            $('ec-mode').querySelectorAll('button').forEach(b =>
+                b.addEventListener('click', () => setMode(b.dataset.mode)));
+
+            /* ---------------- run ---------------- */
+            function clearOutput() {
+                lastOutput = null;
+                lastParams = null;
+                const out = $('ec-output');
+                out.textContent = 'Nothing yet.';
+                out.classList.add('placeholder');
+                out.style.color = '';
+                $('ec-status').textContent = '';
+                $('ec-out-note').textContent = '';
+                $('ec-params-out-wrap').style.display = 'none';
+            }
+            function showOutput(text) {
+                const out = $('ec-output');
+                out.textContent = text;
+                out.classList.remove('placeholder');
+                $('ec-out-note').textContent = '';
+            }
+            // The number varies, the words don't — keeping them in separate text
+            // nodes is what lets the words be translated.
+            function showCount(n, words) {
+                $('ec-out-note').innerHTML = '<span></span> <span></span>';
+                const spans = $('ec-out-note').querySelectorAll('span');
+                spans[0].textContent = n.toLocaleString();
+                spans[1].textContent = words;
+            }
+            function specOf(r) {
+                if (r.type === 'password') return { type: 'password', password: r.password };
+                if (r.type === 'rawkey') return { type: 'rawkey', key: r.key };
+                if (r.type === 'pem') return { type: 'pem', pem: r.pem };
+                if (!r.wa) throw new Error('Register (or use) your security key first.');
+                return { type: 'webauthn', secret: r.wa.secret, credIdB64: r.wa.credIdB64, rpId: r.wa.rpId };
+            }
+
+            $('ec-run').addEventListener('click', async () => {
+                const btn = $('ec-run');
+                btn.disabled = true;
+                $('ec-status').textContent = 'Working…';
+                try {
+                    if (mode === 'encrypt') {
+                        const bytes = fileBytes || enc.encode($('ec-input').value);
+                        if (!bytes.length) throw new Error('Nothing to encrypt.');
+                        const res = await K.encrypt(bytes, specOf(rows[0]));
+                        lastOutput = {
+                            bytes: res.ciphertext, text: res.ciphertextB64, isText: true,
+                            suggestedName: (fileName || 'message') + '.enc',
+                        };
+                        lastParams = res.paramsText;
+                        showOutput(res.ciphertextB64);
+                        showCount(res.ciphertext.length, 'bytes of ciphertext');
+                        $('ec-params-out').textContent = res.paramsText;
+                        $('ec-params-out-wrap').style.display = '';
+                        $('ec-status').textContent = 'Encrypted';
+                    } else {
+                        // A dropped file is raw ciphertext bytes; pasted text is base64url.
+                        const ct = fileBytes || $('ec-input').value.trim();
+                        if (!ct.length) throw new Error('Paste the ciphertext first.');
+                        const paramsText = $('ec-params-in').value;
+                        if (!paramsText.trim()) throw new Error('Paste the decryption parameters first.');
+                        const out = await K.decrypt(ct, paramsText, specOf(rows[0]));
+                        let text = null;
+                        try {
+                            text = new TextDecoder('utf-8', { fatal: true }).decode(out.plaintext);
+                        } catch (_) { /* binary */ }
+                        lastOutput = {
+                            bytes: out.plaintext, text, isText: text !== null,
+                            suggestedName: 'decrypted' + (text === null ? '.bin' : '.txt'),
+                        };
+                        showOutput(text === null
+                            ? '[' + out.plaintext.length.toLocaleString() + ' bytes of binary data — use Download]'
+                            : text);
+                        showCount(out.plaintext.length, 'bytes recovered');
+                        $('ec-status').textContent = 'Decrypted';
+                    }
+                } catch (err) {
+                    clearOutput();
+                    $('ec-status').textContent = '';
+                    const out = $('ec-output');
+                    out.textContent = err.message || String(err);
+                    out.classList.remove('placeholder');
+                    out.style.color = 'var(--danger)';
+                    setTimeout(() => { out.style.color = ''; }, 4000);
+                } finally {
+                    btn.disabled = false;
+                }
+            });
+
+            $('ec-copy').addEventListener('click', () => {
+                if (!lastOutput || lastOutput.text == null) { window.showToast('Nothing to copy', true); return; }
+                navigator.clipboard.writeText(lastOutput.text)
+                    .then(() => window.showToast('Copied to clipboard!'))
+                    .catch(() => window.showToast('Copy failed!', true));
+            });
+            $('ec-copy-params').addEventListener('click', () => {
+                if (!lastParams) { window.showToast('Nothing to copy', true); return; }
+                navigator.clipboard.writeText(lastParams)
+                    .then(() => window.showToast('Parameters copied'))
+                    .catch(() => window.showToast('Copy failed!', true));
+            });
+            $('ec-download').addEventListener('click', () => {
+                if (!lastOutput) { window.showToast('Nothing to download', true); return; }
+                // Raw bytes, so the file is nothing but ciphertext.
+                const data = lastOutput.bytes || enc.encode(lastOutput.text);
+                const url = URL.createObjectURL(new Blob([data], { type: 'application/octet-stream' }));
+                const a = document.createElement('a');
+                a.href = url; a.download = lastOutput.suggestedName;
+                a.click();
+                URL.revokeObjectURL(url);
+            });
+
+            addRow('webauthn');
+            setMode('encrypt');
+        });
+    </script>
+</body>
+
+</html>

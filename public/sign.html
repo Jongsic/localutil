@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
+    <title>Sign &amp; Verify Text with a Security Key or Private Key — LocalUtil</title>
+    <!-- social / favicon -->
+    <meta name="description" content="Sign any text with a WebAuthn security key or an EC / RSA / Ed25519 private key, in standard formats only: a compact JWS (RFC 7515) for keys, and the WebAuthn authentication response JSON for security keys. Then verify it check by check — challenge-to-message binding, rpIdHash, authenticator flags and signature. Runs 100% in your browser — nothing is uploaded.">
+    <link rel="canonical" href="https://jongsic.github.io/localutil/sign.html">
+    <link rel="icon" href="favicon.ico" sizes="any">
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="LocalUtil">
+    <meta property="og:title" content="Sign &amp; Verify Text with a Security Key or Private Key — LocalUtil">
+    <meta property="og:description" content="Sign any text with a WebAuthn security key or an EC / RSA / Ed25519 private key, in standard formats only: a compact JWS (RFC 7515) for keys, and the WebAuthn authentication response JSON for security keys. Then verify it check by check — challenge-to-message binding, rpIdHash, authenticator flags and signature. Runs 100% in your browser — nothing is uploaded.">
+    <meta property="og:image" content="https://jongsic.github.io/localutil/og.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:url" content="https://jongsic.github.io/localutil/sign.html">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:image" content="https://jongsic.github.io/localutil/og.png">
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebApplication","name":"Sign & Verify Text with a Security Key or Private Key","url":"https://jongsic.github.io/localutil/sign.html","description":"Sign any text with a WebAuthn security key or an EC / RSA / Ed25519 private key, in standard formats only: a compact JWS (RFC 7515) for keys, and the WebAuthn authentication response JSON for security keys. Then verify it check by check — challenge-to-message binding, rpIdHash, authenticator flags and signature. Runs 100% in your browser — nothing is uploaded.","applicationCategory":"DeveloperApplication","operatingSystem":"Any","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"isPartOf":{"@type":"WebSite","name":"LocalUtil","url":"https://jongsic.github.io/localutil/"}}</script>
+    <!-- /social -->
+    <script src="theme-init.js"></script>
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        .sg-row { border: 1px solid var(--border-color); border-radius: var(--r-sm); padding: 12px 13px; background: var(--bg-subtle); }
+        /* width:auto would size the select to its longest option label and
+           overflow a phone viewport, so cap it and let it shrink instead. */
+        .sg-row select { width: 100%; max-width: 380px; }
+        .sg-row-body { margin-top: 10px; }
+        .sg-row-body input[type="password"], .sg-row-body input[type="text"] { width: 100%; }
+        #sg-rpid, #sg-origin { width: 100%; font-family: var(--font-mono); font-size: 0.8rem; }
+        .sg-row-body textarea { width: 100%; min-height: 96px; font-family: var(--font-mono); font-size: 0.8rem; }
+        .sg-note { font-size: 0.8rem; color: var(--text-muted); margin-top: 8px; }
+        .sg-note.err { color: var(--danger); }
+        .sg-note.ok { color: var(--success); }
+
+        .sg-badge {
+            display: inline-block; padding: 2px 8px; border-radius: var(--r-pill);
+            font-size: 0.72rem; font-weight: 700; font-family: var(--font-mono);
+            border: 1px solid var(--border-strong); color: var(--text-faint);
+        }
+        .sg-badge.on { background: var(--primary-soft); border-color: var(--primary); color: var(--primary); }
+        .sg-badge.warn { border-color: var(--warning); color: var(--warning); }
+        .sg-badge.bad { border-color: var(--danger); color: var(--danger); }
+
+        textarea.sg-input { width: 100%; min-height: 110px; }
+        textarea.sg-mono { width: 100%; min-height: 96px; font-family: var(--font-mono); font-size: 0.8rem; }
+        .sg-out { min-height: 60px; white-space: pre-wrap; }
+        .sg-out.placeholder { color: var(--text-faint); font-family: inherit; }
+
+        /* Verification checklist */
+        .sg-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+        .sg-summary { font-size: 0.82rem; font-weight: 700; }
+        .sg-summary.ok { color: var(--success); }
+        .sg-summary.bad { color: var(--danger); }
+        .sg-check { display: flex; align-items: baseline; gap: 10px; padding: 9px 0; font-size: 0.85rem; border-top: 1px solid var(--border-color); }
+        .sg-check:first-of-type { border-top: none; }
+        .sg-check-icon { font-weight: 700; flex-shrink: 0; width: 16px; text-align: center; }
+        .sg-check.pass .sg-check-icon { color: var(--success); }
+        .sg-check.fail .sg-check-icon { color: var(--danger); }
+        .sg-check.info .sg-check-icon { color: var(--text-muted); }
+        .sg-check-name { font-weight: 650; flex: 0 0 210px; }
+        .sg-check-detail { color: var(--text-muted); flex: 1; min-width: 160px; word-break: break-word; }
+        .sg-check.key .sg-check-name { color: var(--primary); }
+
+        .sg-limits { font-size: 0.82rem; line-height: 1.6; color: var(--text-muted); }
+        .sg-limits li { margin: 4px 0; }
+        .sg-limits b { color: var(--text-main); }
+
+        @media (max-width: 640px) {
+            .sg-check { flex-wrap: wrap; }
+            .sg-check-name { flex-basis: auto; }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="app-container">
+        <aside class="sidebar" id="app-sidebar"></aside>
+
+        <main class="main-content">
+            <header class="topbar" id="app-topbar">
+                <div class="topbar-title">
+                    <h1 id="current-tool-title">Sign / Verify</h1>
+                    <p id="current-tool-desc" class="topbar-desc">Sign text with a security key or a private key, then verify it check by check</p>
+                </div>
+            </header>
+
+            <div class="tools-container">
+                <section id="tool-sign" class="tool-section active">
+                    <div class="tool-shell">
+
+                        <div class="card">
+                            <div class="segmented" id="sg-mode" role="tablist">
+                                <button type="button" data-mode="sign" class="active">Sign</button>
+                                <button type="button" data-mode="verify">Verify</button>
+                            </div>
+                            <div class="card-subtitle" style="margin-top:10px;" id="sg-lead">
+                                A WebAuthn assertion never signs your bytes directly — it signs
+                                <code>authenticatorData ‖ SHA-256(clientDataJSON)</code>. To sign a message with a
+                                security key, its hash goes in the challenge; verification re-derives that hash and
+                                checks it matches. That one step is what binds the signature to the content.
+                            </div>
+                        </div>
+
+                        <!-- ============ message ============ -->
+                        <div class="card">
+                            <div class="card-title" style="margin:0;">Message</div>
+                            <div class="card-subtitle" id="sg-msg-sub">The exact text to sign — every byte matters.</div>
+                            <textarea class="sg-input" id="sg-message" spellcheck="false" autocomplete="off"
+                                placeholder="Text to sign…"></textarea>
+                            <div class="field-hint" id="sg-msg-hash"></div>
+                        </div>
+
+                        <!-- ============ signature (verify only) ============ -->
+                        <div class="card" id="sg-sig-card" style="display:none;">
+                            <div class="card-title" style="margin:0;">Signature</div>
+                            <div class="card-subtitle">A compact JWS, or a WebAuthn authentication response in JSON —
+                                whichever you have. The format is detected.</div>
+                            <textarea class="sg-mono" id="sg-sig-in" spellcheck="false" autocomplete="off"
+                                placeholder="eyJhbGciOiJFUzI1NiJ9.…    or    { &quot;id&quot;: &quot;…&quot;, &quot;response&quot;: { … } }"></textarea>
+                            <div class="mt-2">
+                                <label class="field-hint" for="sg-pin">Signer’s public key (PEM)</label>
+                                <textarea class="sg-mono" id="sg-pin" spellcheck="false" autocomplete="off"
+                                    placeholder="-----BEGIN PUBLIC KEY-----"></textarea>
+                                <div class="field-hint">
+                                    Neither format carries a public key, and that is deliberate: a signature that ships
+                                    its own key proves the bytes are intact but <b>nothing about who signed them</b>.
+                                    The key has to come from you. (HS256 uses the shared key below instead.)
+                                </div>
+                            </div>
+                            <div class="mt-2" id="sg-rpid-wrap">
+                                <label class="field-hint" for="sg-rpid">RP ID (WebAuthn only)</label>
+                                <input type="text" id="sg-rpid" spellcheck="false" autocomplete="off"
+                                    placeholder="leave empty for this page’s host">
+                                <div class="field-hint">The domain the signature was made for. It is checked against
+                                    <code>rpIdHash</code> — a WebAuthn assertion is bound to it and cannot be replayed
+                                    as one made elsewhere.</div>
+                                <label class="field-hint mt-1" for="sg-origin">Expected origin (WebAuthn only)</label>
+                                <input type="text" id="sg-origin" spellcheck="false" autocomplete="off"
+                                    placeholder="leave empty for this page’s origin">
+                                <div class="field-hint">WebAuthn §7.2 requires a verifier to check
+                                    <code>clientDataJSON.origin</code>, not just the RP ID: the RP ID fixes the host,
+                                    but only the origin fixes the scheme and port. Without this an assertion produced on
+                                    a different origin under the same host would pass.</div>
+                            </div>
+                        </div>
+
+                        <!-- ============ source ============ -->
+                        <div class="card">
+                            <div class="card-title" style="margin:0;" id="sg-src-title">Signing key</div>
+                            <div class="card-subtitle" id="sg-src-sub">Choose what produces the signature.</div>
+                            <div class="sg-row" id="sg-row"></div>
+                        </div>
+
+                        <!-- ============ action ============ -->
+                        <div class="card">
+                            <div class="flex-row gap-1 items-center">
+                                <button class="btn btn-primary" id="sg-run">Sign</button>
+                                <button class="btn" id="sg-copy">Copy</button>
+                                <span class="field-hint" id="sg-status"></span>
+                            </div>
+                            <div class="result-box sg-out placeholder mt-2" id="sg-output">Nothing yet.</div>
+                            <div class="field-hint" id="sg-out-note"></div>
+                        </div>
+
+                        <!-- ============ checklist ============ -->
+                        <div class="card" id="sg-checks-card" style="display:none;">
+                            <div class="sg-head mb-1">
+                                <div class="card-title" style="margin:0;">Verification checklist</div>
+                                <div class="sg-summary" id="sg-summary"></div>
+                            </div>
+                            <div id="sg-checks"></div>
+                        </div>
+
+                        <!-- ============ limits ============ -->
+                        <div class="card">
+                            <div class="card-title" style="margin:0;">What a security-key signature does and does not prove</div>
+                            <ul class="sg-limits" style="margin-top:8px;padding-left:18px;">
+                                <li><b>Only FIDO2-aware verifiers can check it.</b> The signature covers the WebAuthn
+                                    structure, so it is not a PGP, CMS/S-MIME, JWS, or PAdES signature and no such tool
+                                    will accept it. That is why the output here is the WebAuthn authentication response
+                                    JSON — the shape every FIDO2 server already parses — rather than an invented one.
+                                    Signing with a private key instead produces a plain compact JWS, which any JOSE
+                                    library reads. Note a JWS is not automatically a <i>JWT</i>: JWT requires a JSON
+                                    payload, so only a JSON message makes the token readable by JWT tooling — including
+                                    this site’s JWT Decode.</li>
+                                <li><b>It is bound to a domain.</b> <code>rpIdHash</code> commits to the site that
+                                    requested it — a signature made here says “made on this origin”, and cannot be
+                                    replayed as one made elsewhere.</li>
+                                <li><b>The signature counter is not non-repudiation.</b> It exists for clone detection;
+                                    <code>0</code> is normal for platform passkeys.</li>
+                                <li><b>There is no raw-hash signing in browsers yet.</b> The WebAuthn <code>sign</code>
+                                    extension is still a W3C draft, and YubiKey’s <code>previewSign</code> (firmware 5.8,
+                                    CTAP 2.3) is explicitly early-access and unsupported by browsers.</li>
+                                <li><b>HS256 is a MAC, not a signature.</b> Anyone who can verify it could also have
+                                    produced it, so it proves integrity between people who already share a secret —
+                                    nothing more.</li>
+                                <li><b>These assertions are not logins, and must never be accepted as one.</b>
+                                    WebAuthn §13.4.3 requires an authentication challenge to be freshly random; here the
+                                    challenge is <code>SHA-256(message)</code>, which is deterministic on purpose. So an
+                                    assertion produced here carries no freshness and is replayable as an authentication
+                                    assertion against any server careless enough to accept a challenge it did not
+                                    generate. Treat the output as a document signature only.</li>
+                                <li><b>The credential is shared across the whole host.</b> The RP ID is the entire
+                                    subdomain under <code>*.github.io</code> style hosting, so every page under that
+                                    host sees the same credential.</li>
+                                <li><b>Verification here is stateless.</b> A real Relying Party also stores a credential
+                                    record and compares the signature counter and backup state against it across
+                                    ceremonies (§7.2 steps 6, 19, 22). With nothing but a pasted public key there is no
+                                    history to compare, so clone detection is out of scope.</li>
+                            </ul>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </div>
+
+    <div id="toast" class="toast">Copied to clipboard!</div>
+
+    <script src="app.js"></script>
+    <script src="webauthn-core.js"></script>
+    <script src="keysource.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const K = window.LocalUtilKeySource;
+            const W = window.LocalUtilWebAuthn;
+            const $ = id => document.getElementById(id);
+            const enc = new TextEncoder();
+
+            let mode = 'sign';
+            let lastSig = null;
+            const src = { type: 'webauthn', pem: '', key: '', note: null };
+
+            // A WebAuthn response never carries the public key, and it is only
+            // exposed once — in the create() response. So it is kept here, and the
+            // verifier has to be given it separately (as a real RP would).
+            const SIGNER_KEY = 'localutil-sign-credential';
+            let signer = null;
+            (function loadSigner() {
+                try {
+                    const raw = JSON.parse(localStorage.getItem(SIGNER_KEY) || 'null');
+                    if (raw && raw.credIdB64 && raw.spki) {
+                        signer = {
+                            credIdB64: raw.credIdB64, rpId: raw.rpId, algName: raw.algName,
+                            credId: W.b64urlDecode(raw.credIdB64), spki: W.b64urlDecode(raw.spki),
+                            slot: raw.slot,
+                        };
+                    }
+                } catch (_) { signer = null; }
+            })();
+            function saveSigner(s) {
+                signer = s;
+                try {
+                    localStorage.setItem(SIGNER_KEY, s ? JSON.stringify({
+                        credIdB64: s.credIdB64, rpId: s.rpId, algName: s.algName,
+                        spki: W.b64urlEncode(s.spki), slot: s.slot,
+                    }) : null);
+                    if (!s) localStorage.removeItem(SIGNER_KEY);
+                } catch (_) { /* private mode — in-memory only */ }
+            }
+
+            let capability = { webauthn: false, reported: null, webkit: null };
+            K.browserPrfCapability().then(c => { capability = c; renderRow(); });
+
+            const SOURCES_SIGN = [
+                { v: 'webauthn', label: 'Security key → WebAuthn assertion' },
+                { v: 'pem', label: 'Private key (PEM) → JWS · ES256 / ES384 / ES512 / EdDSA / RS256' },
+                { v: 'rawkey', label: 'Raw key (32 bytes) → JWS · HS256 (a MAC, not a signature)' },
+            ];
+            // Verification never takes a key from this row for the asymmetric
+            // cases: the public key is pinned in the box above, which is what
+            // makes the result mean anything. Only HS256 needs its shared key.
+            const SOURCES_VERIFY = [
+                { v: 'auto', label: 'Asymmetric — public key pinned above' },
+                { v: 'rawkey', label: 'Raw key (32 bytes) → HS256 (a MAC, not a signature)' },
+            ];
+            const sources = () => (mode === 'sign' ? SOURCES_SIGN : SOURCES_VERIFY);
+
+            function esc(s) {
+                return String(s == null ? '' : s)
+                    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+                    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+            }
+
+            function capabilityHtml() {
+                if (!capability.webauthn) return '<span class="sg-badge bad">no WebAuthn</span> This browser has no WebAuthn support.';
+                if (capability.webkit) {
+                    return '<span class="sg-badge bad">limited here</span> ' + capability.webkit.reason
+                        + ' Signing itself needs no extensions, so it may still work — but use desktop Chrome, Edge or '
+                        + 'Firefox for reliable security-key behaviour.';
+                }
+                return '<span class="sg-badge on">WebAuthn ready</span> The message hash travels in the challenge. '
+                    + 'The credential is created without occupying a slot on the key.';
+            }
+
+            function rowBodyHtml() {
+                if (src.type === 'auto') {
+                    return '<div class="sg-note">Nothing to enter here — paste the signer’s public key into '
+                        + '<b>Public key</b> above. Neither a JWS nor a WebAuthn response carries one, which is '
+                        + 'the point: the key has to come from you for the result to say anything about the signer.</div>';
+                }
+                if (src.type === 'pem') {
+                    return '<label class="field-hint" for="sg-pem">PRIVATE key (PKCS#8)</label>'
+                        + '<textarea id="sg-pem" data-f="pem" spellcheck="false" autocomplete="off"'
+                        + ' placeholder="-----BEGIN PRIVATE KEY-----">' + esc(src.pem) + '</textarea>'
+                        + '<div class="sg-note">The curve or key type picks the JWS <code>alg</code>: P-256 → '
+                        + '<code>ES256</code>, P-384 → <code>ES384</code>, P-521 → <code>ES512</code>, '
+                        + 'Ed25519 → <code>EdDSA</code>, RSA → <code>RS256</code>. '
+                        + 'PKCS#1 / SEC1 keys need converting to PKCS#8 first.</div>';
+                }
+                if (src.type === 'rawkey') {
+                    return '<label class="field-hint" for="sg-rk">Shared key (32 bytes or more)</label>'
+                        + '<input type="text" id="sg-rk" data-f="key" spellcheck="false" autocomplete="off"'
+                        + ' placeholder="64+ hex chars, or base64" value="' + esc(src.key) + '">'
+                        + '<div class="sg-note">JWS <code>HS256</code>: the key is used directly as an '
+                        + 'HMAC-SHA-256 secret. RFC 7518 §3.2 requires at least the hash size, so 32 bytes or more — '
+                        + 'longer keys from other tools work too. Both sides need the same key, so it proves '
+                        + 'integrity, not authorship.</div>';
+                }
+                let body = '<div class="sg-limits">' + capabilityHtml() + '</div>';
+                const disabled = capability.webauthn ? '' : ' disabled';
+                if (signer) {
+                    body += '<div class="flex-row gap-1 items-center mt-1">'
+                        + '<span class="sg-badge on sg-badge-alg">' + esc(signer.algName) + '</span>'
+                        + '<span class="sg-note" style="margin:0;">' + esc(signer.credIdB64.slice(0, 16)) + '…</span>'
+                        + '<button class="btn btn-small" data-act="wa-forget">Forget</button>'
+                        + '<button class="btn btn-small" data-act="wa-pem">Copy public key</button></div>'
+                        + (signer.slot === 'used' ? '<span class="sg-badge warn">uses a key slot</span>'
+                            : signer.slot ? '<span class="sg-badge">slot-free</span>' : '')
+                        + '<div class="sg-note">Give the verifier this public key — a WebAuthn response does not '
+                        + 'contain one. Copy it once and hand it over alongside the signature.</div>';
+                } else {
+                    body += '<div class="flex-row gap-1 mt-1">'
+                        + '<button class="btn btn-small btn-primary" data-act="wa-create"' + disabled + '>'
+                        + 'Create signing credential</button></div>'
+                        + '<div class="sg-note">A credential is created once, and its public key is revealed only at '
+                        + 'that moment, so it is kept in this browser for you to hand to verifiers. Nothing is written '
+                        + 'to the key itself, so none of its credential slots is used — but clearing this browser’s '
+                        + 'storage loses the public key, and nobody can verify those signatures afterwards.</div>';
+                }
+                return body;
+            }
+
+            function renderRow() {
+                $('sg-row').innerHTML =
+                    '<select data-act="type" aria-label="Signing source">'
+                    + sources().map(s => '<option value="' + s.v + '"' + (s.v === src.type ? ' selected' : '') + '>'
+                        + s.label + '</option>').join('')
+                    + '</select>'
+                    + '<div class="sg-row-body">' + rowBodyHtml() + '</div>'
+                    + (src.note ? '<div class="sg-note ' + (src.note.kind === 'err' ? 'err'
+                        : src.note.kind === 'ok' ? 'ok' : '') + '">' + esc(src.note.text) + '</div>' : '');
+            }
+
+            $('sg-row').addEventListener('input', e => {
+                const f = e.target.dataset.f;
+                if (f) src[f] = e.target.value;
+            });
+            $('sg-row').addEventListener('change', e => {
+                if (e.target.dataset.act !== 'type') return;
+                // Clear the key material of the source being left. Otherwise a
+                // shared HS256 key typed earlier stays live, and an attacker-
+                // supplied HS256 token would verify as VALID while the public key
+                // pinned above is silently never used.
+                src.pem = ''; src.key = '';
+                src.type = e.target.value; src.note = null;
+                renderRow();
+            });
+            $('sg-row').addEventListener('click', async e => {
+                const act = e.target.dataset.act;
+                if (!act) return;
+                if (act === 'wa-forget') { saveSigner(null); src.note = null; renderRow(); return; }
+                if (act === 'wa-pem') {
+                    navigator.clipboard.writeText(W.pemWrap('PUBLIC KEY', signer.spki))
+                        .then(() => window.showToast('Public key copied'))
+                        .catch(() => window.showToast('Copy failed!', true));
+                    return;
+                }
+                if (act === 'wa-create') {
+                    e.target.disabled = true;
+                    try {
+                        const s = await K.webauthnCreateSigner({
+                            // Slot-free: the credential id and public key are kept
+                            // here, which is everything a signature needs.
+                            discoverable: false,
+                            onStep: (k, m) => { src.note = { kind: '', text: m }; renderRow(); },
+                        });
+                        saveSigner(s);
+                        src.note = { kind: 'ok', text: 'Credential created — ' + s.algName + '.' };
+                    } catch (err) {
+                        src.note = { kind: 'err', text: err.message || String(err) };
+                    }
+                    renderRow();
+                }
+            });
+
+            /* ---------------- message hash preview ---------------- */
+            async function refreshHash() {
+                const text = $('sg-message').value;
+                if (!text) { $('sg-msg-hash').textContent = ''; return; }
+                const h = await W.sha256(enc.encode(text));
+                $('sg-msg-hash').textContent = 'SHA-256: ' + W.toHex(h)
+                    + ' · ' + enc.encode(text).length + ' bytes';
+            }
+            $('sg-message').addEventListener('input', refreshHash);
+
+            /* ---------------- mode ---------------- */
+            function setMode(m) {
+                mode = m;
+                $('sg-mode').querySelectorAll('button').forEach(b => b.classList.toggle('active', b.dataset.mode === m));
+                const signing = m === 'sign';
+                // The asymmetric sources have no counterpart in the other mode:
+                // a private key must never linger in a verify-mode field.
+                if (!signing && (src.type === 'webauthn' || src.type === 'pem')) src.type = 'auto';
+                if (signing && src.type === 'auto') src.type = 'webauthn';
+                src.note = null;
+                $('sg-sig-card').style.display = signing ? 'none' : '';
+                $('sg-src-title').textContent = signing ? 'Signing key' : 'Verifying key';
+                $('sg-src-sub').textContent = signing
+                    ? 'Choose what produces the signature.'
+                    : 'Must match how the signature was produced.';
+                $('sg-msg-sub').textContent = signing
+                    ? 'The exact text to sign — every byte matters.'
+                    : 'The text the signature is supposed to cover — paste it exactly.';
+                $('sg-message').placeholder = signing ? 'Text to sign…' : 'The original text…';
+                $('sg-run').textContent = signing ? 'Sign' : 'Verify';
+                $('sg-checks-card').style.display = 'none';
+                clearOutput();
+                renderRow();
+            }
+            $('sg-mode').querySelectorAll('button').forEach(b =>
+                b.addEventListener('click', () => setMode(b.dataset.mode)));
+
+            function clearOutput() {
+                lastSig = null;
+                const o = $('sg-output');
+                o.textContent = 'Nothing yet.';
+                o.classList.add('placeholder');
+                o.style.color = '';
+                $('sg-status').textContent = '';
+                $('sg-out-note').textContent = '';
+            }
+            function showError(msg) {
+                clearOutput();
+                const o = $('sg-output');
+                o.textContent = msg;
+                o.classList.remove('placeholder');
+                o.style.color = 'var(--danger)';
+            }
+
+            /* ---------------- checklist ---------------- */
+            const ICON = { pass: '✓', fail: '✗', info: 'ℹ' };
+            const KEY_CHECKS = { 'Challenge ⇄ message binding': 1, 'Signature': 1 };
+            function renderChecks(res) {
+                const graded = res.checks.filter(c => c.kind !== 'info');
+                const passed = graded.filter(c => c.ok).length;
+                const allOk = passed === graded.length;
+                $('sg-summary').className = 'sg-summary ' + (allOk ? 'ok' : 'bad');
+                $('sg-summary').textContent = allOk
+                    ? '✓ ' + passed + ' / ' + graded.length + ' passed'
+                    : '✗ ' + (graded.length - passed) + ' of ' + graded.length + ' failed';
+                const KIND = { pass: 'pass', fail: 'fail', info: 'info' };
+                $('sg-checks').innerHTML = res.checks.map(c =>
+                    '<div class="sg-check ' + (KIND[c.kind] || 'info') + (KEY_CHECKS[c.label] ? ' key' : '') + '">'
+                    + '<span class="sg-check-icon">' + (ICON[KIND[c.kind]] || ICON.info) + '</span>'
+                    + '<span class="sg-check-name">' + esc(c.label) + '</span>'
+                    + '<span class="sg-check-detail">' + esc(c.detail) + '</span>'
+                    + '</div>').join('');
+                $('sg-checks-card').style.display = '';
+            }
+
+            /* ---------------- run ---------------- */
+            $('sg-run').addEventListener('click', async () => {
+                const btn = $('sg-run');
+                btn.disabled = true;
+                $('sg-status').textContent = 'Working…';
+                try {
+                    const message = enc.encode($('sg-message').value);
+                    if (!message.length) throw new Error('Enter the message first.');
+
+                    if (mode === 'sign') {
+                        let sig, note;
+                        if (src.type === 'webauthn') {
+                            if (!signer) throw new Error('Create a signing credential first — a WebAuthn response '
+                                + 'carries no public key, so the verifier needs the one from registration.');
+                            src.note = { kind: '', text: 'Touch your security key to sign…' };
+                            renderRow();
+                            const res = await K.signWebauthnAssertion(message, {
+                                credId: signer.credId, rpId: signer.rpId,
+                            });
+                            sig = res.text;
+                            note = 'WebAuthn authentication response JSON · the message hash travels in the challenge '
+                                + '· rpId ' + signer.rpId;
+                            src.note = { kind: 'ok', text: 'Signed.' };
+                            renderRow();
+                        } else {
+                            sig = await K.signJws(message, { type: src.type, pem: src.pem, key: src.key });
+                            const alg = K.parseJws(sig).alg;
+                            note = alg === 'HS256'
+                                ? 'Compact JWS · HS256 — a MAC. Anyone holding this key could have produced it.'
+                                : 'Compact JWS · ' + alg + ' (RFC 7515) — any JOSE library can verify it.';
+                        }
+                        lastSig = sig;
+                        const o = $('sg-output');
+                        o.textContent = sig;
+                        o.classList.remove('placeholder');
+                        $('sg-out-note').textContent = note;
+                        $('sg-status').textContent = 'Signed';
+                    } else {
+                        const sigText = $('sg-sig-in').value;
+                        if (!sigText.trim()) throw new Error('Paste the signature first.');
+                        const kind = K.detectSignature(sigText);
+                        let res, note;
+                        if (kind === 'webauthn') {
+                            res = await K.verifyWebauthnAssertion(sigText, message, {
+                                publicKeyPem: $('sg-pin').value.trim() || null,
+                                rpId: $('sg-rpid').value.trim() || undefined,
+                                expectedOrigin: $('sg-origin').value.trim() || undefined,
+                            });
+                            note = 'WebAuthn assertion, bound to rpId “' + (res.rpId || '') + '” — only a '
+                                + 'FIDO2-aware verifier can check one.';
+                        } else {
+                            // RFC 8725 §3.1: the caller states which algorithms
+                            // are acceptable. "Asymmetric" must not accept HS256,
+                            // and the MAC source must not accept anything else.
+                            res = await K.verifyJws(sigText, {
+                                algorithms: src.type === 'rawkey'
+                                    ? ['HS256'] : ['ES256', 'ES384', 'ES512', 'EdDSA', 'RS256'],
+                                pinnedPem: src.type === 'rawkey' ? null : ($('sg-pin').value.trim() || null),
+                                key: src.type === 'rawkey' ? src.key : null,
+                                message,
+                            });
+                            note = res.mac
+                                ? 'HS256 is a MAC: it shows the payload is intact between holders of the key, not who wrote it.'
+                                : 'Compact JWS · ' + res.alg + ' over base64url(header).base64url(payload).';
+                        }
+                        renderChecks(res);
+                        const o = $('sg-output');
+                        o.textContent = res.valid
+                            ? 'VALID — every check passed.'
+                            : 'INVALID — see the failed checks below.';
+                        o.classList.remove('placeholder');
+                        o.style.color = res.valid ? 'var(--success)' : 'var(--danger)';
+                        $('sg-out-note').textContent = note;
+                        $('sg-status').textContent = res.valid ? 'Valid' : 'Invalid';
+                    }
+                } catch (err) {
+                    $('sg-checks-card').style.display = 'none';
+                    showError(err.message || String(err));
+                } finally {
+                    btn.disabled = false;
+                }
+            });
+
+            $('sg-copy').addEventListener('click', () => {
+                if (!lastSig) { window.showToast('Nothing to copy', true); return; }
+                navigator.clipboard.writeText(lastSig)
+                    .then(() => window.showToast('Copied to clipboard!'))
+                    .catch(() => window.showToast('Copy failed!', true));
+            });
+
+            setMode('sign');
+        });
+    </script>
+</body>
+
+</html>

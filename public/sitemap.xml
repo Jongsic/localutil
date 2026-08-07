@@ -7,7 +7,7 @@
   </url>
   <url>
     <loc>https://jongsic.github.io/localutil/calldata.html</loc>
-    <lastmod>2026-07-20</lastmod>
+    <lastmod>2026-08-05</lastmod>
     <priority>0.8</priority>
   </url>
   <url>
@@ -33,6 +33,11 @@
   <url>
     <loc>https://jongsic.github.io/localutil/diff.html</loc>
     <lastmod>2026-07-20</lastmod>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://jongsic.github.io/localutil/encrypt.html</loc>
+    <lastmod>2026-08-07</lastmod>
     <priority>0.8</priority>
   </url>
   <url>
@@ -97,7 +102,7 @@
   </url>
   <url>
     <loc>https://jongsic.github.io/localutil/keystore.html</loc>
-    <lastmod>2026-07-20</lastmod>
+    <lastmod>2026-07-31</lastmod>
     <priority>0.8</priority>
   </url>
   <url>
@@ -117,7 +122,7 @@
   </url>
   <url>
     <loc>https://jongsic.github.io/localutil/password.html</loc>
-    <lastmod>2026-07-20</lastmod>
+    <lastmod>2026-08-06</lastmod>
     <priority>0.8</priority>
   </url>
   <url>
@@ -143,6 +148,11 @@
   <url>
     <loc>https://jongsic.github.io/localutil/seo-check.html</loc>
     <lastmod>2026-07-20</lastmod>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://jongsic.github.io/localutil/sign.html</loc>
+    <lastmod>2026-08-07</lastmod>
     <priority>0.8</priority>
   </url>
   <url>
