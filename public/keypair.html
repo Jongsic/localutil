@@ -40,6 +40,15 @@
             gap: 8px;
             align-items: center;
         }
+        .kp-dl-right { margin-left: auto; }
+
+        .kp-preview {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin-top: 10px;
+        }
+        .kp-preview textarea { min-height: 110px; }
 
         .kp-status {
             font-size: 0.85rem;
@@ -152,21 +161,27 @@
                                 </div>
 
                                 <div id="kp-priv-block" class="hidden">
-                                    <label for="kp-priv" id="kp-priv-label">Private key (PKCS#8 PEM)</label>
+                                    <label for="kp-priv" id="kp-priv-label">Private key</label>
                                     <div class="kp-out">
                                         <textarea id="kp-priv" rows="7" spellcheck="false" readonly></textarea>
                                         <button class="btn btn-small copy-btn" data-clipboard-target="#kp-priv">Copy</button>
                                     </div>
-                                    <div class="kp-actions mt-1" id="kp-priv-dl"></div>
+                                    <div class="kp-actions mt-1">
+                                        <div class="segmented" id="kp-priv-fmt"></div>
+                                        <button id="kp-priv-download" class="btn btn-small kp-dl-right">Download PEM</button>
+                                    </div>
                                 </div>
 
                                 <div id="kp-pub-block" class="hidden">
-                                    <label for="kp-pub">Public key (SPKI PEM)</label>
+                                    <label for="kp-pub">Public key</label>
                                     <div class="kp-out">
                                         <textarea id="kp-pub" rows="5" spellcheck="false" readonly></textarea>
                                         <button class="btn btn-small copy-btn" data-clipboard-target="#kp-pub">Copy</button>
                                     </div>
-                                    <div class="kp-actions mt-1" id="kp-pub-dl"></div>
+                                    <div class="kp-actions mt-1">
+                                        <div class="segmented" id="kp-pub-fmt"></div>
+                                        <button id="kp-pub-download" class="btn btn-small kp-dl-right">Download PEM</button>
+                                    </div>
                                 </div>
                             </div>
 
@@ -203,8 +218,10 @@
             const privLabel = document.getElementById('kp-priv-label');
             const privOut = document.getElementById('kp-priv');
             const pubOut = document.getElementById('kp-pub');
-            const privDl = document.getElementById('kp-priv-dl');
-            const pubDl = document.getElementById('kp-pub-dl');
+            const privFmt = document.getElementById('kp-priv-fmt');
+            const pubFmt = document.getElementById('kp-pub-fmt');
+            const privDlBtn = document.getElementById('kp-priv-download');
+            const pubDlBtn = document.getElementById('kp-pub-download');
             const inspectInput = document.getElementById('kp-inspect');
             const report = document.getElementById('kp-report');
             const tr = s => (window.t ? window.t(s) : s);
@@ -481,8 +498,34 @@
                 throw new Error(tr('Unrecognized input — expected a PEM block, JWK / JWKS JSON, or a hex / base64 secret.'));
             }
 
+            /* ---------------- format views ----------------
+               Every format button shows the re-encoded key in a textarea;
+               binary formats display <binary> and only make sense downloaded. */
+            const FMT_LABEL = { pem: 'PEM', der: 'DER', jwk: 'JWK', hex: 'Hex', b64: 'Base64url' };
+            const DL_KEY = { pem: 'Download PEM', der: 'Download DER', jwk: 'Download JWK', hex: 'Download Hex', b64: 'Download Base64url' };
+            const DL_PART_KEY = {
+                'private:pem': 'Download Private PEM', 'private:der': 'Download Private DER', 'private:jwk': 'Download Private JWK',
+                'public:pem': 'Download Public PEM', 'public:der': 'Download Public DER', 'public:jwk': 'Download Public JWK',
+            };
+
+            function dlLabel(part, fmt) {
+                return part === 'secret' ? tr(DL_KEY[fmt]) : tr(DL_PART_KEY[part + ':' + fmt]);
+            }
+
+            function viewTextFor(item, part, fmt) {
+                if (part === 'secret') {
+                    if (fmt === 'hex') return toHex(item.bytes);
+                    if (fmt === 'b64') return b64urlEncode(item.bytes);
+                    return JSON.stringify({ kty: 'oct', k: b64urlEncode(item.bytes) }, null, 2);
+                }
+                if (fmt === 'der') return '<binary>';
+                const isPriv = part === 'private';
+                if (fmt === 'pem') return pemWrap(isPriv ? 'PRIVATE KEY' : 'PUBLIC KEY', isPriv ? item.privDer : item.pubDer);
+                return JSON.stringify(isPriv ? item.privJwk : item.pubJwk, null, 2);
+            }
+
             /* ---------------- rendering ---------------- */
-            let current = [];   // items backing the download buttons
+            let current = [];   // items backing the format / download buttons
 
             function row(parent, key, val, cls) {
                 const r = document.createElement('div');
@@ -507,9 +550,9 @@
                 });
             }
 
-            function dlButton(parent, label, idx, part, fmt) {
+            function viewButton(parent, label, idx, part, fmt) {
                 const b = document.createElement('button');
-                b.className = 'btn btn-small';
+                b.className = 'btn btn-small kp-view';
                 b.textContent = label;
                 b.dataset.idx = idx; b.dataset.part = part; b.dataset.fmt = fmt;
                 parent.appendChild(b);
@@ -552,25 +595,56 @@
                 if (item.thumbprint) copyable(row(report, tr('JWK thumbprint (RFC 7638)'), item.thumbprint), tr('Thumbprint'));
                 item.warnings.forEach(w => row(report, tr('Warning'), '⚠ ' + w, 'kp-warn'));
 
-                const dlVal = row(report, tr('Download'), '');
+                const dlVal = row(report, tr('Formats'), '');
                 dlVal.textContent = '';
                 const wrap = document.createElement('div');
                 wrap.className = 'kp-actions';
                 if (item.kind === 'secret') {
-                    dlButton(wrap, tr('Hex (.txt)'), idx, 'secret', 'hex');
-                    dlButton(wrap, tr('Base64url (.txt)'), idx, 'secret', 'b64');
-                    dlButton(wrap, 'JWK (.json)', idx, 'secret', 'jwk');
+                    viewButton(wrap, 'Hex', idx, 'secret', 'hex');
+                    viewButton(wrap, 'Base64url', idx, 'secret', 'b64');
+                    viewButton(wrap, 'JWK', idx, 'secret', 'jwk');
                 } else {
                     if (item.kind === 'private') {
-                        dlButton(wrap, tr('Private') + ' PEM', idx, 'private', 'pem');
-                        dlButton(wrap, tr('Private') + ' DER', idx, 'private', 'der');
-                        dlButton(wrap, tr('Private') + ' JWK', idx, 'private', 'jwk');
+                        viewButton(wrap, tr('Private') + ' PEM', idx, 'private', 'pem');
+                        viewButton(wrap, tr('Private') + ' DER', idx, 'private', 'der');
+                        viewButton(wrap, tr('Private') + ' JWK', idx, 'private', 'jwk');
                     }
-                    dlButton(wrap, tr('Public') + ' PEM', idx, 'public', 'pem');
-                    dlButton(wrap, tr('Public') + ' DER', idx, 'public', 'der');
-                    dlButton(wrap, tr('Public') + ' JWK', idx, 'public', 'jwk');
+                    viewButton(wrap, tr('Public') + ' PEM', idx, 'public', 'pem');
+                    viewButton(wrap, tr('Public') + ' DER', idx, 'public', 'der');
+                    viewButton(wrap, tr('Public') + ' JWK', idx, 'public', 'jwk');
                 }
                 dlVal.appendChild(wrap);
+
+                // Hidden until a format button is clicked: the re-encoded key,
+                // with a download button for exactly what is shown.
+                const prev = document.createElement('div');
+                prev.className = 'kp-preview hidden';
+                prev.dataset.idx = idx;
+                const pta = document.createElement('textarea');
+                pta.readOnly = true; pta.rows = 6; pta.spellcheck = false;
+                const pactions = document.createElement('div');
+                pactions.className = 'kp-actions';
+                const pbtn = document.createElement('button');
+                pbtn.className = 'btn btn-small kp-dl kp-dl-right';
+                pactions.appendChild(pbtn);
+                prev.appendChild(pta);
+                prev.appendChild(pactions);
+                report.appendChild(prev);
+            }
+
+            function showPreview(viewBtn) {
+                const idx = +viewBtn.dataset.idx;
+                const item = current[idx];
+                const prev = report.querySelector('.kp-preview[data-idx="' + idx + '"]');
+                if (!item || !prev) return;
+                const { part, fmt } = viewBtn.dataset;
+                prev.classList.remove('hidden');
+                prev.querySelector('textarea').value = viewTextFor(item, part, fmt);
+                const dl = prev.querySelector('button.kp-dl');
+                dl.textContent = dlLabel(part, fmt);
+                dl.dataset.idx = idx; dl.dataset.part = part; dl.dataset.fmt = fmt;
+                viewBtn.closest('.kp-actions').querySelectorAll('.kp-view')
+                    .forEach(b => b.classList.toggle('btn-primary', b === viewBtn));
             }
 
             function renderError(msg) {
@@ -630,15 +704,14 @@
                 return download(base + suffix + '.jwk.json', JSON.stringify(jwk, null, 2) + '\n', 'application/json');
             }
 
-            function onDownloadClick(e) {
-                const b = e.target.closest('button[data-part]');
-                if (!b) return;
-                const item = current[+b.dataset.idx];
-                if (item) handleDownload(item, b.dataset.part, b.dataset.fmt);
-            }
-            report.addEventListener('click', onDownloadClick);
-            privDl.addEventListener('click', onDownloadClick);
-            pubDl.addEventListener('click', onDownloadClick);
+            report.addEventListener('click', e => {
+                const v = e.target.closest('button.kp-view');
+                if (v) { showPreview(v); return; }
+                const d = e.target.closest('button.kp-dl');
+                if (!d) return;
+                const item = current[+d.dataset.idx];
+                if (item) handleDownload(item, d.dataset.part, d.dataset.fmt);
+            });
 
             /* ---------------- generation ---------------- */
             const PARAMS = {
@@ -677,6 +750,38 @@
                 return paramSel.value + '-' + tr('byte secret');
             }
 
+            // Which format each generated output box is currently showing.
+            const genView = { private: 'pem', public: 'pem', secret: 'hex' };
+
+            function genPartOf(which) {
+                if (which === 'pub') return 'public';
+                return gen.kind === 'secret' ? 'secret' : 'private';
+            }
+
+            function refreshGenBlock(which) {
+                const part = genPartOf(which);
+                const fmt = genView[part];
+                (which === 'pub' ? pubOut : privOut).value = viewTextFor(gen, part, fmt);
+                (which === 'pub' ? pubFmt : privFmt).querySelectorAll('button')
+                    .forEach(b => b.classList.toggle('active', b.dataset.fmt === fmt));
+                // The block's own label already says private/public — the
+                // download button only needs to name the format.
+                (which === 'pub' ? pubDlBtn : privDlBtn).textContent = tr(DL_KEY[fmt]);
+            }
+
+            function buildGenControls() {
+                const fmts = gen.kind === 'secret' ? ['hex', 'b64', 'jwk'] : ['pem', 'der', 'jwk'];
+                [privFmt, pubFmt].forEach(seg => {
+                    seg.innerHTML = '';
+                    fmts.forEach(f => {
+                        const b = document.createElement('button');
+                        b.textContent = FMT_LABEL[f];
+                        b.dataset.fmt = f;
+                        seg.appendChild(b);
+                    });
+                });
+            }
+
             async function generate() {
                 const type = typeSel.value;
                 const btn = document.getElementById('btn-kp-generate');
@@ -686,9 +791,8 @@
                     if (type === 'oct') {
                         const bytes = crypto.getRandomValues(new Uint8Array(+paramSel.value));
                         gen = describeSecret(bytes, tr('generated'));
-                        privLabel.textContent = tr('Secret (hex)');
-                        privOut.value = toHex(bytes);
-                        privOut.rows = 2;
+                        privLabel.textContent = tr('Secret');
+                        privOut.rows = 3;
                         pubBlock.classList.add('hidden');
                     } else {
                         let params, usages = ['sign', 'verify'];
@@ -709,21 +813,20 @@
                             crv: type === 'ec' ? paramSel.value : type === 'ed25519' ? 'Ed25519' : type === 'x25519' ? 'X25519' : undefined,
                         };
                         gen = await describeKey(imp, tr('generated'));
-                        privLabel.textContent = tr('Private key (PKCS#8 PEM)');
-                        privOut.value = pemWrap('PRIVATE KEY', gen.privDer);
+                        privLabel.textContent = tr('Private key');
                         privOut.rows = 7;
-                        pubOut.value = pemWrap('PUBLIC KEY', gen.pubDer);
                         pubBlock.classList.remove('hidden');
                     }
+                    genView.private = 'pem'; genView.public = 'pem'; genView.secret = 'hex';
+                    buildGenControls();
+                    refreshGenBlock('priv');
+                    if (gen.kind !== 'secret') refreshGenBlock('pub');
                     privBlock.classList.remove('hidden');
                     setGenStatus(tr('Generated:') + ' ' + genLabel(), 'ok');
 
-                    // Show the new key's properties in the inspector. analyze()
-                    // rebuilds `current`, so the generated key's download
-                    // buttons are registered after it.
-                    inspectInput.value = type === 'oct' ? toHex(gen.bytes) : privOut.value;
+                    // Show the new key's properties in the inspector.
+                    inspectInput.value = type === 'oct' ? toHex(gen.bytes) : viewTextFor(gen, 'private', 'pem');
                     await analyze();
-                    renderGenDownloads();
                 } catch (e) {
                     setGenStatus(tr('Key generation failed:') + ' ' + (e.message || e), 'bad');
                 } finally {
@@ -731,33 +834,24 @@
                 }
             }
 
-            // The generated key reuses the same download machinery: it is
-            // appended to `current` and the buttons point at its index.
-            function renderGenDownloads() {
-                privDl.innerHTML = '';
-                pubDl.innerHTML = '';
-                const idx = current.push(gen) - 1;
-                if (gen.kind === 'secret') {
-                    dlButton(privDl, tr('Hex (.txt)'), idx, 'secret', 'hex');
-                    dlButton(privDl, tr('Base64url (.txt)'), idx, 'secret', 'b64');
-                    dlButton(privDl, 'JWK (.json)', idx, 'secret', 'jwk');
-                } else {
-                    dlButton(privDl, 'PEM', idx, 'private', 'pem');
-                    dlButton(privDl, 'DER', idx, 'private', 'der');
-                    dlButton(privDl, 'JWK', idx, 'private', 'jwk');
-                    dlButton(pubDl, 'PEM', idx, 'public', 'pem');
-                    dlButton(pubDl, 'DER', idx, 'public', 'der');
-                    dlButton(pubDl, 'JWK', idx, 'public', 'jwk');
-                }
-            }
-
             /* ---------------- wiring ---------------- */
             typeSel.addEventListener('change', syncParamSelect);
             document.getElementById('btn-kp-generate').addEventListener('click', generate);
-            // analyze() rebuilds `current`, orphaning the generated key's
-            // download buttons — re-register it after every run.
-            document.getElementById('btn-kp-analyze').addEventListener('click',
-                () => analyze().then(() => { if (gen) renderGenDownloads(); }));
+            document.getElementById('btn-kp-analyze').addEventListener('click', analyze);
+
+            [['priv', privFmt, privDlBtn], ['pub', pubFmt, pubDlBtn]].forEach(([which, seg, dlBtn]) => {
+                seg.addEventListener('click', e => {
+                    const b = e.target.closest('button[data-fmt]');
+                    if (!b || !gen) return;
+                    genView[genPartOf(which)] = b.dataset.fmt;
+                    refreshGenBlock(which);
+                });
+                dlBtn.addEventListener('click', () => {
+                    if (!gen) return;
+                    const part = genPartOf(which);
+                    handleDownload(gen, part, genView[part]);
+                });
+            });
 
             syncParamSelect();
         });

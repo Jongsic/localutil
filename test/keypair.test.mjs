@@ -49,9 +49,24 @@ test('inspecting the generated public key identifies it as public', async () => 
     const r = await rows();
     assert.match(r['What it is'], /Public key · SPKI PEM/);
     assert.equal(r['Curve'], 'P-256');
+
+    // format buttons open a preview of the re-encoded key with its own
+    // download button; binary formats preview as <binary>
+    assert.equal(await page.isVisible('#kp-report .kp-preview'), false);
+    await page.click('#kp-report .kp-view[data-part="public"][data-fmt="jwk"]');
+    assert.match(await page.inputValue('#kp-report .kp-preview textarea'), /"kty": "EC"/);
+    assert.equal(await page.textContent('#kp-report .kp-preview .kp-dl'), 'Download Public JWK');
+
+    await page.click('#kp-report .kp-view[data-part="public"][data-fmt="der"]');
+    assert.equal(await page.inputValue('#kp-report .kp-preview textarea'), '<binary>');
+    const [dl] = await Promise.all([
+        page.waitForEvent('download'),
+        page.click('#kp-report .kp-preview .kp-dl'),
+    ]);
+    assert.equal(dl.suggestedFilename(), 'ec-p256-public.der');
 });
 
-test('RSA-2048 reports modulus size and exponent, and downloads all formats', async () => {
+test('RSA-2048 reports modulus size and exponent; format buttons switch the view and the download', async () => {
     await page.selectOption('#kp-type', 'rsa');
     await page.selectOption('#kp-param', '2048');
     await page.click('#btn-kp-generate');
@@ -63,15 +78,25 @@ test('RSA-2048 reports modulus size and exponent, and downloads all formats', as
     assert.match(r['Public exponent'], /^65537/);
     assert.match(r['Usable as (JOSE)'], /RS256.*PS256.*RSA-OAEP/);
 
-    // one download of each format, from the generated-key buttons
-    for (const [sel, name] of [
-        ['#kp-priv-dl button[data-fmt="pem"]', 'rsa-2048-private.pem'],
-        ['#kp-priv-dl button[data-fmt="der"]', 'rsa-2048-private.der'],
-        ['#kp-pub-dl button[data-fmt="jwk"]', 'rsa-2048-public.jwk.json'],
-    ]) {
-        const [dl] = await Promise.all([page.waitForEvent('download'), page.click(sel)]);
-        assert.equal(dl.suggestedFilename(), name);
-    }
+    // PEM is the default view, and the download button names what it downloads
+    assert.match(await page.inputValue('#kp-priv'), /^-----BEGIN PRIVATE KEY-----/);
+    assert.equal(await page.textContent('#kp-priv-download'), 'Download PEM');
+    let [dl] = await Promise.all([page.waitForEvent('download'), page.click('#kp-priv-download')]);
+    assert.equal(dl.suggestedFilename(), 'rsa-2048-private.pem');
+
+    // DER shows <binary> in the box but downloads the real bytes
+    await page.click('#kp-priv-fmt button[data-fmt="der"]');
+    assert.equal(await page.inputValue('#kp-priv'), '<binary>');
+    assert.equal(await page.textContent('#kp-priv-download'), 'Download DER');
+    [dl] = await Promise.all([page.waitForEvent('download'), page.click('#kp-priv-download')]);
+    assert.equal(dl.suggestedFilename(), 'rsa-2048-private.der');
+
+    // JWK shows the JSON
+    await page.click('#kp-pub-fmt button[data-fmt="jwk"]');
+    assert.match(await page.inputValue('#kp-pub'), /"kty": "RSA"/);
+    assert.equal(await page.textContent('#kp-pub-download'), 'Download JWK');
+    [dl] = await Promise.all([page.waitForEvent('download'), page.click('#kp-pub-download')]);
+    assert.equal(dl.suggestedFilename(), 'rsa-2048-public.jwk.json');
 });
 
 test('a private JWK imports, and a JWKS renders one section per key', async () => {
@@ -129,16 +154,24 @@ test('unsupported inputs get a specific explanation, not a generic failure', asy
     }
 });
 
-test('symmetric generation shows hex and hides the public block', async () => {
+test('symmetric generation shows hex, hides the public block, and offers base64/JWK views', async () => {
     await page.selectOption('#kp-type', 'oct');
     await page.selectOption('#kp-param', '32');
     await page.click('#btn-kp-generate');
     await waitGenerated();
-    assert.match(await page.inputValue('#kp-priv'), /^[0-9a-f]{64}$/);
+    const hex = await page.inputValue('#kp-priv');
+    assert.match(hex, /^[0-9a-f]{64}$/);
     assert.equal(await page.isVisible('#kp-pub-block'), false);
+    assert.equal(await page.textContent('#kp-priv-download'), 'Download Hex');
     await waitReport();
     const r = await rows();
     assert.match(r['Usable as (JOSE)'], /HS256.*A256GCM/);
+
+    await page.click('#kp-priv-fmt button[data-fmt="jwk"]');
+    assert.match(await page.inputValue('#kp-priv'), /"kty": "oct"/);
+    assert.equal(await page.textContent('#kp-priv-download'), 'Download JWK');
+    await page.click('#kp-priv-fmt button[data-fmt="b64"]');
+    assert.match(await page.inputValue('#kp-priv'), /^[\w-]{43}$/);
 });
 
 test('no page errors', () => {
