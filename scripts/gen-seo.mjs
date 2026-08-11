@@ -80,6 +80,10 @@ const SEO = {
         title: 'SSH Key Converter (PEM / PuTTY PPK)',
         desc: 'Extract the public key from an SSH private key and convert between OpenSSH / PEM and PuTTY .ppk formats. Runs 100% in your browser — keys never leave your machine.',
     },
+    'keypair.html': {
+        title: 'Key Pair Generator & Inspector (RSA / EC / Ed25519 — PEM / DER / JWK)',
+        desc: 'Generate RSA, EC (P-256/384/521), Ed25519, and X25519 key pairs or symmetric secrets, download them as PEM / DER / JWK, and inspect any pasted key — algorithm, curve, key size, fingerprints. Runs 100% in your browser — keys never leave your machine.',
+    },
     'keystore.html': {
         title: 'Keystore & Certificate Inspector (JKS / P12 / CRT / CSR)',
         desc: 'Read a Java or Android keystore (.jks / .p12) or a certificate file (.crt / .pem / .der / .csr / .p7b): subject, SAN, and SHA-1 / SHA-256 fingerprints with and without colons. Runs 100% in your browser.',

@@ -1,0 +1,767 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
+    <title>Key Pair Generator &amp; Inspector (RSA / EC / Ed25519 — PEM / DER / JWK) — LocalUtil</title>
+    <!-- social / favicon -->
+    <meta name="description" content="Generate RSA, EC (P-256/384/521), Ed25519, and X25519 key pairs or symmetric secrets, download them as PEM / DER / JWK, and inspect any pasted key — algorithm, curve, key size, fingerprints. Runs 100% in your browser — keys never leave your machine.">
+    <link rel="canonical" href="https://jongsic.github.io/localutil/keypair.html">
+    <link rel="icon" href="favicon.ico" sizes="any">
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="LocalUtil">
+    <meta property="og:title" content="Key Pair Generator &amp; Inspector (RSA / EC / Ed25519 — PEM / DER / JWK) — LocalUtil">
+    <meta property="og:description" content="Generate RSA, EC (P-256/384/521), Ed25519, and X25519 key pairs or symmetric secrets, download them as PEM / DER / JWK, and inspect any pasted key — algorithm, curve, key size, fingerprints. Runs 100% in your browser — keys never leave your machine.">
+    <meta property="og:image" content="https://jongsic.github.io/localutil/og.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:url" content="https://jongsic.github.io/localutil/keypair.html">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:image" content="https://jongsic.github.io/localutil/og.png">
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebApplication","name":"Key Pair Generator & Inspector (RSA / EC / Ed25519 — PEM / DER / JWK)","url":"https://jongsic.github.io/localutil/keypair.html","description":"Generate RSA, EC (P-256/384/521), Ed25519, and X25519 key pairs or symmetric secrets, download them as PEM / DER / JWK, and inspect any pasted key — algorithm, curve, key size, fingerprints. Runs 100% in your browser — keys never leave your machine.","applicationCategory":"DeveloperApplication","operatingSystem":"Any","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"isPartOf":{"@type":"WebSite","name":"LocalUtil","url":"https://jongsic.github.io/localutil/"}}</script>
+    <!-- /social -->
+    <script src="theme-init.js"></script>
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        /* Key pair tool — page-specific layout only */
+        .kp-out {
+            position: relative;
+            display: flex;
+        }
+        .kp-out textarea { flex: 1; min-height: 96px; }
+
+        .kp-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .kp-status {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            display: none;
+        }
+        .kp-status.show { display: block; }
+        .kp-status.ok { color: var(--success); }
+        .kp-status.bad { color: var(--danger); }
+
+        /* Property rows, same shape as the keystore inspector */
+        .kp-row {
+            display: flex;
+            gap: 16px;
+            padding: 9px 0;
+            align-items: baseline;
+        }
+        .kp-row + .kp-row { border-top: 1px solid var(--border-color); }
+        .kp-row-key {
+            flex: 0 0 190px;
+            color: var(--text-muted);
+            font-size: 0.82rem;
+            font-weight: 600;
+        }
+        .kp-row-val {
+            flex: 1;
+            min-width: 0;
+            font-family: var(--font-mono);
+            font-size: 0.85rem;
+            word-break: break-all;
+            white-space: pre-wrap;
+            color: var(--text-main);
+        }
+        .kp-row-val.kp-copyable { cursor: pointer; }
+        .kp-row-val.kp-copyable:hover { color: var(--primary); }
+        .kp-row-val.kp-warn { color: var(--warning); font-weight: 600; }
+        .kp-row-val.kp-ok { color: var(--success); }
+
+        .kp-heading {
+            font-size: 0.72rem;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: var(--primary);
+            margin-top: 14px;
+        }
+        .kp-heading:first-child { margin-top: 0; }
+
+        .kp-error {
+            color: var(--danger);
+            font-size: 0.85rem;
+            padding: 10px 13px;
+            background: color-mix(in srgb, var(--danger) 9%, transparent);
+            border: 1px solid color-mix(in srgb, var(--danger) 35%, transparent);
+            border-radius: var(--r-sm);
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+
+        .hidden { display: none !important; }
+
+        @media (max-width: 560px) {
+            .kp-row { flex-direction: column; gap: 3px; }
+            .kp-row-key { flex-basis: auto; }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar" id="app-sidebar"></aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <header class="topbar" id="app-topbar">
+                <div class="topbar-title">
+                    <h1 id="current-tool-title">Key Pair Generator</h1>
+                    <p id="current-tool-desc" class="topbar-desc">Generate RSA / EC / Ed25519 key pairs and secrets, inspect any PEM / JWK key, download as PEM / DER / JWK</p>
+                </div>
+            </header>
+
+            <div class="tools-container">
+                <section id="tool-keypair" class="tool-section active">
+                    <div class="tool-shell">
+                        <div class="split-pane">
+                            <!-- Generate side -->
+                            <div class="pane">
+                                <label for="kp-type">Generate a key</label>
+                                <div class="field-hint">Keys are generated with the browser’s WebCrypto CSPRNG and never leave this page.</div>
+                                <div class="form-grid">
+                                    <div class="field-group">
+                                        <label for="kp-type">Key type</label>
+                                        <select id="kp-type">
+                                            <option value="rsa">RSA — sign / encrypt</option>
+                                            <option value="ec" selected>EC — ECDSA / ECDH</option>
+                                            <option value="ed25519">Ed25519 — signing (EdDSA)</option>
+                                            <option value="x25519">X25519 — key agreement</option>
+                                            <option value="oct">Symmetric secret — HMAC / AES</option>
+                                        </select>
+                                    </div>
+                                    <div class="field-group" id="kp-param-group">
+                                        <label for="kp-param" id="kp-param-label">Curve</label>
+                                        <select id="kp-param"></select>
+                                    </div>
+                                </div>
+                                <div class="kp-actions">
+                                    <button id="btn-kp-generate" class="btn btn-primary">Generate</button>
+                                    <span id="kp-gen-status" class="kp-status" aria-live="polite"></span>
+                                </div>
+
+                                <div id="kp-priv-block" class="hidden">
+                                    <label for="kp-priv" id="kp-priv-label">Private key (PKCS#8 PEM)</label>
+                                    <div class="kp-out">
+                                        <textarea id="kp-priv" rows="7" spellcheck="false" readonly></textarea>
+                                        <button class="btn btn-small copy-btn" data-clipboard-target="#kp-priv">Copy</button>
+                                    </div>
+                                    <div class="kp-actions mt-1" id="kp-priv-dl"></div>
+                                </div>
+
+                                <div id="kp-pub-block" class="hidden">
+                                    <label for="kp-pub">Public key (SPKI PEM)</label>
+                                    <div class="kp-out">
+                                        <textarea id="kp-pub" rows="5" spellcheck="false" readonly></textarea>
+                                        <button class="btn btn-small copy-btn" data-clipboard-target="#kp-pub">Copy</button>
+                                    </div>
+                                    <div class="kp-actions mt-1" id="kp-pub-dl"></div>
+                                </div>
+                            </div>
+
+                            <!-- Inspect side -->
+                            <div class="pane">
+                                <label for="kp-inspect">Inspect a key</label>
+                                <div class="field-hint">Paste a PEM (SPKI / PKCS#8), a JWK or JWKS JSON, or a raw hex / base64 secret. Generated keys are analyzed automatically.</div>
+                                <textarea id="kp-inspect" rows="7" spellcheck="false" autocomplete="off"
+                                    placeholder="-----BEGIN PUBLIC KEY-----  ·  {&quot;kty&quot;:&quot;EC&quot;,…}  ·  a1b2c3…"></textarea>
+                                <div class="kp-actions">
+                                    <button id="btn-kp-analyze" class="btn btn-primary">Analyze</button>
+                                </div>
+                                <div id="kp-report"></div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="toast">Copied to clipboard!</div>
+
+    <script src="app.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const typeSel = document.getElementById('kp-type');
+            const paramSel = document.getElementById('kp-param');
+            const paramLabel = document.getElementById('kp-param-label');
+            const genStatus = document.getElementById('kp-gen-status');
+            const privBlock = document.getElementById('kp-priv-block');
+            const pubBlock = document.getElementById('kp-pub-block');
+            const privLabel = document.getElementById('kp-priv-label');
+            const privOut = document.getElementById('kp-priv');
+            const pubOut = document.getElementById('kp-pub');
+            const privDl = document.getElementById('kp-priv-dl');
+            const pubDl = document.getElementById('kp-pub-dl');
+            const inspectInput = document.getElementById('kp-inspect');
+            const report = document.getElementById('kp-report');
+            const tr = s => (window.t ? window.t(s) : s);
+
+            /* ---------------- byte helpers ---------------- */
+            function toHex(bytes) {
+                return Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+            }
+            function fromHex(s) {
+                const clean = s.replace(/\s+/g, '').replace(/^0x/i, '');
+                if (!/^[0-9a-fA-F]*$/.test(clean) || clean.length % 2) return null;
+                const out = new Uint8Array(clean.length / 2);
+                for (let i = 0; i < out.length; i++) out[i] = parseInt(clean.substr(i * 2, 2), 16);
+                return out;
+            }
+            function b64Encode(bytes) {
+                let bin = '';
+                for (let i = 0; i < bytes.length; i += 0x8000) {
+                    bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+                }
+                return btoa(bin);
+            }
+            function b64urlEncode(bytes) {
+                return b64Encode(bytes).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+            }
+            function b64Decode(s) {
+                let b64 = s.replace(/\s+/g, '').replace(/-/g, '+').replace(/_/g, '/');
+                while (b64.length % 4) b64 += '=';
+                const bin = atob(b64);
+                const out = new Uint8Array(bin.length);
+                for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+                return out;
+            }
+            async function sha256(bytes) {
+                return new Uint8Array(await crypto.subtle.digest('SHA-256', bytes));
+            }
+            function colonHex(bytes) {
+                return Array.from(bytes, b => b.toString(16).padStart(2, '0').toUpperCase()).join(':');
+            }
+            function pemWrap(label, bytes) {
+                const b64 = b64Encode(bytes).replace(/(.{64})/g, '$1\n');
+                return '-----BEGIN ' + label + '-----\n' + b64.trim() + '\n-----END ' + label + '-----';
+            }
+
+            /* ---------------- PEM parsing with guidance ---------------- */
+            const PEM_RE = /-----BEGIN ([A-Z0-9 ]+)-----([\s\S]*?)-----END \1-----/;
+
+            function parsePem(text) {
+                const m = PEM_RE.exec(text);
+                if (!m) throw new Error(tr('Not a PEM block — expected -----BEGIN … ----- / -----END … -----.'));
+                const label = m[1].trim();
+                if (label === 'CERTIFICATE' || label === 'CERTIFICATE REQUEST' || label === 'PKCS7') {
+                    throw new Error(tr('This is a certificate / CSR — inspect it in the Keystore Inspector tool. To extract just the public key: openssl x509 -in cert.pem -pubkey -noout'));
+                }
+                if (label === 'OPENSSH PRIVATE KEY') {
+                    throw new Error(tr('This is an OpenSSH private key — convert it with the SSH Key Converter tool on this site, then paste the PKCS#8 result here.'));
+                }
+                if (label === 'RSA PUBLIC KEY') {
+                    throw new Error(tr('PKCS#1 “RSA PUBLIC KEY” is not importable by WebCrypto. Convert it first: openssl rsa -pubin -RSAPublicKey_in -in key.pem -out spki.pem'));
+                }
+                if (label === 'RSA PRIVATE KEY' || label === 'EC PRIVATE KEY') {
+                    throw new Error(label + ' — ' + tr('PKCS#1/SEC1 is not importable by WebCrypto. Convert to PKCS#8: openssl pkcs8 -topk8 -nocrypt -in key.pem -out pkcs8.pem'));
+                }
+                if (label === 'ENCRYPTED PRIVATE KEY') {
+                    throw new Error(tr('This private key is passphrase-encrypted. Decrypt it first: openssl pkcs8 -in key.pem -out plain.pem'));
+                }
+                if (label !== 'PUBLIC KEY' && label !== 'PRIVATE KEY') {
+                    throw new Error(tr('Unsupported PEM type') + ' “' + label + '”');
+                }
+                let der;
+                try { der = b64Decode(m[2]); }
+                catch (e) { throw new Error(tr('PEM body is not valid base64.')); }
+                return { der, isPrivate: label === 'PRIVATE KEY' };
+            }
+
+            /* ---------------- trial import (DER) ----------------
+               The algorithm is identified by trying each candidate: the set is
+               small and a failed import is itself the answer. Everything is
+               imported extractable so it can be re-exported as JWK / DER. */
+            const EC_BITS = { 'P-256': 256, 'P-384': 384, 'P-521': 521 };
+
+            async function importDer(fmt, der) {
+                const isPriv = fmt === 'pkcs8';
+                const sigUse = isPriv ? ['sign'] : ['verify'];
+                const tries = [
+                    { params: { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' }, usages: sigUse, family: 'RSA' },
+                    { params: { name: 'RSA-PSS', hash: 'SHA-256' }, usages: sigUse, family: 'RSA', note: 'id-RSASSA-PSS (PSS-restricted key)' },
+                    { params: { name: 'RSA-OAEP', hash: 'SHA-256' }, usages: isPriv ? ['decrypt'] : ['encrypt'], family: 'RSA', note: 'id-RSAES-OAEP (encryption-restricted key)' },
+                    ...Object.keys(EC_BITS).map(crv => ({ params: { name: 'ECDSA', namedCurve: crv }, usages: sigUse, family: 'EC', crv })),
+                    { params: { name: 'Ed25519' }, usages: sigUse, family: 'OKP', crv: 'Ed25519' },
+                    { params: { name: 'X25519' }, usages: isPriv ? ['deriveBits'] : [], family: 'OKP', crv: 'X25519' },
+                ];
+                for (const t of tries) {
+                    try {
+                        const key = await crypto.subtle.importKey(fmt, der, t.params, true, t.usages);
+                        return { key, family: t.family, crv: t.crv, note: t.note };
+                    } catch (e) { /* not this algorithm — try the next */ }
+                }
+                throw new Error(tr('Could not identify this key — unsupported algorithm or corrupted data. WebCrypto supports RSA, EC P-256/384/521, Ed25519, and X25519.'));
+            }
+
+            function jwkImportSpec(jwk, isPriv) {
+                const sigUse = isPriv ? ['sign'] : ['verify'];
+                if (jwk.kty === 'RSA') {
+                    return { params: { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' }, usages: sigUse, family: 'RSA' };
+                }
+                if (jwk.kty === 'EC') {
+                    if (!EC_BITS[jwk.crv]) {
+                        throw new Error(tr('EC curve not importable by WebCrypto:') + ' ' + (jwk.crv || '(missing crv)')
+                            + ' — ' + tr('supported curves are P-256, P-384, and P-521.'));
+                    }
+                    return { params: { name: 'ECDSA', namedCurve: jwk.crv }, usages: sigUse, family: 'EC', crv: jwk.crv };
+                }
+                if (jwk.kty === 'OKP') {
+                    if (jwk.crv === 'Ed25519') return { params: { name: 'Ed25519' }, usages: sigUse, family: 'OKP', crv: 'Ed25519' };
+                    if (jwk.crv === 'X25519') return { params: { name: 'X25519' }, usages: isPriv ? ['deriveBits'] : [], family: 'OKP', crv: 'X25519' };
+                    throw new Error(tr('OKP curve not importable by WebCrypto:') + ' ' + (jwk.crv || '(missing crv)'));
+                }
+                throw new Error(tr('Unsupported JWK key type (kty):') + ' ' + (jwk.kty || '(missing)'));
+            }
+
+            function publicJwkOf(jwk) {
+                if (jwk.kty === 'RSA') return { kty: 'RSA', n: jwk.n, e: jwk.e };
+                if (jwk.kty === 'EC') return { kty: 'EC', crv: jwk.crv, x: jwk.x, y: jwk.y };
+                return { kty: 'OKP', crv: jwk.crv, x: jwk.x };
+            }
+
+            // RFC 7638 §3 — thumbprint over the required members in lexicographic order.
+            async function jwkThumbprint(jwk) {
+                let canon;
+                if (jwk.kty === 'RSA') canon = { e: jwk.e, kty: 'RSA', n: jwk.n };
+                else if (jwk.kty === 'EC') canon = { crv: jwk.crv, kty: 'EC', x: jwk.x, y: jwk.y };
+                else if (jwk.kty === 'OKP') canon = { crv: jwk.crv, kty: 'OKP', x: jwk.x };
+                else if (jwk.kty === 'oct') canon = { k: jwk.k, kty: 'oct' };
+                else return null;
+                return b64urlEncode(await sha256(new TextEncoder().encode(JSON.stringify(canon))));
+            }
+
+            /* ---------------- property extraction ---------------- */
+            function rsaBits(nB64url) {
+                const n = b64Decode(nB64url);
+                let i = 0;
+                while (i < n.length && n[i] === 0) i++;
+                if (i === n.length) return 0;
+                return (n.length - i - 1) * 8 + n[i].toString(2).length;
+            }
+            function rsaExponent(eB64url) {
+                let v = 0n;
+                for (const b of b64Decode(eB64url)) v = (v << 8n) | BigInt(b);
+                return v.toString();
+            }
+
+            function joseAlgsFor(item) {
+                if (item.family === 'RSA') {
+                    const sign = 'RS256 · RS384 · RS512 · PS256 · PS384 · PS512';
+                    const enc = 'RSA-OAEP';
+                    return sign + ' (' + tr('sign') + ') · ' + enc + ' (' + tr('encrypt') + ')';
+                }
+                if (item.family === 'EC') {
+                    const es = { 'P-256': 'ES256', 'P-384': 'ES384', 'P-521': 'ES512' }[item.crv];
+                    return es + ' (' + tr('sign') + ') · ECDH-ES (' + tr('key agreement') + ')';
+                }
+                if (item.crv === 'Ed25519') return 'EdDSA (' + tr('sign') + ')';
+                if (item.crv === 'X25519') return 'ECDH-ES (' + tr('key agreement') + ') — ' + tr('cannot sign');
+                return '';
+            }
+
+            // Build the unified item that both the renderer and the download
+            // buttons consume, starting from an imported private or public key.
+            async function describeKey(imp, container) {
+                const jwk = await crypto.subtle.exportKey('jwk', imp.key);
+                const isPriv = imp.key.type === 'private';
+                const item = {
+                    kind: isPriv ? 'private' : 'public',
+                    container, family: imp.family, crv: imp.crv, note: imp.note,
+                    kid: imp.kid, warnings: [],
+                };
+
+                if (imp.family === 'RSA') {
+                    item.bits = rsaBits(jwk.n);
+                    item.exponent = rsaExponent(jwk.e);
+                    if (item.bits < 2048) {
+                        item.warnings.push(tr('RSA below 2048 bits is not accepted by RFC 7518 and is considered weak — generate a new key.'));
+                    }
+                } else if (imp.family === 'EC') {
+                    item.bits = EC_BITS[imp.crv];
+                } else {
+                    item.bits = 256; // Curve25519 keys are 32 bytes
+                }
+
+                if (isPriv) {
+                    item.privJwk = jwk;
+                    item.privDer = new Uint8Array(await crypto.subtle.exportKey('pkcs8', imp.key));
+                    item.pubJwk = publicJwkOf(jwk);
+                    const spec = jwkImportSpec(item.pubJwk, false);
+                    const pubKey = await crypto.subtle.importKey('jwk', item.pubJwk, spec.params, true, spec.usages);
+                    item.pubDer = new Uint8Array(await crypto.subtle.exportKey('spki', pubKey));
+                } else {
+                    item.pubJwk = jwk;
+                    item.pubDer = new Uint8Array(await crypto.subtle.exportKey('spki', imp.key));
+                }
+
+                item.fingerprint = colonHex(await sha256(item.pubDer));
+                item.thumbprint = await jwkThumbprint(item.pubJwk);
+                return item;
+            }
+
+            function describeSecret(bytes, container) {
+                const item = { kind: 'secret', container, family: 'oct', bits: bytes.length * 8, bytes, warnings: [] };
+                const okFor = [];
+                if (bytes.length >= 32) okFor.push('HS256');
+                if (bytes.length >= 48) okFor.push('HS384');
+                if (bytes.length >= 64) okFor.push('HS512');
+                if (bytes.length === 16 || bytes.length === 24 || bytes.length === 32) {
+                    okFor.push('A' + bytes.length * 8 + 'GCM');
+                }
+                item.joseAlgs = okFor.join(' · ');
+                if (bytes.length < 32) {
+                    item.warnings.push(tr('Shorter than 32 bytes — RFC 7518 §3.2 requires an HS256 key of at least 256 bits.'));
+                }
+                return item;
+            }
+
+            /* ---------------- input dispatch ---------------- */
+            async function analyzeJwk(jwk, container) {
+                if (!jwk || typeof jwk !== 'object') throw new Error(tr('Not a JWK object.'));
+                if (jwk.kty === 'oct') {
+                    if (!jwk.k) throw new Error(tr('This oct JWK has no "k" member.'));
+                    const item = describeSecret(b64Decode(jwk.k), container);
+                    item.kid = jwk.kid;
+                    item.thumbprint = await jwkThumbprint(jwk);
+                    return item;
+                }
+                const clean = Object.assign({}, jwk);
+                delete clean.alg; delete clean.use; delete clean.key_ops; delete clean.ext;
+                const isPriv = !!clean.d;
+                const spec = jwkImportSpec(clean, isPriv);
+                let key;
+                try {
+                    key = await crypto.subtle.importKey('jwk', clean, spec.params, true, spec.usages);
+                } catch (e) {
+                    throw new Error(tr('This JWK does not import — a member is missing or inconsistent with its key type.') + ' (' + (e.message || e) + ')');
+                }
+                return describeKey({ key, family: spec.family, crv: spec.crv, kid: jwk.kid }, container);
+            }
+
+            async function parseInput(text) {
+                if (text.includes('-----BEGIN')) {
+                    const { der, isPrivate } = parsePem(text);
+                    const fmt = isPrivate ? 'pkcs8' : 'spki';
+                    const imp = await importDer(fmt, der);
+                    return [await describeKey(imp, (isPrivate ? 'PKCS#8' : 'SPKI') + ' PEM')];
+                }
+                if (/^(ssh|ecdsa)-[a-z0-9-]+\s/.test(text)) {
+                    throw new Error(tr('This is an OpenSSH public key line — convert it with the SSH Key Converter tool on this site.'));
+                }
+                if (text.startsWith('{')) {
+                    let j;
+                    try { j = JSON.parse(text); } catch (e) { throw new Error(tr('Not valid JSON:') + ' ' + e.message); }
+                    if (Array.isArray(j.keys)) {
+                        if (!j.keys.length) throw new Error(tr('This JWKS has an empty "keys" array.'));
+                        const out = [];
+                        for (const k of j.keys) out.push(await analyzeJwk(k, 'JWKS'));
+                        return out;
+                    }
+                    return [await analyzeJwk(j, 'JWK')];
+                }
+                const hexBytes = fromHex(text);
+                if (hexBytes && hexBytes.length) return [describeSecret(hexBytes, tr('raw hex'))];
+                try {
+                    const b = b64Decode(text);
+                    if (b.length) return [describeSecret(b, tr('raw base64'))];
+                } catch (e) { /* not base64 either */ }
+                throw new Error(tr('Unrecognized input — expected a PEM block, JWK / JWKS JSON, or a hex / base64 secret.'));
+            }
+
+            /* ---------------- rendering ---------------- */
+            let current = [];   // items backing the download buttons
+
+            function row(parent, key, val, cls) {
+                const r = document.createElement('div');
+                r.className = 'kp-row';
+                const k = document.createElement('div');
+                k.className = 'kp-row-key';
+                k.textContent = key;
+                const v = document.createElement('div');
+                v.className = 'kp-row-val' + (cls ? ' ' + cls : '');
+                v.textContent = val;
+                r.appendChild(k); r.appendChild(v);
+                parent.appendChild(r);
+                return v;
+            }
+
+            function copyable(el, label) {
+                el.classList.add('kp-copyable');
+                el.title = tr('Click to copy');
+                el.addEventListener('click', () => {
+                    navigator.clipboard.writeText(el.textContent)
+                        .then(() => window.showToast && window.showToast(label + ' ' + tr('copied')));
+                });
+            }
+
+            function dlButton(parent, label, idx, part, fmt) {
+                const b = document.createElement('button');
+                b.className = 'btn btn-small';
+                b.textContent = label;
+                b.dataset.idx = idx; b.dataset.part = part; b.dataset.fmt = fmt;
+                parent.appendChild(b);
+                return b;
+            }
+
+            function kindLabel(item) {
+                if (item.kind === 'secret') return tr('Symmetric secret') + ' · ' + item.container + ' (' + item.bytes.length + ' ' + tr('bytes') + ')';
+                return (item.kind === 'private' ? tr('Private key') : tr('Public key')) + ' · ' + item.container;
+            }
+
+            function familyLabel(item) {
+                if (item.family === 'RSA') return 'RSA' + (item.note ? ' — ' + item.note : '');
+                if (item.family === 'EC') return 'EC (' + item.crv + ')';
+                if (item.family === 'OKP') return item.crv;
+                return tr('Symmetric (oct)');
+            }
+
+            function renderItem(item, idx, total) {
+                if (total > 1) {
+                    const h = document.createElement('div');
+                    h.className = 'kp-heading';
+                    h.textContent = tr('Key') + ' ' + (idx + 1) + ' / ' + total + (item.kid ? ' · kid: ' + item.kid : '');
+                    report.appendChild(h);
+                }
+                row(report, tr('What it is'), kindLabel(item));
+                row(report, tr('Algorithm'), familyLabel(item));
+                if (item.crv) row(report, tr('Curve'), item.crv);
+                row(report, tr('Key size'), item.bits + ' ' + tr('bits'));
+                if (item.exponent) row(report, tr('Public exponent'), item.exponent + (item.exponent === '65537' ? ' (0x10001)' : ''));
+                const jose = item.joseAlgs !== undefined ? item.joseAlgs : joseAlgsFor(item);
+                row(report, tr('Usable as (JOSE)'), jose || '—');
+                if (item.kid && total === 1) row(report, tr('Key ID (kid)'), item.kid);
+                if (item.kind === 'secret') {
+                    copyable(row(report, tr('Hex'), toHex(item.bytes)), tr('Hex'));
+                    copyable(row(report, tr('Base64url'), b64urlEncode(item.bytes)), tr('Base64url'));
+                } else {
+                    copyable(row(report, tr('SHA-256 fingerprint (SPKI)'), item.fingerprint), tr('Fingerprint'));
+                }
+                if (item.thumbprint) copyable(row(report, tr('JWK thumbprint (RFC 7638)'), item.thumbprint), tr('Thumbprint'));
+                item.warnings.forEach(w => row(report, tr('Warning'), '⚠ ' + w, 'kp-warn'));
+
+                const dlVal = row(report, tr('Download'), '');
+                dlVal.textContent = '';
+                const wrap = document.createElement('div');
+                wrap.className = 'kp-actions';
+                if (item.kind === 'secret') {
+                    dlButton(wrap, tr('Hex (.txt)'), idx, 'secret', 'hex');
+                    dlButton(wrap, tr('Base64url (.txt)'), idx, 'secret', 'b64');
+                    dlButton(wrap, 'JWK (.json)', idx, 'secret', 'jwk');
+                } else {
+                    if (item.kind === 'private') {
+                        dlButton(wrap, tr('Private') + ' PEM', idx, 'private', 'pem');
+                        dlButton(wrap, tr('Private') + ' DER', idx, 'private', 'der');
+                        dlButton(wrap, tr('Private') + ' JWK', idx, 'private', 'jwk');
+                    }
+                    dlButton(wrap, tr('Public') + ' PEM', idx, 'public', 'pem');
+                    dlButton(wrap, tr('Public') + ' DER', idx, 'public', 'der');
+                    dlButton(wrap, tr('Public') + ' JWK', idx, 'public', 'jwk');
+                }
+                dlVal.appendChild(wrap);
+            }
+
+            function renderError(msg) {
+                report.innerHTML = '';
+                const d = document.createElement('div');
+                d.className = 'kp-error';
+                d.textContent = msg;
+                report.appendChild(d);
+            }
+
+            async function analyze() {
+                report.innerHTML = '';
+                current = [];
+                const text = inspectInput.value.trim();
+                if (!text) return;
+                try {
+                    const items = await parseInput(text);
+                    current = items;
+                    items.forEach((it, i) => renderItem(it, i, items.length));
+                } catch (e) {
+                    renderError(e.message);
+                }
+            }
+
+            /* ---------------- downloads ---------------- */
+            function download(filename, data, mime) {
+                const url = URL.createObjectURL(new Blob([data], { type: mime }));
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                a.click();
+                setTimeout(() => URL.revokeObjectURL(url), 4000);
+            }
+
+            function baseName(item) {
+                if (item.kind === 'secret') return 'secret-' + item.bytes.length + 'b';
+                if (item.family === 'RSA') return 'rsa-' + item.bits;
+                if (item.family === 'EC') return 'ec-' + item.crv.toLowerCase().replace('-', '');
+                return item.crv.toLowerCase();
+            }
+
+            function handleDownload(item, part, fmt) {
+                const base = baseName(item);
+                if (part === 'secret') {
+                    if (fmt === 'hex') return download(base + '.hex.txt', toHex(item.bytes) + '\n', 'text/plain');
+                    if (fmt === 'b64') return download(base + '.b64.txt', b64urlEncode(item.bytes) + '\n', 'text/plain');
+                    return download(base + '.jwk.json', JSON.stringify({ kty: 'oct', k: b64urlEncode(item.bytes) }, null, 2) + '\n', 'application/json');
+                }
+                const isPriv = part === 'private';
+                const suffix = isPriv ? '-private' : '-public';
+                const der = isPriv ? item.privDer : item.pubDer;
+                const jwk = isPriv ? item.privJwk : item.pubJwk;
+                if (fmt === 'pem') {
+                    return download(base + suffix + '.pem', pemWrap(isPriv ? 'PRIVATE KEY' : 'PUBLIC KEY', der) + '\n', 'application/x-pem-file');
+                }
+                if (fmt === 'der') return download(base + suffix + '.der', der, 'application/octet-stream');
+                return download(base + suffix + '.jwk.json', JSON.stringify(jwk, null, 2) + '\n', 'application/json');
+            }
+
+            function onDownloadClick(e) {
+                const b = e.target.closest('button[data-part]');
+                if (!b) return;
+                const item = current[+b.dataset.idx];
+                if (item) handleDownload(item, b.dataset.part, b.dataset.fmt);
+            }
+            report.addEventListener('click', onDownloadClick);
+            privDl.addEventListener('click', onDownloadClick);
+            pubDl.addEventListener('click', onDownloadClick);
+
+            /* ---------------- generation ---------------- */
+            const PARAMS = {
+                rsa: { label: 'Modulus size', options: [['2048', '2048 bits'], ['3072', '3072 bits'], ['4096', '4096 bits']] },
+                ec: { label: 'Curve', options: [['P-256', 'P-256 (ES256)'], ['P-384', 'P-384 (ES384)'], ['P-521', 'P-521 (ES512)']] },
+                oct: { label: 'Length', options: [['16', '16 bytes — AES-128'], ['32', '32 bytes — HS256 / AES-256'], ['48', '48 bytes — HS384'], ['64', '64 bytes — HS512']] },
+            };
+
+            function syncParamSelect() {
+                const p = PARAMS[typeSel.value];
+                document.getElementById('kp-param-group').classList.toggle('hidden', !p);
+                if (!p) return;
+                paramLabel.textContent = tr(p.label);
+                paramSel.innerHTML = '';
+                p.options.forEach(([v, label]) => {
+                    const o = document.createElement('option');
+                    o.value = v; o.textContent = label;
+                    paramSel.appendChild(o);
+                });
+                if (typeSel.value === 'oct') paramSel.value = '32';
+            }
+
+            function setGenStatus(msg, cls) {
+                genStatus.textContent = msg || '';
+                genStatus.className = 'kp-status' + (msg ? ' show' : '') + (cls ? ' ' + cls : '');
+            }
+
+            let gen = null;
+
+            function genLabel() {
+                const t = typeSel.value;
+                if (t === 'rsa') return 'RSA-' + paramSel.value;
+                if (t === 'ec') return 'EC ' + paramSel.value;
+                if (t === 'ed25519') return 'Ed25519';
+                if (t === 'x25519') return 'X25519';
+                return paramSel.value + '-' + tr('byte secret');
+            }
+
+            async function generate() {
+                const type = typeSel.value;
+                const btn = document.getElementById('btn-kp-generate');
+                btn.disabled = true;
+                setGenStatus(tr('Generating…'), '');
+                try {
+                    if (type === 'oct') {
+                        const bytes = crypto.getRandomValues(new Uint8Array(+paramSel.value));
+                        gen = describeSecret(bytes, tr('generated'));
+                        privLabel.textContent = tr('Secret (hex)');
+                        privOut.value = toHex(bytes);
+                        privOut.rows = 2;
+                        pubBlock.classList.add('hidden');
+                    } else {
+                        let params, usages = ['sign', 'verify'];
+                        if (type === 'rsa') {
+                            params = { name: 'RSASSA-PKCS1-v1_5', modulusLength: +paramSel.value, publicExponent: new Uint8Array([1, 0, 1]), hash: 'SHA-256' };
+                        } else if (type === 'ec') {
+                            params = { name: 'ECDSA', namedCurve: paramSel.value };
+                        } else if (type === 'ed25519') {
+                            params = { name: 'Ed25519' };
+                        } else {
+                            params = { name: 'X25519' };
+                            usages = ['deriveBits'];
+                        }
+                        const kp = await crypto.subtle.generateKey(params, true, usages);
+                        const imp = {
+                            key: kp.privateKey,
+                            family: type === 'rsa' ? 'RSA' : type === 'ec' ? 'EC' : 'OKP',
+                            crv: type === 'ec' ? paramSel.value : type === 'ed25519' ? 'Ed25519' : type === 'x25519' ? 'X25519' : undefined,
+                        };
+                        gen = await describeKey(imp, tr('generated'));
+                        privLabel.textContent = tr('Private key (PKCS#8 PEM)');
+                        privOut.value = pemWrap('PRIVATE KEY', gen.privDer);
+                        privOut.rows = 7;
+                        pubOut.value = pemWrap('PUBLIC KEY', gen.pubDer);
+                        pubBlock.classList.remove('hidden');
+                    }
+                    privBlock.classList.remove('hidden');
+                    setGenStatus(tr('Generated:') + ' ' + genLabel(), 'ok');
+
+                    // Show the new key's properties in the inspector. analyze()
+                    // rebuilds `current`, so the generated key's download
+                    // buttons are registered after it.
+                    inspectInput.value = type === 'oct' ? toHex(gen.bytes) : privOut.value;
+                    await analyze();
+                    renderGenDownloads();
+                } catch (e) {
+                    setGenStatus(tr('Key generation failed:') + ' ' + (e.message || e), 'bad');
+                } finally {
+                    btn.disabled = false;
+                }
+            }
+
+            // The generated key reuses the same download machinery: it is
+            // appended to `current` and the buttons point at its index.
+            function renderGenDownloads() {
+                privDl.innerHTML = '';
+                pubDl.innerHTML = '';
+                const idx = current.push(gen) - 1;
+                if (gen.kind === 'secret') {
+                    dlButton(privDl, tr('Hex (.txt)'), idx, 'secret', 'hex');
+                    dlButton(privDl, tr('Base64url (.txt)'), idx, 'secret', 'b64');
+                    dlButton(privDl, 'JWK (.json)', idx, 'secret', 'jwk');
+                } else {
+                    dlButton(privDl, 'PEM', idx, 'private', 'pem');
+                    dlButton(privDl, 'DER', idx, 'private', 'der');
+                    dlButton(privDl, 'JWK', idx, 'private', 'jwk');
+                    dlButton(pubDl, 'PEM', idx, 'public', 'pem');
+                    dlButton(pubDl, 'DER', idx, 'public', 'der');
+                    dlButton(pubDl, 'JWK', idx, 'public', 'jwk');
+                }
+            }
+
+            /* ---------------- wiring ---------------- */
+            typeSel.addEventListener('change', syncParamSelect);
+            document.getElementById('btn-kp-generate').addEventListener('click', generate);
+            // analyze() rebuilds `current`, orphaning the generated key's
+            // download buttons — re-register it after every run.
+            document.getElementById('btn-kp-analyze').addEventListener('click',
+                () => analyze().then(() => { if (gen) renderGenDownloads(); }));
+
+            syncParamSelect();
+        });
+    </script>
+</body>
+
+</html>
