@@ -25,6 +25,7 @@
     <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebApplication","name":"TOTP Code Generator (2FA)","url":"https://jongsic.github.io/localutil/totp.html","description":"Generate time-based one-time passwords (TOTP) from a 2FA secret key. Runs 100% in your browser — secrets never leave your machine.","applicationCategory":"DeveloperApplication","operatingSystem":"Any","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"isPartOf":{"@type":"WebSite","name":"LocalUtil","url":"https://jongsic.github.io/localutil/"}}</script>
     <!-- /social -->
     <script src="theme-init.js"></script>
+    <script src="vendor/jsQR.min.js"></script>
     <link rel="stylesheet" href="styles.css">
     <style>
         #tool-totp .form-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 14px; }
@@ -77,8 +78,8 @@
                 <section id="tool-totp" class="tool-section active">
                     <div class="card" style="padding:20px;">
                         <label for="totp-secret">TOTP secret</label>
-                        <div class="field-hint">Base32 secret or an <code>otpauth://</code> URI. Computed locally — your secret never leaves the browser.</div>
-                        <input type="text" id="totp-secret" placeholder="JBSWY3DPEHPK3PXP  or  otpauth://totp/...">
+                        <div class="field-hint">Base32 secret, an <code>otpauth://</code> URI, or paste a QR code image (Ctrl/⌘&nbsp;+&nbsp;V). Computed locally — your secret never leaves the browser.</div>
+                        <input type="text" id="totp-secret" placeholder="JBSWY3DPEHPK3PXP  ·  otpauth://totp/...  ·  paste a QR image">
 
                         <div class="form-grid">
                             <div>
@@ -247,6 +248,45 @@
 
             secretIn.addEventListener('input', () => { refreshSecret(); tick(); });
             [digitsSel, periodSel, algoSel].forEach(el => el.addEventListener('change', tick));
+
+            // Paste a QR code image (e.g. a 2FA enrollment screenshot) anywhere on the page:
+            // decode it and feed the otpauth:// URI / secret into the input.
+            function decodeQrImage(blob) {
+                const img = new Image();
+                const url = URL.createObjectURL(blob);
+                img.onload = () => {
+                    URL.revokeObjectURL(url);
+                    const canvas = document.createElement('canvas');
+                    canvas.width = img.naturalWidth;
+                    canvas.height = img.naturalHeight;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0);
+                    const data = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                    const code = jsQR(data.data, data.width, data.height, { inversionAttempts: 'attemptBoth' });
+                    if (!code || !code.data) { showInvalid('No QR code found in the pasted image'); return; }
+                    if (/^otpauth-migration:\/\//i.test(code.data.trim())) {
+                        showInvalid('Google Authenticator export QR is not supported — use a single-account QR');
+                        return;
+                    }
+                    secretIn.value = code.data.trim();
+                    refreshSecret();
+                    tick();
+                };
+                img.onerror = () => { URL.revokeObjectURL(url); showInvalid('Failed to load the pasted image'); };
+                img.src = url;
+            }
+
+            document.addEventListener('paste', (e) => {
+                const items = e.clipboardData && e.clipboardData.items;
+                if (!items) return;
+                for (const item of items) {
+                    if (item.type.startsWith('image/')) {
+                        e.preventDefault();
+                        decodeQrImage(item.getAsFile());
+                        return;
+                    }
+                }
+            });
 
             refreshSecret();
             tick();
