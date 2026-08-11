@@ -189,7 +189,7 @@
                                     Signing with a private key instead produces a plain compact JWS, which any JOSE
                                     library reads. Note a JWS is not automatically a <i>JWT</i>: JWT requires a JSON
                                     payload, so only a JSON message makes the token readable by JWT tooling — including
-                                    this site’s JWT Decode.</li>
+                                    this site’s JWT Encode / Decode.</li>
                                 <li><b>It is bound to a domain.</b> <code>rpIdHash</code> commits to the site that
                                     requested it — a signature made here says “made on this origin”, and cannot be
                                     replayed as one made elsewhere.</li>

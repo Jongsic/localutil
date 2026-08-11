@@ -5,31 +5,31 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
-    <title>JWT Decoder — LocalUtil</title>
+    <title>JWT Encoder / Decoder — LocalUtil</title>
     <!-- social / favicon -->
-    <meta name="description" content="Decode a JWT (JSON Web Token) and inspect its header, payload, and signature. Runs 100% in your browser — tokens never leave your machine.">
+    <meta name="description" content="Decode, verify, and sign JWTs (JSON Web Tokens) — HS256, RS256, ES256, EdDSA and more, with a secret, PEM key, or JWK. Runs 100% in your browser — tokens never leave your machine.">
     <link rel="canonical" href="https://jongsic.github.io/localutil/jwt.html">
     <link rel="icon" href="favicon.ico" sizes="any">
     <link rel="icon" type="image/png" href="favicon.png">
     <link rel="apple-touch-icon" href="apple-touch-icon.png">
     <meta property="og:type" content="website">
     <meta property="og:site_name" content="LocalUtil">
-    <meta property="og:title" content="JWT Decoder — LocalUtil">
-    <meta property="og:description" content="Decode a JWT (JSON Web Token) and inspect its header, payload, and signature. Runs 100% in your browser — tokens never leave your machine.">
+    <meta property="og:title" content="JWT Encoder / Decoder — LocalUtil">
+    <meta property="og:description" content="Decode, verify, and sign JWTs (JSON Web Tokens) — HS256, RS256, ES256, EdDSA and more, with a secret, PEM key, or JWK. Runs 100% in your browser — tokens never leave your machine.">
     <meta property="og:image" content="https://jongsic.github.io/localutil/og.png">
     <meta property="og:image:width" content="1200">
     <meta property="og:image:height" content="630">
     <meta property="og:url" content="https://jongsic.github.io/localutil/jwt.html">
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:image" content="https://jongsic.github.io/localutil/og.png">
-    <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebApplication","name":"JWT Decoder","url":"https://jongsic.github.io/localutil/jwt.html","description":"Decode a JWT (JSON Web Token) and inspect its header, payload, and signature. Runs 100% in your browser — tokens never leave your machine.","applicationCategory":"DeveloperApplication","operatingSystem":"Any","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"isPartOf":{"@type":"WebSite","name":"LocalUtil","url":"https://jongsic.github.io/localutil/"}}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebApplication","name":"JWT Encoder / Decoder","url":"https://jongsic.github.io/localutil/jwt.html","description":"Decode, verify, and sign JWTs (JSON Web Tokens) — HS256, RS256, ES256, EdDSA and more, with a secret, PEM key, or JWK. Runs 100% in your browser — tokens never leave your machine.","applicationCategory":"DeveloperApplication","operatingSystem":"Any","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"isPartOf":{"@type":"WebSite","name":"LocalUtil","url":"https://jongsic.github.io/localutil/"}}</script>
     <!-- /social -->
     <script src="theme-init.js"></script>
     <link rel="stylesheet" href="styles.css">
     <style>
         /* JWT tool — page-specific layout only */
         .jwt-decoded {
-            flex: 1;
+            flex: 1.15;
             min-width: 0;
             display: flex;
             flex-direction: column;
@@ -45,12 +45,75 @@
             flex: 1;
         }
 
+        /* Direction buttons between the token pane and the decoded side.
+           Horizontal layout rotates the chevrons to point up / down. */
+        .jwt-dir {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .jwt-dir .btn {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 3px;
+            padding: 9px 12px;
+            font-size: 0.72rem;
+            color: var(--text-muted);
+        }
+
+        .jwt-dir .btn:hover { color: var(--text-main); }
+
+        .jwt-dir svg { width: 18px; height: 18px; }
+
+        @media (max-width: 860px) {
+            .jwt-dir { flex-direction: row; }
+            .jwt-dir svg { transform: rotate(90deg); }
+        }
+
+        .jwt-sig-status {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            margin-top: 10px;
+            display: none;
+        }
+        .jwt-sig-status.show { display: block; }
+        .jwt-sig-status.ok { color: var(--success); }
+        /* A failed verification is the one result that must not be skimmed past. */
+        .jwt-sig-status.bad {
+            color: var(--danger);
+            font-weight: 600;
+            padding: 10px 13px;
+            background: color-mix(in srgb, var(--danger) 9%, transparent);
+            border: 1px solid color-mix(in srgb, var(--danger) 35%, transparent);
+            border-radius: var(--r-sm);
+        }
+
+        .jwt-key-match {
+            font-size: 0.8rem;
+            display: none;
+        }
+        .jwt-key-match.show { display: block; }
+        .jwt-key-match.ok { color: var(--success); }
+        .jwt-key-match.warn { color: var(--warning); font-weight: 600; }
+
+        .jwt-key-grid {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
         .jwt-actions {
             display: flex;
             flex-wrap: wrap;
             gap: 8px;
-            margin-top: 4px;
+            margin-top: 10px;
         }
+
+        .hidden { display: none !important; }
     </style>
 </head>
 
@@ -63,8 +126,8 @@
         <main class="main-content">
             <header class="topbar" id="app-topbar">
                 <div class="topbar-title">
-                    <h1 id="current-tool-title">JWT Decode</h1>
-                    <p id="current-tool-desc" class="topbar-desc">Decode and inspect JSON Web Tokens</p>
+                    <h1 id="current-tool-title">JWT Encode / Decode</h1>
+                    <p id="current-tool-desc" class="topbar-desc">Decode, verify, and create JSON Web Tokens</p>
                 </div>
             </header>
 
@@ -76,13 +139,21 @@
                             <!-- Encoded token side -->
                             <div class="pane">
                                 <label for="jwt-input">Encoded token</label>
-                                <div class="field-hint">Paste a JWT to decode it, or build one below and encode.</div>
+                                <div class="field-hint">Paste a JWT and decode it, or build one on the right and encode.</div>
                                 <textarea id="jwt-input" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9…"></textarea>
                                 <button class="btn btn-small copy-btn" data-clipboard-target="#jwt-input">Copy</button>
-                                <div class="jwt-actions">
-                                    <button id="btn-jwt-decode" class="btn btn-primary">Decode token</button>
-                                    <button id="btn-jwt-encode" class="btn">Encode from claims</button>
-                                </div>
+                            </div>
+
+                            <!-- Direction buttons -->
+                            <div class="jwt-dir">
+                                <button id="btn-jwt-decode" class="btn" title="Decode: token → header / payload">
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+                                    <span>Decode</span>
+                                </button>
+                                <button id="btn-jwt-encode" class="btn" title="Encode: header / payload → token">
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+                                    <span>Encode</span>
+                                </button>
                             </div>
 
                             <!-- Decoded / claims side -->
@@ -90,8 +161,47 @@
                                 <div class="card">
                                     <div class="section-title" style="margin-top:0;">Header</div>
                                     <div class="field-hint mb-1">Algorithm and token type.</div>
-                                    <div class="jwt-field">
-                                        <textarea id="jwt-header" rows="3">{"alg":"HS256","typ":"JWT"}</textarea>
+                                    <div class="form-grid mb-1">
+                                        <div class="field-group">
+                                            <label for="jwt-alg">Algorithm (alg)</label>
+                                            <select id="jwt-alg">
+                                                <optgroup label="HMAC (shared secret)">
+                                                    <option value="HS256" selected>HS256</option>
+                                                    <option value="HS384">HS384</option>
+                                                    <option value="HS512">HS512</option>
+                                                </optgroup>
+                                                <optgroup label="RSA">
+                                                    <option value="RS256">RS256</option>
+                                                    <option value="RS384">RS384</option>
+                                                    <option value="RS512">RS512</option>
+                                                    <option value="PS256">PS256</option>
+                                                    <option value="PS384">PS384</option>
+                                                    <option value="PS512">PS512</option>
+                                                </optgroup>
+                                                <optgroup label="Elliptic curve">
+                                                    <option value="ES256">ES256</option>
+                                                    <option value="ES384">ES384</option>
+                                                    <option value="ES512">ES512</option>
+                                                    <option value="EdDSA">EdDSA</option>
+                                                </optgroup>
+                                                <option value="none">none (unsigned)</option>
+                                                <option value="custom">Custom (edit JSON)</option>
+                                            </select>
+                                        </div>
+                                        <div class="field-group" id="jwt-typ-group">
+                                            <label for="jwt-typ">Type (typ)</label>
+                                            <select id="jwt-typ">
+                                                <option value="JWT" selected>JWT</option>
+                                                <option value="at+jwt">at+jwt</option>
+                                                <option value="dpop+jwt">dpop+jwt</option>
+                                                <option value="">(omit)</option>
+                                                <option value="custom">Custom…</option>
+                                            </select>
+                                            <input type="text" id="jwt-typ-custom" class="hidden" placeholder="typ value">
+                                        </div>
+                                    </div>
+                                    <div class="jwt-field hidden" id="jwt-header-raw">
+                                        <textarea id="jwt-header" rows="4" spellcheck="false">{"alg":"HS256","typ":"JWT"}</textarea>
                                         <button class="btn btn-small copy-btn" data-clipboard-target="#jwt-header">Copy</button>
                                     </div>
                                 </div>
@@ -100,16 +210,41 @@
                                     <div class="section-title" style="margin-top:0;">Payload</div>
                                     <div class="field-hint mb-1">The claims carried by the token.</div>
                                     <div class="jwt-field">
-                                        <textarea id="jwt-payload"
-                                            rows="7">{"sub":"1234567890","name":"John Doe","iat":1516239022}</textarea>
+                                        <textarea id="jwt-payload" rows="7"
+                                            spellcheck="false">{"sub":"1234567890","name":"John Doe","iat":1516239022}</textarea>
                                         <button class="btn btn-small copy-btn" data-clipboard-target="#jwt-payload">Copy</button>
                                     </div>
                                 </div>
 
                                 <div class="card">
                                     <div class="section-title" style="margin-top:0;">Signature</div>
-                                    <div class="field-hint mb-1">Secret used to sign HS256 tokens when encoding.</div>
-                                    <input type="text" id="jwt-secret" placeholder="your-secret-key">
+                                    <div id="jwt-sec-hmac">
+                                        <div class="field-hint mb-1">Shared secret — the same key signs (encode) and verifies (decode). An oct JWK also works.</div>
+                                        <input type="text" id="jwt-secret" class="mono" placeholder="your-secret-key" autocomplete="off" spellcheck="false">
+                                    </div>
+                                    <div id="jwt-sec-asym" class="jwt-key-grid hidden">
+                                        <div class="jwt-actions" style="margin-top:0;">
+                                            <button id="btn-jwt-genkey" class="btn btn-small"
+                                                title="Fills both boxes with a freshly generated key pair (WebCrypto CSPRNG).">Generate key pair</button>
+                                        </div>
+                                        <div class="field-group">
+                                            <label for="jwt-pubkey">Public key — used to verify when decoding</label>
+                                            <textarea id="jwt-pubkey" rows="4" spellcheck="false" autocomplete="off"
+                                                placeholder="-----BEGIN PUBLIC KEY----- (SPKI PEM), or a JWK / JWKS JSON"></textarea>
+                                        </div>
+                                        <div class="field-group">
+                                            <label for="jwt-privkey">Private key — used to sign when encoding</label>
+                                            <textarea id="jwt-privkey" rows="4" spellcheck="false" autocomplete="off"
+                                                placeholder="-----BEGIN PRIVATE KEY----- (PKCS#8 PEM), or a private JWK JSON"></textarea>
+                                        </div>
+                                        <div id="jwt-key-match" class="jwt-key-match" aria-live="polite"></div>
+                                    </div>
+                                    <div id="jwt-sec-none" class="field-hint hidden">alg "none" — the token is unsigned; there is no signature to create or verify.</div>
+                                    <div id="jwt-sec-unknown" class="field-hint hidden">Unrecognized algorithm — signing and verification are unavailable.</div>
+                                    <div class="jwt-actions">
+                                        <button id="btn-jwt-verify" class="btn btn-small">Verify signature</button>
+                                    </div>
+                                    <div id="jwt-sig-status" class="jwt-sig-status" aria-live="polite"></div>
                                 </div>
                             </div>
                         </div>
@@ -139,12 +274,250 @@
         document.addEventListener('DOMContentLoaded', () => {
             const tokenInput = document.getElementById('jwt-input');
             const headerInput = document.getElementById('jwt-header');
+            const headerRaw = document.getElementById('jwt-header-raw');
             const payloadInput = document.getElementById('jwt-payload');
+            const algSel = document.getElementById('jwt-alg');
+            const typSel = document.getElementById('jwt-typ');
+            const typGroup = document.getElementById('jwt-typ-group');
+            const typCustom = document.getElementById('jwt-typ-custom');
             const secretInput = document.getElementById('jwt-secret');
+            const pubkeyInput = document.getElementById('jwt-pubkey');
+            const privkeyInput = document.getElementById('jwt-privkey');
+            const secHmac = document.getElementById('jwt-sec-hmac');
+            const secAsym = document.getElementById('jwt-sec-asym');
+            const secNone = document.getElementById('jwt-sec-none');
+            const secUnknown = document.getElementById('jwt-sec-unknown');
+            const sigStatus = document.getElementById('jwt-sig-status');
+            const keyMatch = document.getElementById('jwt-key-match');
             const logList = document.getElementById('jwt-log');
             const logEmpty = document.getElementById('jwt-log-empty');
             const LOG_KEY = 'localutil-jwt-log';
+            const tr = s => (window.t ? window.t(s) : s);
 
+            /* ---------------- JWS algorithms (RFC 7518) ---------------- */
+            const ALGS = {
+                HS256: { kind: 'hmac', hash: 'SHA-256' },
+                HS384: { kind: 'hmac', hash: 'SHA-384' },
+                HS512: { kind: 'hmac', hash: 'SHA-512' },
+                RS256: { kind: 'rsa', hash: 'SHA-256' },
+                RS384: { kind: 'rsa', hash: 'SHA-384' },
+                RS512: { kind: 'rsa', hash: 'SHA-512' },
+                PS256: { kind: 'pss', hash: 'SHA-256', salt: 32 },
+                PS384: { kind: 'pss', hash: 'SHA-384', salt: 48 },
+                PS512: { kind: 'pss', hash: 'SHA-512', salt: 64 },
+                ES256: { kind: 'ec', curve: 'P-256', hash: 'SHA-256' },
+                ES384: { kind: 'ec', curve: 'P-384', hash: 'SHA-384' },
+                ES512: { kind: 'ec', curve: 'P-521', hash: 'SHA-512' },
+                EdDSA: { kind: 'okp' },
+                none: { kind: 'none' },
+            };
+
+            function importParamsFor(alg) {
+                const a = ALGS[alg];
+                if (a.kind === 'hmac') return { name: 'HMAC', hash: a.hash };
+                if (a.kind === 'rsa') return { name: 'RSASSA-PKCS1-v1_5', hash: a.hash };
+                if (a.kind === 'pss') return { name: 'RSA-PSS', hash: a.hash };
+                if (a.kind === 'ec') return { name: 'ECDSA', namedCurve: a.curve };
+                return { name: 'Ed25519' };
+            }
+
+            function signParamsFor(alg) {
+                const a = ALGS[alg];
+                if (a.kind === 'hmac') return 'HMAC';
+                if (a.kind === 'rsa') return 'RSASSA-PKCS1-v1_5';
+                if (a.kind === 'pss') return { name: 'RSA-PSS', saltLength: a.salt };
+                if (a.kind === 'ec') return { name: 'ECDSA', hash: { name: a.hash } };
+                return { name: 'Ed25519' };
+            }
+
+            /* ---------------- base64url helpers ---------------- */
+            function base64UrlEncode(str) {
+                return btoa(unescape(encodeURIComponent(str)))
+                    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+            }
+
+            function decodeBase64Url(str) {
+                let b64 = str.replace(/-/g, '+').replace(/_/g, '/');
+                while (b64.length % 4) b64 += '=';
+                return decodeURIComponent(escape(atob(b64)));
+            }
+
+            function b64urlToBytes(str) {
+                let b64 = str.replace(/-/g, '+').replace(/_/g, '/');
+                while (b64.length % 4) b64 += '=';
+                const bin = atob(b64);
+                const out = new Uint8Array(bin.length);
+                for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+                return out;
+            }
+
+            function bytesToB64url(bytes) {
+                let bin = '';
+                for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+                return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+            }
+
+            /* ---------------- key import (PEM / JWK / JWKS) ---------------- */
+            const PEM_RE = /-----BEGIN ([A-Z0-9 ]+)-----([\s\S]*?)-----END \1-----/;
+
+            function parsePem(text) {
+                const m = PEM_RE.exec(String(text || '').trim());
+                if (!m) throw new Error(tr('Not a PEM block — expected -----BEGIN … ----- / -----END … -----.'));
+                const label = m[1].trim();
+                if (label === 'CERTIFICATE') {
+                    throw new Error(tr('This is a certificate — paste the PUBLIC KEY instead. Extract it: openssl x509 -in cert.pem -pubkey -noout'));
+                }
+                if (label === 'RSA PUBLIC KEY') {
+                    throw new Error(tr('PKCS#1 “RSA PUBLIC KEY” is not importable by WebCrypto. Convert it first: openssl rsa -pubin -RSAPublicKey_in -in key.pem -out spki.pem'));
+                }
+                if (label === 'RSA PRIVATE KEY' || label === 'EC PRIVATE KEY') {
+                    throw new Error(label + ' — ' + tr('PKCS#1/SEC1 is not importable by WebCrypto. Convert to PKCS#8: openssl pkcs8 -topk8 -nocrypt -in key.pem -out pkcs8.pem'));
+                }
+                if (label === 'ENCRYPTED PRIVATE KEY') {
+                    throw new Error(tr('This private key is passphrase-encrypted. Decrypt it first: openssl pkcs8 -in key.pem -out plain.pem'));
+                }
+                if (label !== 'PUBLIC KEY' && label !== 'PRIVATE KEY') {
+                    throw new Error(tr('Unsupported PEM type') + ' “' + label + '”');
+                }
+                let der;
+                try {
+                    const bin = atob(m[2].replace(/\s+/g, ''));
+                    der = new Uint8Array(bin.length);
+                    for (let i = 0; i < bin.length; i++) der[i] = bin.charCodeAt(i);
+                } catch (e) { throw new Error(tr('PEM body is not valid base64.')); }
+                return { der, isPrivate: label === 'PRIVATE KEY' };
+            }
+
+            function pickJwk(keys, kid, ktyWant) {
+                if (!Array.isArray(keys)) return null;
+                return (kid && keys.find(k => k && k.kid === kid))
+                    || keys.find(k => k && k.kty === ktyWant)
+                    || null;
+            }
+
+            async function importAsymKey(text, alg, usage, kid) {
+                const params = importParamsFor(alg);
+                const kind = ALGS[alg].kind;
+                if (text.startsWith('{')) {
+                    let j;
+                    try { j = JSON.parse(text); } catch (e) { throw new Error(tr('Key is not valid JSON:') + ' ' + e.message); }
+                    const ktyWant = kind === 'ec' ? 'EC' : kind === 'okp' ? 'OKP' : 'RSA';
+                    let jwk = j.keys ? pickJwk(j.keys, kid, ktyWant) : j;
+                    if (!jwk || !jwk.kty) throw new Error(tr('No usable key found in the JWK / JWKS JSON.'));
+                    jwk = Object.assign({}, jwk);
+                    delete jwk.alg; delete jwk.use; delete jwk.key_ops;
+                    if (usage === 'sign' && !jwk.d) {
+                        throw new Error(tr('This JWK is a public key — signing needs the private JWK (with "d").'));
+                    }
+                    if (usage === 'verify' && jwk.d) {
+                        // A private JWK contains the public part — strip the private
+                        // members so it imports cleanly for verification.
+                        delete jwk.d; delete jwk.p; delete jwk.q;
+                        delete jwk.dp; delete jwk.dq; delete jwk.qi; delete jwk.oth;
+                    }
+                    try {
+                        return await crypto.subtle.importKey('jwk', jwk, params, false, [usage]);
+                    } catch (e) {
+                        throw new Error(tr('Could not import this JWK — wrong key type or curve for the algorithm.') + ' (' + alg + ')');
+                    }
+                }
+                const { der, isPrivate } = parsePem(text);
+                if (usage === 'sign' && !isPrivate) {
+                    throw new Error(tr('This is a PUBLIC key — signing needs the PRIVATE key (PKCS#8).'));
+                }
+                if (usage === 'verify' && isPrivate) {
+                    throw new Error(tr('This is a PRIVATE key — verification needs the PUBLIC key. Derive it: openssl pkey -in key.pem -pubout'));
+                }
+                try {
+                    return await crypto.subtle.importKey(isPrivate ? 'pkcs8' : 'spki', der, params, false, [usage]);
+                } catch (e) {
+                    throw new Error(tr('Could not import this key — wrong key type or curve for the algorithm.') + ' (' + alg + ')');
+                }
+            }
+
+            async function importHmacKey(secret, spec, usage) {
+                let bytes;
+                const s = secret.trim();
+                if (s.startsWith('{')) {
+                    let j;
+                    try { j = JSON.parse(s); } catch (e) { throw new Error(tr('Secret is not valid JSON:') + ' ' + e.message); }
+                    const jwk = j.keys ? pickJwk(j.keys, null, 'oct') : j;
+                    if (!jwk || jwk.kty !== 'oct' || !jwk.k) throw new Error(tr('Expected an oct JWK with a "k" member.'));
+                    bytes = b64urlToBytes(jwk.k);
+                } else {
+                    bytes = new TextEncoder().encode(secret);
+                }
+                if (!bytes.length) throw new Error(tr('Secret is empty.'));
+                return crypto.subtle.importKey('raw', bytes, { name: 'HMAC', hash: spec.hash }, false, [usage]);
+            }
+
+            /* ---------------- header UI (select boxes ↔ raw JSON) ---------------- */
+            function typVal() {
+                if (typSel.value === 'custom') return typCustom.value.trim();
+                return typSel.value; // '' means omit
+            }
+
+            function headerObjFromUi() {
+                if (algSel.value === 'custom') return JSON.parse(headerInput.value); // may throw
+                const obj = { alg: algSel.value };
+                const typ = typVal();
+                if (typ) obj.typ = typ;
+                return obj;
+            }
+
+            function syncHeaderText() {
+                if (algSel.value === 'custom') return;
+                headerInput.value = JSON.stringify(headerObjFromUi(), null, 2);
+                headerInput.classList.remove('error');
+            }
+
+            function currentAlg() {
+                if (algSel.value !== 'custom') return algSel.value;
+                try { return String(JSON.parse(headerInput.value).alg || ''); } catch (e) { return ''; }
+            }
+
+            function updateHeaderMode() {
+                const custom = algSel.value === 'custom';
+                headerRaw.classList.toggle('hidden', !custom);
+                typGroup.classList.toggle('hidden', custom);
+                typCustom.classList.toggle('hidden', typSel.value !== 'custom');
+            }
+
+            function updateSigUi() {
+                const spec = ALGS[currentAlg()];
+                const kind = spec ? spec.kind : 'unknown';
+                secHmac.classList.toggle('hidden', kind !== 'hmac');
+                secAsym.classList.toggle('hidden', !(kind === 'rsa' || kind === 'pss' || kind === 'ec' || kind === 'okp'));
+                secNone.classList.toggle('hidden', kind !== 'none');
+                secUnknown.classList.toggle('hidden', kind !== 'unknown');
+            }
+
+            // Reflect a decoded header into the selects; anything beyond a plain
+            // {alg, typ} with a known alg falls back to Custom (raw JSON) mode.
+            function syncHeaderUiFrom(h) {
+                const alg = typeof h.alg === 'string' ? h.alg : '';
+                const extra = Object.keys(h).some(k => k !== 'alg' && k !== 'typ');
+                if (ALGS[alg] && alg !== 'custom' && !extra) {
+                    algSel.value = alg;
+                    const typ = h.typ;
+                    const opt = typ !== undefined
+                        && [...typSel.options].find(o => o.value === String(typ) && o.value !== 'custom');
+                    if (typ === undefined) typSel.value = '';
+                    else if (opt) typSel.value = String(typ);
+                    else { typSel.value = 'custom'; typCustom.value = String(typ); }
+                } else {
+                    algSel.value = 'custom';
+                }
+                updateHeaderMode();
+                updateSigUi();
+            }
+
+            function setStatus(msg, cls) {
+                sigStatus.textContent = msg || '';
+                sigStatus.className = 'jwt-sig-status' + (msg ? ' show' : '') + (cls ? ' ' + cls : '');
+            }
+
+            /* ---------------- activity log ---------------- */
             let logs = [];
             try {
                 const stored = localStorage.getItem(LOG_KEY);
@@ -177,48 +550,62 @@
                 });
             }
 
-            renderLog();
-
-            function base64UrlEncode(str) {
-                return btoa(unescape(encodeURIComponent(str)))
-                    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-            }
-
-            function decodeBase64Url(str) {
-                let b64 = str.replace(/-/g, '+').replace(/_/g, '/');
-                while (b64.length % 4) b64 += '=';
-                return decodeURIComponent(escape(atob(b64)));
-            }
-
-            document.getElementById('btn-jwt-encode').addEventListener('click', async () => {
+            /* ---------------- encode ---------------- */
+            async function encodeToken() {
+                let headerObj;
                 try {
-                    const header = headerInput.value.trim();
-                    const payload = payloadInput.value.trim();
-                    const secret = secretInput.value;
-
-                    const h64 = base64UrlEncode(header);
-                    const p64 = base64UrlEncode(payload);
-                    const dataToSign = `${h64}.${p64}`;
-
-                    if (secret) {
-                        const encoder = new TextEncoder();
-                        const key = await crypto.subtle.importKey(
-                            'raw', encoder.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']
-                        );
-                        const signature = await crypto.subtle.sign('HMAC', key, encoder.encode(dataToSign));
-
-                        let b64 = btoa(String.fromCharCode(...new Uint8Array(signature)));
-                        const sig = b64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-                        tokenInput.value = `${dataToSign}.${sig}`;
-                    } else {
-                        tokenInput.value = `${dataToSign}.`;
-                    }
-                    addLog('Encode', truncate(payload, 50) + ' → ' + truncate(tokenInput.value, 50));
+                    headerObj = headerObjFromUi();
+                    headerInput.classList.remove('error');
                 } catch (e) {
-                    tokenInput.value = "Encoding error: " + e.message;
+                    headerInput.classList.add('error');
+                    setStatus(tr('Header is not valid JSON:') + ' ' + e.message, 'bad');
+                    return;
                 }
-            });
+                const payloadStr = payloadInput.value.trim();
+                try {
+                    JSON.parse(payloadStr);
+                    payloadInput.classList.remove('error');
+                } catch (e) {
+                    payloadInput.classList.add('error');
+                    setStatus(tr('Payload is not valid JSON:') + ' ' + e.message, 'bad');
+                    return;
+                }
 
+                const alg = String(headerObj.alg || '');
+                const spec = ALGS[alg];
+                // Custom mode signs the header text exactly as typed; select mode
+                // signs the compact serialization of {alg, typ}.
+                const headerStr = algSel.value === 'custom' ? headerInput.value.trim() : JSON.stringify(headerObj);
+                const data = base64UrlEncode(headerStr) + '.' + base64UrlEncode(payloadStr);
+
+                try {
+                    if (!alg) throw new Error(tr('Header has no "alg" member.'));
+                    if (!spec) throw new Error(tr('Unrecognized algorithm — cannot sign.') + ' ("' + alg + '")');
+
+                    if (spec.kind === 'none') {
+                        tokenInput.value = data + '.';
+                        setStatus(tr('Encoded an unsigned token (alg "none").'), '');
+                    } else {
+                        let key;
+                        if (spec.kind === 'hmac') {
+                            if (!secretInput.value) throw new Error(tr('Enter a secret to sign with this algorithm.') + ' (' + alg + ')');
+                            key = await importHmacKey(secretInput.value, spec, 'sign');
+                        } else {
+                            const priv = privkeyInput.value.trim();
+                            if (!priv) throw new Error(tr('Paste the private key (PKCS#8 PEM or JWK) to sign with this algorithm.') + ' (' + alg + ')');
+                            key = await importAsymKey(priv, alg, 'sign', headerObj.kid);
+                        }
+                        const sig = await crypto.subtle.sign(signParamsFor(alg), key, new TextEncoder().encode(data));
+                        tokenInput.value = data + '.' + bytesToB64url(new Uint8Array(sig));
+                        setStatus(tr('Token signed.') + ' (' + alg + ')', 'ok');
+                    }
+                    addLog('Encode', alg + ' · ' + truncate(payloadStr.replace(/\s+/g, ' '), 40) + ' → ' + truncate(tokenInput.value, 40));
+                } catch (e) {
+                    setStatus(tr('Encoding failed:') + ' ' + e.message, 'bad');
+                }
+            }
+
+            /* ---------------- decode + verify ---------------- */
             function tryExtractJwt(raw) {
                 // Already looks like a JWT (has dots and starts with eyJ)
                 if (raw.includes('.') && raw.startsWith('eyJ')) {
@@ -237,32 +624,45 @@
                 return raw;
             }
 
-            function decodeJwt(token) {
+            async function verifyToken(token) {
                 const parts = token.split('.');
-                if (parts.length < 2) {
-                    headerInput.value = "Invalid JWT structure.";
-                    payloadInput.value = "";
-                    return;
-                }
+                let h;
+                try { h = JSON.parse(decodeBase64Url(parts[0])); }
+                catch (e) { setStatus(tr('Cannot verify — the header is not valid JSON.'), 'bad'); return; }
+
+                const alg = String(h.alg || '');
+                const spec = ALGS[alg];
+                const sig = parts[2] || '';
+
+                if (alg === 'none') { setStatus(tr('Token is unsigned (alg "none") — nothing to verify.'), ''); return; }
+                if (!spec) { setStatus(tr('Unrecognized algorithm — cannot verify.') + ' ("' + alg + '")', ''); return; }
+                if (!sig) { setStatus(tr('Token has no signature to verify.'), 'bad'); return; }
 
                 try {
-                    const header = JSON.parse(decodeBase64Url(parts[0]));
-                    headerInput.value = JSON.stringify(header, null, 2);
+                    let key;
+                    if (spec.kind === 'hmac') {
+                        if (!secretInput.value) { setStatus(tr('Enter the shared secret to verify the signature.'), ''); return; }
+                        key = await importHmacKey(secretInput.value, spec, 'verify');
+                    } else {
+                        const pub = pubkeyInput.value.trim();
+                        if (!pub) { setStatus(tr('Paste the public key (PEM or JWK) to verify the signature.'), ''); return; }
+                        key = await importAsymKey(pub, alg, 'verify', h.kid);
+                    }
+                    const data = new TextEncoder().encode(parts[0] + '.' + parts[1]);
+                    const ok = await crypto.subtle.verify(signParamsFor(alg), key, b64urlToBytes(sig), data);
+                    if (ok) {
+                        setStatus(tr('Signature verified') + ' (' + alg + ') ✓', 'ok');
+                    } else if (spec.kind === 'hmac') {
+                        setStatus('✗ ' + tr('Signature is INVALID — the token decoded, but the signature computed with this secret does not match the token’s. The secret is wrong, or the token was modified after signing.') + ' (' + alg + ')', 'bad');
+                    } else {
+                        setStatus('✗ ' + tr('Signature is INVALID — the token decoded, but this public key does not match its signature. The token was signed with a different key pair, or it was modified after signing.') + ' (' + alg + ')', 'bad');
+                    }
                 } catch (e) {
-                    headerInput.value = "Failed to parse Header.";
+                    setStatus(tr('Verify failed:') + ' ' + e.message, 'bad');
                 }
-
-                try {
-                    const payload = JSON.parse(decodeBase64Url(parts[1]));
-                    payloadInput.value = JSON.stringify(payload, null, 2);
-                } catch (e) {
-                    payloadInput.value = "Failed to parse Payload.";
-                }
-
-                addLog('Decode', truncate(token, 50) + ' → header/payload parsed');
             }
 
-            document.getElementById('btn-jwt-decode').addEventListener('click', () => {
+            async function decodeToken() {
                 const raw = tokenInput.value.trim();
                 if (!raw) return;
 
@@ -271,7 +671,164 @@
                     tokenInput.value = token;
                     addLog('Auto-detect', 'Base64-wrapped JWT detected, unwrapped');
                 }
-                decodeJwt(token);
+
+                const parts = token.split('.');
+                if (parts.length < 2 || parts.length > 3) {
+                    setStatus(tr('Invalid JWT structure.'), 'bad');
+                    return;
+                }
+
+                let headerObj = null;
+                try {
+                    headerObj = JSON.parse(decodeBase64Url(parts[0]));
+                    headerInput.value = JSON.stringify(headerObj, null, 2);
+                    headerInput.classList.remove('error');
+                } catch (e) {
+                    headerInput.value = tr('Failed to parse Header.');
+                    headerInput.classList.add('error');
+                }
+
+                try {
+                    const payload = JSON.parse(decodeBase64Url(parts[1]));
+                    payloadInput.value = JSON.stringify(payload, null, 2);
+                    payloadInput.classList.remove('error');
+                } catch (e) {
+                    payloadInput.value = tr('Failed to parse Payload.');
+                    payloadInput.classList.add('error');
+                }
+
+                if (headerObj && typeof headerObj === 'object') {
+                    syncHeaderUiFrom(headerObj);
+                } else {
+                    algSel.value = 'custom';
+                    updateHeaderMode();
+                    updateSigUi();
+                }
+                scheduleKeyPairCheck();
+
+                addLog('Decode', truncate(token, 50) + ' → header/payload parsed');
+                await verifyToken(token);
+            }
+
+            /* ---------------- public ⇄ private pair check ----------------
+               Signs a probe with the private key and verifies it with the
+               public key — the one test that works for every algorithm and
+               key format without parsing key material. */
+            let keyMatchTimer = null, keyMatchSeq = 0;
+
+            function scheduleKeyPairCheck() {
+                clearTimeout(keyMatchTimer);
+                keyMatchTimer = setTimeout(checkKeyPair, 350);
+            }
+
+            async function checkKeyPair() {
+                const seq = ++keyMatchSeq;
+                keyMatch.textContent = '';
+                keyMatch.className = 'jwt-key-match';
+                const alg = currentAlg();
+                const spec = ALGS[alg];
+                if (!spec || (spec.kind !== 'rsa' && spec.kind !== 'pss' && spec.kind !== 'ec' && spec.kind !== 'okp')) return;
+                const pub = pubkeyInput.value.trim();
+                const priv = privkeyInput.value.trim();
+                if (!pub || !priv) return;
+                try {
+                    const [vk, sk] = await Promise.all([
+                        importAsymKey(pub, alg, 'verify'),
+                        importAsymKey(priv, alg, 'sign'),
+                    ]);
+                    const probe = new TextEncoder().encode('localutil key-pair probe');
+                    const sig = await crypto.subtle.sign(signParamsFor(alg), sk, probe);
+                    const ok = await crypto.subtle.verify(signParamsFor(alg), vk, sig, probe);
+                    if (seq !== keyMatchSeq) return;
+                    if (ok) {
+                        keyMatch.textContent = '✓ ' + tr('The public and private keys are a matching pair.');
+                        keyMatch.className = 'jwt-key-match show ok';
+                    } else {
+                        keyMatch.textContent = '⚠ ' + tr('These keys are NOT a matching pair — this public key cannot verify what this private key signs.');
+                        keyMatch.className = 'jwt-key-match show warn';
+                    }
+                } catch (e) {
+                    // One of the keys doesn't import for this algorithm; that
+                    // error is reported in full when the key is actually used.
+                }
+            }
+
+            /* ---------------- key pair generation ---------------- */
+            function pemWrap(label, bytes) {
+                let b64 = '';
+                for (let i = 0; i < bytes.length; i += 0x8000) {
+                    b64 += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+                }
+                b64 = btoa(b64).replace(/(.{64})/g, '$1\n');
+                return '-----BEGIN ' + label + '-----\n' + b64.trim() + '\n-----END ' + label + '-----';
+            }
+
+            async function generateKeyPair() {
+                const alg = currentAlg();
+                const spec = ALGS[alg];
+                let params;
+                if (spec && (spec.kind === 'rsa' || spec.kind === 'pss')) {
+                    params = {
+                        name: spec.kind === 'rsa' ? 'RSASSA-PKCS1-v1_5' : 'RSA-PSS',
+                        modulusLength: 2048,
+                        publicExponent: new Uint8Array([1, 0, 1]),
+                        hash: spec.hash,
+                    };
+                } else if (spec && spec.kind === 'ec') {
+                    params = { name: 'ECDSA', namedCurve: spec.curve };
+                } else if (spec && spec.kind === 'okp') {
+                    params = { name: 'Ed25519' };
+                } else {
+                    return; // the button is only visible for asymmetric algorithms
+                }
+                const btn = document.getElementById('btn-jwt-genkey');
+                btn.disabled = true;
+                setStatus(tr('Generating a key pair…'), '');
+                try {
+                    const kp = await crypto.subtle.generateKey(params, true, ['sign', 'verify']);
+                    const pkcs8 = new Uint8Array(await crypto.subtle.exportKey('pkcs8', kp.privateKey));
+                    const spki = new Uint8Array(await crypto.subtle.exportKey('spki', kp.publicKey));
+                    privkeyInput.value = pemWrap('PRIVATE KEY', pkcs8);
+                    pubkeyInput.value = pemWrap('PUBLIC KEY', spki);
+                    setStatus(tr('Generated a new key pair.') + ' (' + alg + ')', 'ok');
+                    addLog('Generate', alg + ' key pair');
+                    scheduleKeyPairCheck();
+                } catch (e) {
+                    setStatus(tr('Key generation failed:') + ' ' + e.message, 'bad');
+                } finally {
+                    btn.disabled = false;
+                }
+            }
+
+            /* ---------------- wiring ---------------- */
+            document.getElementById('btn-jwt-decode').addEventListener('click', decodeToken);
+            document.getElementById('btn-jwt-encode').addEventListener('click', encodeToken);
+            document.getElementById('btn-jwt-genkey').addEventListener('click', generateKeyPair);
+            document.getElementById('btn-jwt-verify').addEventListener('click', () => {
+                const raw = tokenInput.value.trim();
+                if (!raw) { setStatus(tr('Paste a token first, then verify.'), ''); return; }
+                verifyToken(tryExtractJwt(raw));
+            });
+
+            algSel.addEventListener('change', () => {
+                updateHeaderMode();
+                syncHeaderText();
+                updateSigUi();
+                setStatus('');
+                scheduleKeyPairCheck();
+            });
+            pubkeyInput.addEventListener('input', scheduleKeyPairCheck);
+            privkeyInput.addEventListener('input', scheduleKeyPairCheck);
+            typSel.addEventListener('change', () => {
+                updateHeaderMode();
+                syncHeaderText();
+            });
+            typCustom.addEventListener('input', syncHeaderText);
+            headerInput.addEventListener('input', () => {
+                if (algSel.value === 'custom') {
+                    updateSigUi();
+                    scheduleKeyPairCheck();
+                }
             });
 
             document.getElementById('btn-jwt-clear-log').addEventListener('click', () => {
@@ -279,6 +836,11 @@
                 try { localStorage.removeItem(LOG_KEY); } catch (e) {}
                 renderLog();
             });
+
+            renderLog();
+            syncHeaderText();
+            updateHeaderMode();
+            updateSigUi();
         });
     </script>
 </body>

@@ -69,8 +69,8 @@ const SEO = {
         desc: `Test JavaScript regular expressions with live match highlighting and capture groups. ${LOCAL}`,
     },
     'jwt.html': {
-        title: 'JWT Decoder',
-        desc: 'Decode a JWT (JSON Web Token) and inspect its header, payload, and signature. Runs 100% in your browser — tokens never leave your machine.',
+        title: 'JWT Encoder / Decoder',
+        desc: 'Decode, verify, and sign JWTs (JSON Web Tokens) — HS256, RS256, ES256, EdDSA and more, with a secret, PEM key, or JWK. Runs 100% in your browser — tokens never leave your machine.',
     },
     'gpg.html': {
         title: 'GPG / PGP Key Inspector',

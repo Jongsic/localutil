@@ -74,7 +74,7 @@ const TOOLS = [
     { file: 'csv-md.html', name: 'CSV ⇄ Markdown', desc: 'Convert between CSV and Markdown tables', icon: 'tablecsv', cat: 'Text & Data' },
     { file: 'diff.html', name: 'Diff / Compare', desc: 'Compare two texts side by side', icon: 'diff', cat: 'Text & Data' },
     { file: 'regex.html', name: 'Regex Tester', desc: 'Test regular expressions with live match highlighting', icon: 'regex', cat: 'Text & Data' },
-    { file: 'jwt.html', name: 'JWT Decode', desc: 'Decode and inspect JSON Web Tokens', icon: 'jwt', cat: 'Crypto & Auth' },
+    { file: 'jwt.html', name: 'JWT Encode / Decode', desc: 'Decode, verify, and create JSON Web Tokens', icon: 'jwt', cat: 'Crypto & Auth' },
     { file: 'gpg.html', name: 'GPG Key Inspector', desc: 'Inspect GPG / PGP key details', icon: 'gpg', cat: 'Crypto & Auth' },
     { file: 'ssh-key.html', name: 'SSH Key Converter', desc: 'Extract public keys and convert between PEM and PuTTY .ppk', icon: 'key', cat: 'Crypto & Auth' },
     { file: 'keystore.html', name: 'Keystore Inspector', desc: 'Read keystores, certificates (CRT / PEM / DER), and CSRs — SHA-1 / SHA-256 fingerprints', icon: 'keystore', cat: 'Crypto & Auth' },
