@@ -7,7 +7,7 @@
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
     <title>HD Wallet Deriver (BIP-39 Seed Phrase) — LocalUtil</title>
     <!-- social / favicon -->
-    <meta name="description" content="Derive HD wallet accounts from a BIP-39 seed phrase or raw hex root key: addresses, public and private keys. Runs 100% in your browser — keys never leave your machine.">
+    <meta name="description" content="Derive HD wallet accounts from a BIP-39 seed phrase or raw hex root key, or inspect a public key: addresses, public and private keys. Runs 100% in your browser — keys never leave your machine.">
     <link rel="canonical" href="https://jongsic.github.io/localutil/hd-wallet.html">
     <link rel="icon" href="favicon.ico" sizes="any">
     <link rel="icon" type="image/png" href="favicon.png">
@@ -15,14 +15,14 @@
     <meta property="og:type" content="website">
     <meta property="og:site_name" content="LocalUtil">
     <meta property="og:title" content="HD Wallet Deriver (BIP-39 Seed Phrase) — LocalUtil">
-    <meta property="og:description" content="Derive HD wallet accounts from a BIP-39 seed phrase or raw hex root key: addresses, public and private keys. Runs 100% in your browser — keys never leave your machine.">
+    <meta property="og:description" content="Derive HD wallet accounts from a BIP-39 seed phrase or raw hex root key, or inspect a public key: addresses, public and private keys. Runs 100% in your browser — keys never leave your machine.">
     <meta property="og:image" content="https://jongsic.github.io/localutil/og.png">
     <meta property="og:image:width" content="1200">
     <meta property="og:image:height" content="630">
     <meta property="og:url" content="https://jongsic.github.io/localutil/hd-wallet.html">
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:image" content="https://jongsic.github.io/localutil/og.png">
-    <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebApplication","name":"HD Wallet Deriver (BIP-39 Seed Phrase)","url":"https://jongsic.github.io/localutil/hd-wallet.html","description":"Derive HD wallet accounts from a BIP-39 seed phrase or raw hex root key: addresses, public and private keys. Runs 100% in your browser — keys never leave your machine.","applicationCategory":"DeveloperApplication","operatingSystem":"Any","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"isPartOf":{"@type":"WebSite","name":"LocalUtil","url":"https://jongsic.github.io/localutil/"}}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebApplication","name":"HD Wallet Deriver (BIP-39 Seed Phrase)","url":"https://jongsic.github.io/localutil/hd-wallet.html","description":"Derive HD wallet accounts from a BIP-39 seed phrase or raw hex root key, or inspect a public key: addresses, public and private keys. Runs 100% in your browser — keys never leave your machine.","applicationCategory":"DeveloperApplication","operatingSystem":"Any","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"isPartOf":{"@type":"WebSite","name":"LocalUtil","url":"https://jongsic.github.io/localutil/"}}</script>
     <!-- /social -->
     <script src="theme-init.js"></script>
     <link rel="stylesheet" href="styles.css">
@@ -229,7 +229,7 @@
             <header class="topbar" id="app-topbar">
                 <div class="topbar-title">
                     <h1 id="current-tool-title">Web3 Wallet</h1>
-                    <p id="current-tool-desc" class="topbar-desc">Create a root key from a seed phrase or raw hex, inspect addresses, derive HD accounts</p>
+                    <p id="current-tool-desc" class="topbar-desc">Create a root key from a seed phrase or raw hex, derive HD accounts, or inspect a public key</p>
                 </div>
             </header>
 
@@ -238,12 +238,13 @@
                     <div class="tool-shell">
                         <!-- Input card -->
                         <div class="card">
-                            <div class="card-title">Create a root private key</div>
-                            <div class="card-subtitle">Start from a BIP39 seed phrase, or bring a raw 32-byte hex key. Everything runs locally in your browser.</div>
+                            <div class="card-title" id="hd-input-title">Create a root private key</div>
+                            <div class="card-subtitle" id="hd-input-subtitle">Start from a BIP39 seed phrase, or bring a raw 32-byte hex key. Everything runs locally in your browser.</div>
 
                             <div class="segmented mb-2" id="hd-mode">
                                 <button type="button" data-mode="seed" class="active">From seed phrase</button>
                                 <button type="button" data-mode="hex">From raw hex</button>
+                                <button type="button" data-mode="pub">From public key</button>
                             </div>
 
                             <!-- Seed phrase panel -->
@@ -285,6 +286,21 @@
                                 </div>
                             </div>
 
+                            <!-- Public key panel -->
+                            <div id="hd-panel-pub" style="display:none;">
+                                <div class="field-group">
+                                    <label for="hd-pub">Public key (hex)</label>
+                                    <textarea id="hd-pub" rows="2" class="mono"
+                                        placeholder="0x… or bare hex — compressed (33B), uncompressed (65B), raw X‖Y (64B), or 32-byte Ed25519 / x-only"></textarea>
+                                    <div class="field-hint">The type is detected from length and prefix: 66 hex = compressed <code>02/03…</code> (short form), 130 = uncompressed <code>04…</code> (long form), 128 = raw X‖Y (Ethereum style), 64 = Ed25519 / x-only. Only public data can be derived — the private key can never be recovered.</div>
+                                    <div class="hd-preset-row">
+                                        <button id="btn-hd-pub-compressed" class="btn btn-small" type="button">🎲 Random compressed (33B)</button>
+                                        <button id="btn-hd-pub-uncompressed" class="btn btn-small" type="button">🎲 Random uncompressed (65B)</button>
+                                        <button id="btn-hd-pub-ed25519" class="btn btn-small" type="button">🎲 Random Ed25519 (32B)</button>
+                                    </div>
+                                </div>
+                            </div>
+
                             <div id="hd-warn" class="hd-callout warn mt-2" style="display:none;"></div>
                             <div id="hd-error" class="hd-callout error mt-2" style="display:none;"></div>
                         </div>
@@ -293,7 +309,7 @@
                         <details id="hd-steps-card" class="card" style="display:none;">
                             <summary>
                                 <div>
-                                    <div class="card-title">How this root key was made</div>
+                                    <div class="card-title" id="hd-steps-title">How this root key was made</div>
                                     <div class="card-subtitle" id="hd-steps-subtitle"></div>
                                 </div>
                                 <span class="hd-steps-chevron">▶</span>
@@ -365,9 +381,13 @@
             const mnemonicInput = document.getElementById('hd-mnemonic');
             const passInput = document.getElementById('hd-passphrase');
             const hexInput = document.getElementById('hd-hex');
+            const pubInput = document.getElementById('hd-pub');
             const warnEl = document.getElementById('hd-warn');
             const errEl = document.getElementById('hd-error');
+            const inputTitle = document.getElementById('hd-input-title');
+            const inputSubtitle = document.getElementById('hd-input-subtitle');
             const stepsCard = document.getElementById('hd-steps-card');
+            const stepsTitle = document.getElementById('hd-steps-title');
             const stepsSubtitle = document.getElementById('hd-steps-subtitle');
             const stepsEl = document.getElementById('hd-steps');
             const summaryEl = document.getElementById('hd-summary');
@@ -387,10 +407,19 @@
 
             // --- Mode switch -----------------------------------------------------
             const modeButtons = document.querySelectorAll('#hd-mode button');
-            const panels = { seed: document.getElementById('hd-panel-seed'), hex: document.getElementById('hd-panel-hex') };
+            const panels = {
+                seed: document.getElementById('hd-panel-seed'),
+                hex: document.getElementById('hd-panel-hex'),
+                pub: document.getElementById('hd-panel-pub'),
+            };
             modeButtons.forEach(b => b.addEventListener('click', () => {
                 modeButtons.forEach(x => x.classList.toggle('active', x === b));
                 Object.entries(panels).forEach(([m, el]) => el.style.display = m === b.dataset.mode ? '' : 'none');
+                const pub = b.dataset.mode === 'pub';
+                inputTitle.textContent = pub ? 'Inspect a public key' : 'Create a root private key';
+                inputSubtitle.textContent = pub
+                    ? 'Paste a public key in hex — its type is auto-detected from the length and prefix, and everything publicly derivable from it is shown below.'
+                    : 'Start from a BIP39 seed phrase, or bring a raw 32-byte hex key. Everything runs locally in your browser.';
                 refreshForMode(b.dataset.mode);
             }));
 
@@ -398,6 +427,8 @@
             function refreshForMode(mode) {
                 if (mode === 'hex') {
                     handleHexInput(true);
+                } else if (mode === 'pub') {
+                    handlePubInput(true);
                 } else if (mnemonicInput.value.trim()) {
                     generateFromSeed();
                 } else {
@@ -415,16 +446,72 @@
                 return '1'.repeat(leading) + ethers.encodeBase58(full);
             }
 
+            function hash160(hex) { return ethers.ripemd160(ethers.sha256(hex)); }
+
             // Legacy P2PKH address (starts with 1) from a compressed public key
             function btcP2PKH(compressedPubKeyHex) {
-                const h = ethers.ripemd160(ethers.sha256(compressedPubKeyHex));
-                return base58check('0x00' + h.slice(2));
+                return base58check('0x00' + hash160(compressedPubKeyHex).slice(2));
             }
 
             // WIF (compressed) from 32-byte private key hex
             function btcWIF(privKeyHex) {
                 const body = '0x80' + privKeyHex.slice(2) + '01';
                 return base58check(body);
+            }
+
+            // Bech32 / Bech32m segwit encoding (BIP173 / BIP350), mainnet.
+            // Checked against the specs' own vectors: P2WPKH of the BIP173
+            // example key and the first BIP86 P2TR address.
+            const B32 = 'qpzry9x8gf2tvdw0s3jn54khce6mua7l';
+            function bech32Polymod(values) {
+                const GEN = [0x3b6a57b2, 0x26508e6d, 0x1ea119fa, 0x3d4233dd, 0x2a1462b3];
+                let chk = 1;
+                for (const v of values) {
+                    const b = chk >>> 25;
+                    chk = ((chk & 0x1ffffff) << 5) ^ v;
+                    for (let i = 0; i < 5; i++) if ((b >>> i) & 1) chk ^= GEN[i];
+                }
+                return chk;
+            }
+            function segwitAddress(witver, program) {
+                const data = [witver];
+                let acc = 0, bits = 0;
+                for (const b of program) { // 8-bit bytes → 5-bit groups
+                    acc = (acc << 8) | b; bits += 8;
+                    while (bits >= 5) { bits -= 5; data.push((acc >> bits) & 31); }
+                }
+                if (bits) data.push((acc << (5 - bits)) & 31);
+                const hrp = 'bc';
+                const expanded = [...Array.from(hrp, c => c.charCodeAt(0) >> 5), 0, ...Array.from(hrp, c => c.charCodeAt(0) & 31)];
+                const polymod = bech32Polymod([...expanded, ...data, 0, 0, 0, 0, 0, 0]) ^ (witver === 0 ? 1 : 0x2bc830a3);
+                let out = hrp + '1';
+                for (const d of data) out += B32[d];
+                for (let i = 0; i < 6; i++) out += B32[(polymod >> (5 * (5 - i))) & 31];
+                return out;
+            }
+
+            // Native segwit v0 (bc1q…) from a compressed public key
+            function btcP2WPKH(compressedPubKeyHex) {
+                return segwitAddress(0, ethers.getBytes(hash160(compressedPubKeyHex)));
+            }
+
+            // Nested segwit (3…): P2SH wrapping the 0x0014<keyhash> witness script
+            function btcP2SHP2WPKH(compressedPubKeyHex) {
+                const redeem = '0x0014' + hash160(compressedPubKeyHex).slice(2);
+                return base58check('0x05' + hash160(redeem).slice(2));
+            }
+
+            // Taproot key-path output (bc1p…, BIP341, no script tree): the
+            // x-only internal key is tweaked by taggedHash("TapTweak", x)·G.
+            function taggedHash(tag, dataHex) {
+                const t = ethers.sha256(ethers.toUtf8Bytes(tag));
+                return ethers.sha256(ethers.concat([t, t, dataHex]));
+            }
+            function btcP2TR(xOnlyHex) {
+                const tweak = taggedHash('TapTweak', xOnlyHex);
+                const Q = ethers.SigningKey.addPoints('0x02' + xOnlyHex.slice(2),
+                    ethers.SigningKey.computePublicKey(tweak, true), true);
+                return segwitAddress(1, ethers.getBytes('0x' + Q.slice(4)));
             }
 
             // --- XRP helpers -------------------------------------------------------
@@ -613,7 +700,8 @@
 
             // --- Derivation-step rendering ---------------------------------------
             // steps: [{title, desc (may contain <code>), rows: [[key, valueNode], …]}]
-            function renderSteps(subtitle, steps) {
+            function renderSteps(subtitle, steps, title) {
+                stepsTitle.textContent = title || 'How this root key was made';
                 stepsSubtitle.textContent = subtitle;
                 stepsEl.innerHTML = '';
                 steps.forEach((s, i) => {
@@ -839,11 +927,198 @@
             hexInput.addEventListener('input', () => handleHexInput(false));
             hexInput.addEventListener('change', () => handleHexInput(true));
 
-            document.getElementById('btn-hd-hex-random').addEventListener('click', () => {
+            function randomBytes32() {
                 const bytes = new Uint8Array(32);
                 crypto.getRandomValues(bytes);
-                hexInput.value = ethers.hexlify(bytes);
+                return bytes;
+            }
+
+            document.getElementById('btn-hd-hex-random').addEventListener('click', () => {
+                hexInput.value = ethers.hexlify(randomBytes32());
                 generateFromHex();
+            });
+
+            // --- Public key inspection ------------------------------------------
+            // Classify a pasted public key by length and prefix. Throws with a
+            // human-readable reason when the input can't be a public key.
+            function classifyPubKey(raw) {
+                const s = (raw || '').replace(/\s+/g, '').toLowerCase().replace(/^0x/, '');
+                if (!s) throw new Error('Please enter a public key, or generate a random one.');
+                if (/[^0-9a-f]/.test(s)) throw new Error('Input contains non-hex characters.');
+                if (s.length === 40) throw new Error('20 bytes looks like an address, not a public key — an address is a hash of the key, so the key cannot be recovered from it.');
+                if (s.length === 130) {
+                    if (!s.startsWith('04')) throw new Error('A 65-byte public key must start with the uncompressed-point prefix 04 (got ' + s.slice(0, 2) + ').');
+                    return secpPubInfo('0x' + s, s, 'uncompressed (long form)',
+                        '65 bytes starting with 04 → uncompressed secp256k1 point, X‖Y coordinates.');
+                }
+                if (s.length === 128) {
+                    return secpPubInfo('0x04' + s, s, 'raw X‖Y (long form, no prefix)',
+                        '64 bytes with no point prefix → Ethereum-style uncompressed key; the 04 prefix was added for you.');
+                }
+                if (s.length === 66) {
+                    if (!s.startsWith('02') && !s.startsWith('03')) throw new Error('A 33-byte public key must start with 02 or 03 (got ' + s.slice(0, 2) + ').');
+                    return secpPubInfo('0x' + s, s, 'compressed (short form)',
+                        '33 bytes starting with ' + s.slice(0, 2) + ' → compressed secp256k1 point (' + (s.startsWith('02') ? 'even' : 'odd') + ' Y).');
+                }
+                if (s.length === 64) {
+                    return {
+                        kind: 'raw32', input: '0x' + s,
+                        form: '32-byte key — Ed25519 or x-only secp256k1 (ambiguous)',
+                        reason: '32 bytes with no prefix fit both an Ed25519 public key (Solana, TON) and an x-only secp256k1 key (BTC Taproot, BIP340) — both readings are shown below.',
+                    };
+                }
+                throw new Error('Unrecognized public key length: ' + s.length + ' hex chars. Expected 66 (compressed), 130 (uncompressed), 128 (raw X‖Y) or 64 (Ed25519 / x-only).');
+            }
+
+            function secpPubInfo(keyHex, cleaned, form, reason) {
+                let compressed, uncompressed;
+                try {
+                    // computePublicKey re-derives both encodings and verifies the
+                    // coordinates actually lie on the curve.
+                    compressed = ethers.SigningKey.computePublicKey(keyHex, true);
+                    uncompressed = ethers.SigningKey.computePublicKey(keyHex, false);
+                } catch (e) {
+                    throw new Error('Not a valid secp256k1 point — the coordinates are not on the curve.');
+                }
+                return { kind: 'secp', input: '0x' + cleaned, form: 'secp256k1 ' + form, reason, compressed, uncompressed };
+            }
+
+            function generateFromPub(quiet) {
+                resetOutput();
+                rootNode = null; // no private material — the Derive accounts table stays hidden
+
+                let info;
+                try {
+                    info = classifyPubKey(pubInput.value);
+                } catch (e) {
+                    if (!quiet) showErr(e.message || String(e));
+                    return false;
+                }
+                // Show the cleaned, 0x-prefixed form — but not mid-edit, or the
+                // rewrite would yank the cursor to the end of the field.
+                if (document.activeElement !== pubInput) pubInput.value = info.input;
+
+                const byteLen = (info.input.length - 2) / 2;
+                const detectStep = {
+                    title: 'Detect the key type',
+                    desc: info.reason,
+                    rows: [
+                        ['Input', byteLen + ' bytes (' + (byteLen * 2) + ' hex chars)'],
+                        ['Detected type', info.form],
+                    ],
+                };
+
+                if (info.kind === 'secp') {
+                    renderSteps('Public key → detected type → addresses. No private key exists anywhere in this flow.', [
+                        detectStep,
+                        {
+                            title: 'Normalize the point',
+                            desc: 'Compressed ↔ uncompressed conversion is pure curve math (<code>y² = x³ + 7</code>) — both encodings name the same point.',
+                            rows: [
+                                ['Compressed (33 bytes)', info.compressed],
+                                ['Uncompressed (65 bytes)', info.uncompressed],
+                            ],
+                        },
+                        {
+                            title: 'Hash into addresses',
+                            desc: 'Every address below is a hash of the public key. Hashes are one-way: none of this can be turned back into the private key.',
+                        },
+                    ], 'How this key was interpreted');
+
+                    const rows = [
+                        ['Detected type', info.form],
+                        ['Public key (compressed)', info.compressed],
+                        ['Public key (uncompressed)', info.uncompressed],
+                        ['ETH Address', ethers.computeAddress(info.uncompressed)],
+                        ['BTC Address (P2PKH, legacy)', btcP2PKH(info.compressed)],
+                        ['BTC Address (P2SH-P2WPKH)', btcP2SHP2WPKH(info.compressed)],
+                        ['BTC Address (P2WPKH, bech32)', btcP2WPKH(info.compressed)],
+                    ];
+                    try { rows.push(['BTC Address (P2TR, key-path)', btcP2TR('0x' + info.compressed.slice(4))]); } catch (e) { /* keep the other rows */ }
+                    try {
+                        const xrp = xrpInfo(info.compressed);
+                        rows.push(['XRP Address', xrp.address]);
+                        rows.push(['XRP Address (hex)', xrp.decodedHex]);
+                    } catch (e) { /* keep the other rows */ }
+                    summaryEl.appendChild(summaryCard('Derived from this public key', rows,
+                        'Addresses only — recovering the private key from any of this is computationally impossible. P2TR uses the x coordinate as a BIP341 internal key (key-path, no script tree).'));
+                } else {
+                    renderSteps('32 bytes → two possible readings, shown side by side.', [
+                        detectStep,
+                        {
+                            title: 'Derive both readings',
+                            desc: 'The Ed25519 reading feeds the Solana / TON encodings; the x-only reading is lifted to a curve point (even Y, BIP340) and tweaked into a Taproot output key (BIP341).',
+                        },
+                    ], 'How this key was interpreted');
+
+                    summaryEl.appendChild(summaryCard('Key type', [['Detected type', info.form]],
+                        'A bare 32-byte value carries no type tag, so both common readings are derived below.'));
+
+                    try {
+                        const pubBytes = ethers.getBytes(info.input);
+                        const rows = [['SOL Address', solanaAddress(pubBytes)]];
+                        const ton = tonInfo(pubBytes);
+                        rows.push(['TON Public key (Ed25519)', ton.publicKey]);
+                        rows.push(['TON Address (v4r2, bounceable)', ton.v4r2.bounceable]);
+                        rows.push(['TON Address (v4r2, non-bounceable)', ton.v4r2.nonBounceable]);
+                        rows.push(['TON Address (v3r2, bounceable)', ton.v3r2.bounceable]);
+                        rows.push(['TON Address (v3r2, non-bounceable)', ton.v3r2.nonBounceable]);
+                        summaryEl.appendChild(summaryCard('Reading 1 — as an Ed25519 public key', rows,
+                            'Solana and TON encode the raw 32 public-key bytes directly (TON: wallet v4r2 / v3r2, workchain 0). Any 32 bytes encode this way — the tool cannot verify it is a real Ed25519 point.'));
+                    } catch (e) { /* keep the other card */ }
+
+                    const xRows = [];
+                    let xSubtitle;
+                    try {
+                        const lifted = ethers.SigningKey.computePublicKey('0x02' + info.input.slice(2), true);
+                        xRows.push(['Lifted point (even Y, BIP340)', lifted]);
+                        xRows.push(['BTC Address (P2TR, key-path)', btcP2TR(info.input)]);
+                        xSubtitle = 'The x coordinate lifts to a valid secp256k1 point, so it works as a Taproot internal key (BIP341 key-path, no script tree).';
+                    } catch (e) {
+                        xRows.push(['Result', 'Not on the curve — no secp256k1 point has this x coordinate, so this cannot be an x-only key. (True for about half of all 32-byte values.)']);
+                        xSubtitle = 'An x-only key (BIP340) is the x coordinate of a point with even Y.';
+                    }
+                    summaryEl.appendChild(summaryCard('Reading 2 — as an x-only secp256k1 key (Taproot)', xRows, xSubtitle));
+                }
+
+                summaryEl.style.display = 'flex';
+                return true;
+            }
+
+            // Live public-key handling, mirroring the hex tab: derive as soon as
+            // the cleaned input has a complete, recognizable length; stay quiet
+            // on incomplete-but-plausible hex; show errors on commit or for
+            // clearly bad input.
+            function handlePubInput(commit) {
+                const s = pubInput.value.replace(/\s+/g, '').toLowerCase().replace(/^0x/, '');
+                if (!s) { resetOutput(); return; }
+                const complete = [64, 66, 128, 130].includes(s.length);
+                const noisy = commit || /[^0-9a-f]/.test(s) || s.length > 130;
+                if (complete) {
+                    generateFromPub(!noisy);
+                    return;
+                }
+                resetOutput();
+                if (noisy) {
+                    try { classifyPubKey(pubInput.value); } catch (e) { showErr(e.message); }
+                }
+            }
+            pubInput.addEventListener('input', () => handlePubInput(false));
+            pubInput.addEventListener('change', () => handlePubInput(true));
+
+            document.getElementById('btn-hd-pub-compressed').addEventListener('click', () => {
+                pubInput.value = ethers.SigningKey.computePublicKey(randomBytes32(), true);
+                generateFromPub();
+            });
+            document.getElementById('btn-hd-pub-uncompressed').addEventListener('click', () => {
+                pubInput.value = ethers.SigningKey.computePublicKey(randomBytes32(), false);
+                generateFromPub();
+            });
+            document.getElementById('btn-hd-pub-ed25519').addEventListener('click', () => {
+                const pub = ed25519Pub(ethers.hexlify(randomBytes32()));
+                if (!pub) { resetOutput(); showErr('Ed25519 support (forge) is unavailable — cannot generate.'); return; }
+                pubInput.value = ethers.hexlify(pub);
+                generateFromPub();
             });
 
             function normalizePath(p) {

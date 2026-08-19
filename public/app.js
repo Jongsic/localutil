@@ -86,7 +86,7 @@ const TOOLS = [
     { file: 'passkey.html', name: 'Passkey Debugger', desc: 'Create, sign in with, and inspect WebAuthn passkeys against a simulated local server — every byte decoded and verified', icon: 'passkey', cat: 'Crypto & Auth' },
     { file: 'encrypt.html', name: 'Encrypt / Decrypt', desc: 'Protect text or files with a security key, a password, a raw key, or a key pair — whatever locks it is what unlocks it', icon: 'encrypt', cat: 'Crypto & Auth' },
     { file: 'sign.html', name: 'Sign / Verify', desc: 'Sign text with a security key or a private key, then verify it check by check', icon: 'sign', cat: 'Crypto & Auth' },
-    { file: 'hd-wallet.html', name: 'Web3 Wallet', desc: 'Create a root key from a seed phrase or raw hex, inspect addresses, derive HD accounts', icon: 'wallet', cat: 'Web3' },
+    { file: 'hd-wallet.html', name: 'Web3 Wallet', desc: 'Create a root key from a seed phrase or raw hex, derive HD accounts, or inspect a public key', icon: 'wallet', cat: 'Web3' },
     { file: 'calldata.html', name: 'ABI / Calldata', desc: 'Encode calldata & event topics, decode calldata and logs — from a signature or ABI', icon: 'eth', cat: 'Web3' },
     { file: 'qr-generator.html', name: 'QR Generator', desc: 'Create QR codes with an optional logo', icon: 'qrgen', cat: 'QR Codes' },
     { file: 'qr-reader.html', name: 'QR Reader', desc: 'Read QR codes from an image', icon: 'qrscan', cat: 'QR Codes' },

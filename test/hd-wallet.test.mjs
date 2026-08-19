@@ -125,6 +125,106 @@ test('random buttons produce working keys', async () => {
     assert.match(await env.page.$eval('#hd-hex', e => e.value), /^0x[0-9a-f]{64}$/);
 });
 
+// BIP173's example key (hash160 = 751e76e8…): the spec's own P2WPKH address,
+// plus the equally well-known P2SH-P2WPKH / P2PKH forms of the same key.
+const BIP173_PUB = '0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798';
+const BIP173_ADDRS = {
+    'BTC Address (P2PKH, legacy)': '1BgGZ9tcN4rm9KBzDn7KprQz87SZ26SAMH',
+    'BTC Address (P2SH-P2WPKH)': '3JvL6Ymt8MVWiCNHC7oWU6nLeHNJKLZGLN',
+    'BTC Address (P2WPKH, bech32)': 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4',
+};
+// First BIP86 test vector: x-only internal key → P2TR address.
+const BIP86_XONLY = 'cc8a4bc64d897bddc5fbc2f670f7a8ba0b386779106cf1223c6fc5d7cd6fc115';
+const BIP86_P2TR = 'bc1p5cyxnuxmeuwuvkwfem96lqzszd02n6xdcjrs20cac6yqjjwudpxqkedrcr';
+
+test('public key mode: compressed key detected, BIP-verified BTC addresses', async () => {
+    await env.goto('hd-wallet.html');
+    await env.page.click('#hd-mode button[data-mode="pub"]');
+    await env.page.fill('#hd-pub', BIP173_PUB);
+    await env.page.waitForSelector('#hd-summary .card');
+
+    assert.match(await summaryValue(env.page, 'Detected type'), /compressed \(short form\)/);
+    for (const [key, expected] of Object.entries(BIP173_ADDRS)) {
+        assert.equal(await summaryValue(env.page, key), expected, key);
+    }
+    // No private material → no Derive accounts panel.
+    assert.equal(await env.page.$eval('#hd-derive-panel', e => e.style.display), 'none');
+});
+
+test('public key mode: long forms (04-prefixed and raw X‖Y) match the private key', async () => {
+    await env.goto('hd-wallet.html');
+    const unc = await env.page.evaluate((pk) => ethers.SigningKey.computePublicKey('0x' + pk, false), TEST_PK);
+    await env.page.click('#hd-mode button[data-mode="pub"]');
+
+    await env.page.fill('#hd-pub', unc);
+    await env.page.waitForSelector('#hd-summary .card');
+    assert.match(await summaryValue(env.page, 'Detected type'), /uncompressed \(long form\)/);
+    assert.equal(await summaryValue(env.page, 'ETH Address'), TEST_PK_ADDR);
+    assert.equal(await summaryValue(env.page, 'XRP Address'), TEST_PK_CHAINS['XRP Address']);
+
+    // Same key, Ethereum style: X‖Y without the 04 prefix.
+    await env.page.fill('#hd-pub', unc.slice(4));
+    assert.match(await summaryValue(env.page, 'Detected type'), /raw X‖Y/);
+    assert.equal(await summaryValue(env.page, 'ETH Address'), TEST_PK_ADDR);
+});
+
+test('public key mode: 32-byte key shows Ed25519 and x-only readings', async () => {
+    await env.goto('hd-wallet.html');
+    await env.page.click('#hd-mode button[data-mode="pub"]');
+
+    // The Ed25519 pubkey of TEST_PK must reproduce the hex-mode SOL/TON values.
+    await env.page.fill('#hd-pub', TEST_PK_CHAINS['TON Public key (Ed25519)']);
+    await env.page.waitForSelector('#hd-summary .card');
+    assert.match(await summaryValue(env.page, 'Detected type'), /ambiguous/);
+    assert.equal(await summaryValue(env.page, 'SOL Address'), TEST_PK_CHAINS['SOL Address']);
+    assert.equal(await summaryValue(env.page, 'TON Address (v4r2, bounceable)'), TEST_PK_CHAINS['TON Address (v4r2, bounceable)']);
+
+    // The x-only reading must reproduce the BIP86 taproot vector.
+    await env.page.fill('#hd-pub', BIP86_XONLY);
+    assert.equal(await summaryValue(env.page, 'BTC Address (P2TR, key-path)'), BIP86_P2TR);
+});
+
+test('public key mode: clear errors for bad input', async () => {
+    await env.goto('hd-wallet.html');
+    await env.page.click('#hd-mode button[data-mode="pub"]');
+
+    // 20 bytes is an address, not a key.
+    await env.page.fill('#hd-pub', '0x2c7536E3605D9C16a7a3D7b1898e529396a65c23');
+    await env.page.dispatchEvent('#hd-pub', 'change');
+    assert.match(await env.page.$eval('#hd-error', e => e.textContent), /address, not a public key/);
+
+    // 65 bytes must carry the 04 prefix.
+    await env.page.fill('#hd-pub', '05' + 'ab'.repeat(64));
+    await env.page.dispatchEvent('#hd-pub', 'change');
+    assert.match(await env.page.$eval('#hd-error', e => e.textContent), /must start with the uncompressed-point prefix 04/);
+
+    // Compressed key whose x is not on the curve.
+    await env.page.fill('#hd-pub', '02' + 'ff'.repeat(32));
+    await env.page.dispatchEvent('#hd-pub', 'change');
+    assert.match(await env.page.$eval('#hd-error', e => e.textContent), /not on the curve/);
+
+    // Incomplete-but-plausible hex stays quiet while typing.
+    await env.page.fill('#hd-pub', '02abcd');
+    assert.equal(await env.page.$eval('#hd-error', e => e.style.display), 'none');
+});
+
+test('public key mode: random buttons generate detectable keys', async () => {
+    await env.goto('hd-wallet.html');
+    await env.page.click('#hd-mode button[data-mode="pub"]');
+
+    await env.page.click('#btn-hd-pub-compressed');
+    await env.page.waitForSelector('#hd-summary .card');
+    assert.match(await summaryValue(env.page, 'Detected type'), /compressed \(short form\)/);
+
+    await env.page.click('#btn-hd-pub-uncompressed');
+    assert.match(await summaryValue(env.page, 'Detected type'), /uncompressed \(long form\)/);
+    assert.match(await env.page.$eval('#hd-pub', e => e.value), /^0x04[0-9a-f]{128}$/);
+
+    await env.page.click('#btn-hd-pub-ed25519');
+    assert.match(await summaryValue(env.page, 'Detected type'), /ambiguous/);
+    assert.equal(await summaryValue(env.page, 'SOL Address') !== null, true);
+});
+
 test('no page errors', () => {
     assert.deepEqual(env.errors, []);
 });
