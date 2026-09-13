@@ -318,6 +318,7 @@
             width: 1%;
             text-align: right;
             color: var(--text-faint);
+            -webkit-user-select: none;
             user-select: none;
             background: var(--bg-subtle);
             border-right: 1px solid var(--border-color);
@@ -326,6 +327,12 @@
         }
         .iam-json td.side { width: 50%; }
         .iam-json td.side.old { border-right: 1px solid var(--border-color); }
+        /* Drag inside one side and the other stops taking part, so what is
+           highlighted is what will be copied. The copy handler is the guarantee
+           — Safari puts user-select:none text on the clipboard regardless — but
+           without this the selection still *looks* like it spans both columns. */
+        .iam-json.pick-old td.side.new,
+        .iam-json.pick-new td.side.old { -webkit-user-select: none; user-select: none; }
         .iam-json tr.row-ins .side.new, .iam-json tr.row-ins .ln.new { background: rgba(62, 207, 127, 0.14); }
         .iam-json tr.row-del .side.old, .iam-json tr.row-del .ln.old { background: rgba(229, 72, 77, 0.14); }
         .iam-json tr.row-chg .side.old, .iam-json tr.row-chg .ln.old { background: rgba(229, 72, 77, 0.12); }
@@ -596,6 +603,8 @@
                             <dd>An action both sides list, but never under the same condition, is lifted into a block of its own on each side. Left merged it would read as a deletion in one block and an unrelated block appearing elsewhere. A resource added or dropped is not a move; it stays visible inside its block.</dd>
                             <dt>Output</dt>
                             <dd>A line diff of the two normalized documents. Within a pair of changed lines, the parts that actually differ are marked. Each block is labelled with the Sid it was written under.</dd>
+                            <dt>Copying</dt>
+                            <dd>A selection takes the side it started in. Copying gives that side's lines alone — no line numbers, no counterpart column, no block labels — so the result is the document, ready to paste.</dd>
                         </dl>
                     </div>
                 </section>
@@ -1543,6 +1552,86 @@
                 emptyBox.hidden = true;
                 tableWrap.hidden = false;
             }
+
+            // ------------------------------------------------------------
+            // Selecting and copying one side
+            // ------------------------------------------------------------
+            // The two sides are one table, so a drag down column A runs through
+            // every cell of the row and the clipboard ends up holding the line
+            // numbers and column B as well — `8  "arn:…"  8  "arn:…"` per line.
+            // user-select:none on the numbers is not enough on its own: Safari
+            // puts that text on the clipboard anyway. So the copy is rebuilt from
+            // the side the selection started in, and the CSS above is there to
+            // make the highlight agree with it.
+            const jsonTable = jsonRows.parentElement;
+
+            function sideOf(node) {
+                if (!node) return '';
+                const start = node.nodeType === 1 ? node : node.parentElement;
+                const cell = start && start.closest ? start.closest('#iam-json-rows td') : null;
+                if (!cell) return '';
+                return cell.classList.contains('old') ? 'old'
+                    : cell.classList.contains('new') ? 'new' : '';
+            }
+
+            jsonRows.addEventListener('pointerdown', e => {
+                const side = sideOf(e.target);
+                jsonTable.classList.toggle('pick-old', side === 'old');
+                jsonTable.classList.toggle('pick-new', side === 'new');
+            });
+
+            // The part of one cell that falls inside the selection.
+            function clip(cell, range) {
+                const r = document.createRange();
+                r.selectNodeContents(cell);
+                if (range.compareBoundaryPoints(Range.START_TO_START, r) > 0) {
+                    r.setStart(range.startContainer, range.startOffset);
+                }
+                if (range.compareBoundaryPoints(Range.END_TO_END, r) < 0) {
+                    r.setEnd(range.endContainer, range.endOffset);
+                }
+                return r.toString();
+            }
+
+            function selectedSideText(range, side) {
+                const out = [];
+                jsonRows.querySelectorAll('td.side.' + side).forEach(cell => {
+                    // A block's Sid line is this page's annotation, not policy
+                    // text, and a cell with no counterpart has no line to give.
+                    if (cell.parentElement.classList.contains('block-head')) return;
+                    if (cell.classList.contains('cell-empty')) return;
+                    if (!range.intersectsNode(cell)) return;
+                    const text = clip(cell, range);
+                    if (text) out.push(text);
+                });
+                return out.join('\n');
+            }
+
+            // Where a selection began. Anchored outside a cell — dragged from the
+            // margin, or selected whole — it is the first side the range reaches,
+            // which for a select-all is A.
+            function firstTouchedSide(range) {
+                const cells = jsonRows.querySelectorAll('td.side');
+                for (const cell of cells) {
+                    if (!range.intersectsNode(cell)) continue;
+                    return cell.classList.contains('old') ? 'old' : 'new';
+                }
+                return '';
+            }
+
+            resultCard.addEventListener('copy', e => {
+                const sel = document.getSelection();
+                if (!sel || sel.isCollapsed || !sel.rangeCount) return;
+                const range = sel.getRangeAt(0);
+                if (!jsonRows.contains(range.commonAncestorContainer) &&
+                    range.commonAncestorContainer !== jsonRows) return;   // not the diff
+                const side = sideOf(sel.anchorNode) || sideOf(sel.focusNode) || firstTouchedSide(range);
+                if (!side) return;
+                const text = selectedSideText(range, side);
+                if (!text) return;
+                e.clipboardData.setData('text/plain', text);
+                e.preventDefault();
+            });
 
             // ------------------------------------------------------------
             // Collapsing the inputs

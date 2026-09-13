@@ -1852,6 +1852,8 @@ window.LOCALUTIL_I18N = Object.assign(window.LOCALUTIL_I18N || {}, {
         "action/resource pairs": "action/resource 조합",
         "characters": "글자",
         "Account IDs or Regions have been replaced with tokens. The result is for reading and comparing, not for deploying.": "계정 ID나 리전이 토큰으로 치환되었습니다. 읽고 비교하기 위한 결과이며 배포용이 아닙니다.",
-        "Paste a policy above and press Normalize.": "위에 정책을 붙여넣고 정리를 누르세요."
+        "Paste a policy above and press Normalize.": "위에 정책을 붙여넣고 정리를 누르세요.",
+        "Copying": "복사",
+        "A selection takes the side it started in. Copying gives that side's lines alone — no line numbers, no counterpart column, no block labels — so the result is the document, ready to paste.": "선택은 시작한 쪽에 머뭅니다. 복사하면 그쪽 줄만 들어옵니다 — 줄번호도, 반대쪽 열도, 블록 라벨도 없습니다. 그대로 붙여넣을 수 있는 문서가 됩니다."
     },
 });

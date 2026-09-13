@@ -610,6 +610,57 @@ test('the ruler and nav still measure the diff with the panes collapsed', async 
         `mark at ${markTop} should track the row at ${rowTop} of ${total}`);
 });
 
+// ------------------------------------------------------------
+// Selecting and copying one side
+// ------------------------------------------------------------
+
+test('copying a selection in one column gives that column alone', async () => {
+    await env.goto('diff.html');
+    await env.page.fill('#diff-a', 'alpha\nbravo\ncharlie');
+    await env.page.fill('#diff-b', 'alpha\ndelta\ncharlie');
+    await env.page.click('#btn-diff-run');
+    await env.page.waitForSelector('.diff-table');
+
+    const selectSide = side => env.page.evaluate(s => {
+        const cells = document.querySelectorAll('td.diff-side.' + s);
+        const sel = document.getSelection();
+        const range = document.createRange();
+        range.setStart(cells[0], 0);
+        const last = cells[cells.length - 1];
+        range.setEnd(last, last.childNodes.length);
+        sel.removeAllRanges();
+        sel.addRange(range);
+        return sel.toString();
+    }, side);
+    const copied = () => env.page.evaluate(() => {
+        const dt = new DataTransfer();
+        document.getElementById('diff-result')
+            .dispatchEvent(new ClipboardEvent('copy', { clipboardData: dt, bubbles: true, cancelable: true }));
+        return dt.getData('text/plain');
+    });
+
+    await selectSide('old');
+    const left = await copied();
+    assert.equal(left, 'alpha\nbravo\ncharlie', 'the original side, without line numbers');
+
+    await selectSide('new');
+    assert.equal(await copied(), 'alpha\ndelta\ncharlie');
+});
+
+test('pressing in one column marks the table so the other stops selecting', async () => {
+    await env.goto('diff.html');
+    await env.page.fill('#diff-a', 'alpha\nbravo');
+    await env.page.fill('#diff-b', 'alpha\ndelta');
+    await env.page.click('#btn-diff-run');
+    await env.page.waitForSelector('.diff-table');
+
+    const box = await env.page.locator('td.diff-side.new').first().boundingBox();
+    await env.page.mouse.move(box.x + 5, box.y + 3);
+    await env.page.mouse.down();
+    await env.page.mouse.up();
+    assert.match(await env.page.$eval('.diff-table', t => t.className), /pick-new/);
+});
+
 test('no page errors', () => {
     assert.deepEqual(env.errors, []);
 });

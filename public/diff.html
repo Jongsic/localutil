@@ -120,6 +120,7 @@
             width: 1%;
             text-align: right;
             color: var(--text-faint);
+            -webkit-user-select: none;
             user-select: none;
             background: var(--bg-subtle);
             border-right: 1px solid var(--border-color);
@@ -130,6 +131,12 @@
         }
         .diff-side { width: 50%; border-right: 1px solid var(--border-color); }
         td.diff-side:last-child { border-right: none; }
+        /* Drag inside one side and the other stops taking part, so what is
+           highlighted is what will be copied. The copy handler is the guarantee
+           — Safari puts user-select:none text on the clipboard regardless — but
+           without this the selection still *looks* like it spans both columns. */
+        .diff-table.pick-old .diff-side.new,
+        .diff-table.pick-new .diff-side.old { -webkit-user-select: none; user-select: none; }
         .row-ins .diff-side.new, .row-ins .diff-num.new { background: rgba(62, 207, 127, 0.14); }
         .row-del .diff-side.old, .row-del .diff-num.old { background: rgba(229, 72, 77, 0.14); }
         .row-chg .diff-side.old, .row-chg .diff-num.old { background: rgba(229, 72, 77, 0.12); }
@@ -1035,6 +1042,77 @@
                     setCollapsed(true);
                     run();
                 });
+            });
+
+            // ------------------------------------------------------------
+            // Selecting and copying one side
+            // ------------------------------------------------------------
+            // The two sides are one table, so a drag down the original column runs
+            // through every cell of the row and the clipboard ends up holding the
+            // line numbers and the changed side as well — `8  foo  8  foo` per
+            // line. user-select:none on the numbers is not enough on its own:
+            // Safari puts that text on the clipboard anyway. So the copy is
+            // rebuilt from the side the selection started in, and the CSS above is
+            // there to make the highlight agree with it.
+            function sideOf(node) {
+                if (!node) return '';
+                const start = node.nodeType === 1 ? node : node.parentElement;
+                const cell = start && start.closest ? start.closest('.diff-table td') : null;
+                if (!cell) return '';
+                return cell.classList.contains('old') ? 'old'
+                    : cell.classList.contains('new') ? 'new' : '';
+            }
+
+            result.addEventListener('pointerdown', e => {
+                const table = result.querySelector('.diff-table');
+                if (!table) return;
+                const side = sideOf(e.target);
+                table.classList.toggle('pick-old', side === 'old');
+                table.classList.toggle('pick-new', side === 'new');
+            });
+
+            // The part of one cell that falls inside the selection.
+            function clipCell(cell, range) {
+                const r = document.createRange();
+                r.selectNodeContents(cell);
+                if (range.compareBoundaryPoints(Range.START_TO_START, r) > 0) {
+                    r.setStart(range.startContainer, range.startOffset);
+                }
+                if (range.compareBoundaryPoints(Range.END_TO_END, r) < 0) {
+                    r.setEnd(range.endContainer, range.endOffset);
+                }
+                return r.toString();
+            }
+
+            // Where a selection began. Anchored outside a cell — dragged from the
+            // margin, or selected whole — it is the first side the range reaches,
+            // which for a select-all is the original.
+            function firstTouchedSide(range) {
+                for (const cell of result.querySelectorAll('td.diff-side')) {
+                    if (!range.intersectsNode(cell)) continue;
+                    return cell.classList.contains('old') ? 'old' : 'new';
+                }
+                return '';
+            }
+
+            result.addEventListener('copy', e => {
+                const sel = document.getSelection();
+                if (!sel || sel.isCollapsed || !sel.rangeCount) return;
+                const range = sel.getRangeAt(0);
+                const table = result.querySelector('.diff-table');
+                if (!table || !table.contains(range.commonAncestorContainer)) return;
+                const side = sideOf(sel.anchorNode) || sideOf(sel.focusNode) || firstTouchedSide(range);
+                if (!side) return;
+                const lines = [];
+                result.querySelectorAll('td.diff-side.' + side).forEach(cell => {
+                    // A cell with no counterpart has no line to give.
+                    if (cell.classList.contains('cell-empty')) return;
+                    if (!range.intersectsNode(cell)) return;
+                    lines.push(clipCell(cell, range));
+                });
+                if (!lines.length) return;
+                e.clipboardData.setData('text/plain', lines.join('\n'));
+                e.preventDefault();
             });
 
             // ------------------------------------------------------------

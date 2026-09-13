@@ -1017,6 +1017,99 @@ test('the view tabs are only for the permission table', async () => {
     assert.equal(await env.page.isVisible('#iam-views'), true);
 });
 
+// ------------------------------------------------------------
+// Selecting and copying one side of the diff
+// ------------------------------------------------------------
+
+// What the clipboard would receive for the current selection.
+const copied = () => env.page.evaluate(() => {
+    const dt = new DataTransfer();
+    document.getElementById('iam-result')
+        .dispatchEvent(new ClipboardEvent('copy', { clipboardData: dt, bubbles: true, cancelable: true }));
+    return dt.getData('text/plain');
+});
+
+// A range over the whole table, anchored where asked — what a browser that
+// ignores user-select:none hands over.
+const selectAll = (anchor) => env.page.evaluate(side => {
+    const rows = document.getElementById('iam-json-rows');
+    const sel = document.getSelection();
+    const range = document.createRange();
+    if (side) {
+        const cells = rows.querySelectorAll('td.side.' + side);
+        range.setStart(cells[0], 0);
+        const last = cells[cells.length - 1];
+        range.setEnd(last, last.childNodes.length);
+    } else {
+        range.selectNodeContents(rows);
+    }
+    sel.removeAllRanges();
+    sel.addRange(range);
+    return sel.toString();
+}, anchor);
+
+async function twoSidedDiff() {
+    await compare(
+        doc({ Sid: 'LT', Effect: 'Allow', Action: ['ec2:Alpha', 'ec2:Bravo'], Resource: 'arn:one' }),
+        doc({ Sid: 'lt', Effect: 'Allow', Action: ['ec2:Alpha', 'ec2:Delta'], Resource: 'arn:one' }),
+        literal);
+}
+
+test('copying a selection in one column gives that column alone', async () => {
+    await twoSidedDiff();
+    const raw = await selectAll('old');
+    assert.match(raw, /ec2:Bravo/);
+
+    const text = await copied();
+    assert.deepEqual(JSON.parse(text), {
+        Effect: 'Allow', Action: ['ec2:Alpha', 'ec2:Bravo'], Resource: ['arn:one'],
+    }, 'the A column on its own, and still valid JSON');
+    assert.ok(!text.includes('ec2:Delta'), 'nothing from B');
+    assert.ok(!/^\s*\d+\s/m.test(text), 'no line numbers');
+    assert.ok(!text.includes('Sid:'), 'no block annotation');
+
+    await selectAll('new');
+    const fromB = await copied();
+    assert.deepEqual(JSON.parse(fromB).Action, ['ec2:Alpha', 'ec2:Delta']);
+    assert.ok(!fromB.includes('ec2:Bravo'));
+});
+
+test('a selection anchored outside a cell falls back to the A side', async () => {
+    await twoSidedDiff();
+    await selectAll(null);          // the whole table, anchored on the tbody
+    assert.deepEqual(JSON.parse(await copied()).Action, ['ec2:Alpha', 'ec2:Bravo']);
+});
+
+test('pressing in one column marks the table so the other stops selecting', async () => {
+    await twoSidedDiff();
+    const cls = async () => env.page.$eval('.iam-json', t => t.className);
+
+    const a = await env.page.locator('#iam-json-rows td.side.old').nth(1).boundingBox();
+    await env.page.mouse.move(a.x + 5, a.y + 3);
+    await env.page.mouse.down();
+    await env.page.mouse.up();
+    assert.match(await cls(), /pick-old/);
+
+    const b = await env.page.locator('#iam-json-rows td.side.new').nth(1).boundingBox();
+    await env.page.mouse.move(b.x + 5, b.y + 3);
+    await env.page.mouse.down();
+    await env.page.mouse.up();
+    assert.match(await cls(), /pick-new/);
+    assert.doesNotMatch(await cls(), /pick-old/);
+});
+
+test('a selection outside the diff is copied normally', async () => {
+    await twoSidedDiff();
+    await env.page.evaluate(() => {
+        const sel = document.getSelection();
+        const range = document.createRange();
+        range.selectNodeContents(document.getElementById('iam-mode-hint'));
+        sel.removeAllRanges();
+        sel.addRange(range);
+    });
+    assert.equal(await copied(), '', 'the handler declined, so the browser does it');
+});
+
 test('comparing puts the inputs away, and Edit brings them back', async () => {
     await compare(
         doc({ Effect: 'Allow', Action: 's3:GetObject', Resource: '*' }),
