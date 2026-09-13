@@ -1,0 +1,1867 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
+    <title>AWS IAM Policy Diff / Compare — LocalUtil</title>
+    <!-- social / favicon -->
+    <meta name="description" content="Compare two AWS IAM policy sets by the permissions they actually grant — statements flattened, wildcards matched as wildcards, explicit Deny applied — or diff them statement by statement as written. Runs 100% in your browser — nothing is uploaded.">
+    <link rel="canonical" href="https://jongsic.github.io/localutil/iam-diff.html">
+    <link rel="icon" href="favicon.ico" sizes="any">
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="LocalUtil">
+    <meta property="og:title" content="AWS IAM Policy Diff / Compare — LocalUtil">
+    <meta property="og:description" content="Compare two AWS IAM policy sets by the permissions they actually grant — statements flattened, wildcards matched as wildcards, explicit Deny applied — or diff them statement by statement as written. Runs 100% in your browser — nothing is uploaded.">
+    <meta property="og:image" content="https://jongsic.github.io/localutil/og.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:url" content="https://jongsic.github.io/localutil/iam-diff.html">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:image" content="https://jongsic.github.io/localutil/og.png">
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebApplication","name":"AWS IAM Policy Diff / Compare","url":"https://jongsic.github.io/localutil/iam-diff.html","description":"Compare two AWS IAM policy sets by the permissions they actually grant — statements flattened, wildcards matched as wildcards, explicit Deny applied — or diff them statement by statement as written. Runs 100% in your browser — nothing is uploaded.","applicationCategory":"DeveloperApplication","operatingSystem":"Any","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"isPartOf":{"@type":"WebSite","name":"LocalUtil","url":"https://jongsic.github.io/localutil/"}}</script>
+    <!-- /social -->
+    <script src="theme-init.js"></script>
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        .iam-toolbar { display: flex; flex-direction: column; gap: 12px; padding: 16px 18px; }
+        .iam-toolbar-main {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            flex-wrap: wrap;
+        }
+        .iam-options { display: flex; gap: 18px; flex-wrap: wrap; align-items: center; }
+        .iam-options label[hidden] { display: none; }
+        .iam-options label { display: inline-flex; align-items: center; gap: 7px; margin: 0; font-weight: 500; cursor: pointer; }
+        .iam-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+        .iam-actions .btn[hidden] { display: none; }
+
+        #tool-iam .pane textarea { min-height: 200px; font-size: 0.82rem; }
+        /* .split-pane is display:flex, which outranks the [hidden] default. */
+        #iam-split[hidden] { display: none; }
+
+        /* What the inputs are replaced by while a comparison is on screen. */
+        .iam-sources {
+            display: flex;
+            align-items: baseline;
+            gap: 10px 28px;
+            flex-wrap: wrap;
+            padding: 12px 16px;
+        }
+        .iam-sources[hidden] { display: none; }
+        .iam-source { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+        .iam-source-label { font-size: 0.85rem; font-weight: 600; white-space: nowrap; }
+        .iam-source-what {
+            font-family: var(--font-mono);
+            font-size: 0.76rem;
+            color: var(--text-muted);
+            word-break: break-all;
+        }
+
+        /* Overview ruler — a fixed strip left of the real scrollbar mapping the
+           whole scroll range, so a mark sits exactly where the scrollbar thumb
+           has to be for that difference to be on screen. */
+        .iam-ruler {
+            position: fixed;
+            width: 14px;
+            z-index: 30;
+            background: var(--bg-app);
+            border-left: 1px solid var(--border-color);
+            cursor: pointer;
+            touch-action: none;
+            user-select: none;
+        }
+        .iam-ruler[hidden] { display: none; }
+        .iam-ruler-marks { position: absolute; inset: 0; }
+        /* Left half = A, right half = B — the same halves as the result. */
+        .iam-mark { position: absolute; left: 1px; right: 1px; border-radius: 1px; }
+        .iam-mark.del { background: linear-gradient(to right, var(--danger) 0 50%, transparent 50%); }
+        .iam-mark.ins { background: linear-gradient(to right, transparent 0 50%, var(--success) 50%); }
+        .iam-mark.chg { background: linear-gradient(to right, var(--danger) 0 50%, var(--success) 50%); }
+        .iam-ruler-thumb {
+            position: absolute;
+            left: 0;
+            right: 0;
+            border-radius: 2px;
+            background: rgba(120, 135, 160, 0.26);
+            box-shadow: inset 0 0 0 1px rgba(120, 135, 160, 0.45);
+            pointer-events: none;
+        }
+        .iam-ruler:hover .iam-ruler-thumb { background: rgba(120, 135, 160, 0.4); }
+
+        /* Drag & drop a policy file onto either side */
+        #tool-iam .pane { position: relative; }
+        .iam-dropzone {
+            position: absolute;
+            inset: 0;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding: 12px;
+            border: 2px dashed var(--primary);
+            border-radius: var(--r-md);
+            background-color: var(--primary-soft);
+            color: var(--active-text);
+            font-size: 0.95rem;
+            pointer-events: none;
+            z-index: 2;
+        }
+        #tool-iam .pane.dragover .iam-dropzone { display: flex; }
+        .iam-file {
+            font-family: var(--font-mono);
+            font-size: 0.76rem;
+            color: var(--text-muted);
+            margin: 0;
+            word-break: break-all;
+        }
+        .iam-file[hidden] { display: none; }
+
+        /* The verdict is the whole point of the page, so it gets the top slot
+           and a colour that says the answer before a single row is read. */
+        .iam-verdict { display: flex; flex-direction: column; gap: 14px; }
+        .iam-verdict[hidden] { display: none; }
+        .iam-verdict-head { display: flex; align-items: flex-start; gap: 14px; }
+        .iam-verdict-mark {
+            flex-shrink: 0;
+            width: 34px;
+            height: 34px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 1rem;
+            background: var(--bg-subtle);
+            color: var(--text-muted);
+        }
+        .iam-verdict.ok .iam-verdict-mark { background: rgba(62, 207, 127, 0.16); color: var(--success); }
+        .iam-verdict.warn .iam-verdict-mark { background: rgba(240, 180, 41, 0.18); color: var(--warning); }
+        .iam-verdict.bad .iam-verdict-mark { background: rgba(229, 72, 77, 0.16); color: var(--danger); }
+        .iam-verdict-title { font-size: 1.05rem; font-weight: 650; }
+        .iam-verdict.ok .iam-verdict-title { color: var(--success); }
+        .iam-verdict.warn .iam-verdict-title { color: var(--warning); }
+        .iam-verdict.bad .iam-verdict-title { color: var(--danger); }
+        .iam-verdict-sub { font-size: 0.85rem; color: var(--text-muted); margin-top: 2px; }
+
+        .iam-chips { display: flex; flex-wrap: wrap; gap: 8px 10px; }
+        .iam-chip {
+            font-size: 0.78rem;
+            color: var(--text-muted);
+            background: var(--bg-subtle);
+            border: 1px solid var(--border-color);
+            border-radius: var(--r-pill);
+            padding: 4px 11px;
+        }
+        .iam-chip b { color: var(--text-main); font-variant-numeric: tabular-nums; }
+        .iam-chip.a b { color: var(--danger); }
+        .iam-chip.b b { color: var(--success); }
+        .iam-chip.c b { color: var(--warning); }
+
+        /* Everything the comparison could not reason about, said out loud —
+           a silent approximation on an IAM policy is worse than no answer. */
+        .iam-notes { display: flex; flex-direction: column; gap: 6px; margin: 0; padding: 0; list-style: none; }
+        .iam-notes:empty { display: none; }
+        .iam-notes li {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            padding-left: 20px;
+            position: relative;
+        }
+        .iam-notes li::before {
+            content: "!";
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 14px;
+            height: 14px;
+            margin-top: 3px;
+            border-radius: 50%;
+            background: rgba(240, 180, 41, 0.2);
+            color: var(--warning);
+            font-size: 0.62rem;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .iam-result { padding: 0; overflow: hidden; }
+        /* One comparison, read four ways: flat, or gathered under whichever of
+           the three axes you are actually auditing. */
+        .iam-views { padding: 12px 14px; border-bottom: 1px solid var(--border-color); }
+        .iam-views[hidden] { display: none; }
+        .iam-table tr.iam-group > td {
+            background: var(--bg-subtle);
+            border-top: 1px solid var(--border-color);
+            border-bottom: 1px solid var(--border-color);
+            padding: 8px 12px;
+            font-family: var(--font-mono);
+            white-space: normal;
+        }
+        .iam-table tr.iam-group:first-child > td { border-top: none; }
+        .iam-group-key { font-weight: 700; color: var(--text-main); word-break: break-all; }
+        .iam-group-counts { display: inline-flex; flex-wrap: wrap; gap: 4px 12px; margin-left: 12px; font-family: inherit; }
+        .iam-group-count { font-family: var(--font-mono); font-size: 0.72rem; color: var(--text-faint); }
+        .iam-group-count b { font-variant-numeric: tabular-nums; }
+        .iam-group-count.a b { color: var(--danger); }
+        .iam-group-count.b b { color: var(--success); }
+        .iam-group-count.c b { color: var(--warning); }
+        .iam-scroll { overflow-x: auto; }
+        .iam-empty { padding: 28px 16px; text-align: center; color: var(--text-faint); }
+
+        /* Blocks that matched are dropped from the result, which is only safe if
+           the page says so — otherwise an action present in the listing below
+           simply cannot be found in the diff and there is nothing to explain it. */
+        .iam-fold[hidden] { display: none; }
+        .iam-fold-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 7px;
+            width: 100%;
+            padding: 9px 12px;
+            border: none;
+            border-top: 1px solid var(--border-color);
+            background: var(--bg-subtle);
+            color: var(--text-muted);
+            font: inherit;
+            font-size: 0.8rem;
+            cursor: pointer;
+        }
+        .iam-fold-btn:hover { background: var(--bg-hover); color: var(--text-main); }
+        .iam-fold-btn b { color: var(--text-main); font-variant-numeric: tabular-nums; }
+        .iam-error { padding: 16px 18px; color: var(--danger); font-size: 0.85rem; white-space: pre-wrap; }
+        .iam-error[hidden] { display: none; }
+
+        .iam-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+        .iam-table th {
+            text-align: left;
+            padding: 10px 12px;
+            color: var(--text-faint);
+            font-weight: 700;
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            white-space: nowrap;
+            border-bottom: 1px solid var(--border-color);
+            background: var(--bg-content);
+        }
+        .iam-table td {
+            padding: 7px 12px;
+            vertical-align: top;
+            border-bottom: 1px solid var(--border-color);
+            font-family: var(--font-mono);
+            word-break: break-all;
+        }
+        .iam-table tr:last-child td { border-bottom: none; }
+        .iam-table td.col-status, .iam-table td.col-effect { font-family: inherit; white-space: nowrap; word-break: normal; }
+        .iam-table td.col-action { white-space: nowrap; word-break: normal; }
+        .iam-table tr.row-a td { background: rgba(229, 72, 77, 0.07); }
+        .iam-table tr.row-b td { background: rgba(62, 207, 127, 0.07); }
+        .iam-table tr.row-c td { background: rgba(240, 180, 41, 0.08); }
+        .iam-table tr.row-muted td { color: var(--text-muted); }
+
+        .iam-tag {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: var(--r-pill);
+            font-size: 0.68rem;
+            font-weight: 700;
+            letter-spacing: 0.02em;
+            white-space: nowrap;
+        }
+        .iam-tag.a { background: rgba(229, 72, 77, 0.16); color: var(--danger); }
+        .iam-tag.b { background: rgba(62, 207, 127, 0.16); color: var(--success); }
+        .iam-tag.c { background: rgba(240, 180, 41, 0.18); color: var(--warning); }
+        .iam-tag.m { background: var(--bg-subtle); color: var(--text-muted); }
+
+        .iam-sub { font-family: var(--font-mono); font-size: 0.7rem; color: var(--text-faint); margin-top: 3px; }
+        .iam-sub.warn { color: var(--warning); }
+        .iam-sub.plain { font-family: inherit; }
+        .iam-cond-a { color: var(--danger); }
+        .iam-cond-b { color: var(--success); }
+        .iam-deny { color: var(--danger); font-weight: 700; }
+        .iam-none { color: var(--text-faint); }
+
+        /* "As written" is read as a diff, not as a list of fields — the unit is a
+           whole normalized statement, pretty-printed, with the two sides lined
+           up. Statements are paired before anything is compared, so blocks sit
+           opposite their counterpart instead of wherever a text diff drifted to. */
+        .iam-json-wrap { overflow-x: auto; }
+        .iam-json-wrap[hidden] { display: none; }
+        .iam-json {
+            width: 100%;
+            border-collapse: collapse;
+            font-family: var(--font-mono);
+            font-size: 0.78rem;
+            line-height: 1.55;
+        }
+        .iam-json th {
+            text-align: left;
+            padding: 10px 12px;
+            color: var(--text-faint);
+            font-family: inherit;
+            font-weight: 700;
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            border-bottom: 1px solid var(--border-color);
+        }
+        .iam-json td { padding: 1px 10px; vertical-align: top; white-space: pre-wrap; word-break: break-word; }
+        .iam-json td.ln {
+            width: 1%;
+            text-align: right;
+            color: var(--text-faint);
+            user-select: none;
+            background: var(--bg-subtle);
+            border-right: 1px solid var(--border-color);
+            white-space: nowrap;
+            word-break: normal;
+        }
+        .iam-json td.side { width: 50%; }
+        .iam-json td.side.old { border-right: 1px solid var(--border-color); }
+        .iam-json tr.row-ins .side.new, .iam-json tr.row-ins .ln.new { background: rgba(62, 207, 127, 0.14); }
+        .iam-json tr.row-del .side.old, .iam-json tr.row-del .ln.old { background: rgba(229, 72, 77, 0.14); }
+        .iam-json tr.row-chg .side.old, .iam-json tr.row-chg .ln.old { background: rgba(229, 72, 77, 0.12); }
+        .iam-json tr.row-chg .side.new, .iam-json tr.row-chg .ln.new { background: rgba(62, 207, 127, 0.12); }
+        /* Stage two of the diff: what changed inside a pair of changed lines.
+           A deeper tint of the row's own colour, so the row still reads as one
+           change while the eye lands on the part that moved. */
+        .iam-json .iam-tok { border-radius: 2px; }
+        .iam-json tr.row-chg .side.old .iam-tok { background: rgba(229, 72, 77, 0.34); }
+        .iam-json tr.row-chg .side.new .iam-tok { background: rgba(62, 207, 127, 0.34); }
+        .iam-json .cell-empty {
+            background: repeating-linear-gradient(45deg, transparent, transparent 6px, var(--bg-subtle) 6px, var(--bg-subtle) 12px);
+        }
+        /* Each block is introduced by the Sid(s) it was written under, which is
+           both the separator and the way back to the statement that has to change. */
+        .iam-json tr.block-head > td {
+            background: var(--bg-subtle);
+            color: var(--text-faint);
+            font-size: 0.72rem;
+            padding: 5px 10px;
+            border-top: 1px solid var(--border-color);
+            border-bottom: 1px solid var(--border-color);
+        }
+        .iam-json tr.block-head > td.ln { border-right-color: var(--border-color); }
+
+        tr.iam-cut > td {
+            padding: 9px 12px;
+            text-align: center;
+            color: var(--text-muted);
+            background: var(--bg-subtle);
+            font-family: inherit;
+        }
+
+        /* The two canonical listings — the thing to paste into Diff / Compare
+           when you want a line-by-line read rather than this table. */
+        .iam-norm[hidden] { display: none; }
+        .iam-norm .pane { gap: 8px; }
+        .iam-norm .code-view { font-size: 0.76rem; max-height: 46vh; min-height: 90px; }
+        .iam-norm .pane-head { justify-content: space-between; }
+
+        .iam-doc-section {
+            font-size: 0.72rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: var(--text-faint);
+            margin: 20px 0 9px;
+        }
+        .iam-doc-section:first-of-type { margin-top: 0; }
+        .iam-doc {
+            display: grid;
+            grid-template-columns: minmax(130px, 210px) 1fr;
+            gap: 7px 22px;
+            margin: 0;
+            font-size: 0.85rem;
+            line-height: 1.6;
+        }
+        .iam-doc dt { font-weight: 600; color: var(--text-main); }
+        .iam-doc dd { margin: 0; color: var(--text-muted); }
+        @media (max-width: 640px) {
+            .iam-doc { grid-template-columns: 1fr; gap: 2px; }
+            .iam-doc dd { margin-bottom: 11px; }
+        }
+        @media (max-width: 700px) {
+            .iam-table { font-size: 0.74rem; }
+            .iam-table td, .iam-table th { padding: 6px 8px; }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="app-container">
+        <aside class="sidebar" id="app-sidebar"></aside>
+
+        <main class="main-content">
+            <header class="topbar" id="app-topbar">
+                <div class="topbar-title">
+                    <h1 id="current-tool-title">IAM Policy Diff</h1>
+                    <p id="current-tool-desc" class="topbar-desc">Compare two AWS IAM policy sets — by the permissions they actually grant, or statement by statement as they are written</p>
+                </div>
+            </header>
+
+            <div class="tools-container">
+                <section id="tool-iam" class="tool-section active">
+                    <div class="iam-toolbar card">
+                        <div class="iam-toolbar-main">
+                            <div class="segmented" id="iam-mode">
+                                <button type="button" class="active" data-mode="effective">Effective permissions</button>
+                                <button type="button" data-mode="literal">As written</button>
+                            </div>
+                            <div class="iam-options">
+                                <label><input type="checkbox" id="iam-opt-account" checked> Normalize account IDs</label>
+                                <label><input type="checkbox" id="iam-opt-region" checked> Normalize regions</label>
+                                <label id="iam-deny-option"><input type="checkbox" id="iam-opt-deny" checked> Apply explicit Deny</label>
+                                <label><input type="checkbox" id="iam-opt-cond"> Ignore conditions</label>
+                                <label><input type="checkbox" id="iam-opt-matched"> Show matched</label>
+                                <label><input type="checkbox" id="iam-opt-norm"> Show normalized</label>
+                            </div>
+                            <div class="iam-actions">
+                                <button id="btn-iam-run" class="btn btn-primary">Compare</button>
+                            <button id="btn-iam-edit" class="btn btn-primary" hidden>Edit</button>
+                                <button id="btn-iam-swap" class="btn">Swap</button>
+                                <button id="btn-iam-example" class="btn">Example</button>
+                                <button id="btn-iam-clear" class="btn">Clear</button>
+                            </div>
+                        </div>
+                        <div class="field-hint" id="iam-mode-hint">Compares the access each side grants. Wildcards are matched by containment and an explicit Deny is applied.</div>
+                    </div>
+
+                    <div class="split-pane" id="iam-split">
+                        <div class="pane" id="iam-pane-a">
+                            <label for="iam-a">Policy set A</label>
+                            <div class="field-hint">Paste one or more policy documents — an inline policy, a managed policy, or raw output from the aws iam read commands. Drop a file here too.</div>
+                            <div class="iam-file" id="iam-file-a" hidden data-i18n-skip></div>
+                            <textarea id="iam-a" spellcheck="false" placeholder='{"Version":"2012-10-17","Statement":[…]}'></textarea>
+                            <div class="iam-dropzone">Drop to load as A</div>
+                        </div>
+                        <div class="pane" id="iam-pane-b">
+                            <label for="iam-b">Policy set B</label>
+                            <div class="field-hint">Several documents in a row are fine — they are merged, because a role's effective access is the union of everything attached to it.</div>
+                            <div class="iam-file" id="iam-file-b" hidden data-i18n-skip></div>
+                            <textarea id="iam-b" spellcheck="false" placeholder='{"Version":"2012-10-17","Statement":[…]}'></textarea>
+                            <div class="iam-dropzone">Drop to load as B</div>
+                        </div>
+                    </div>
+
+                    <div class="iam-sources card" id="iam-sources" hidden>
+                        <div class="iam-source">
+                            <span class="iam-source-label">A</span>
+                            <span class="iam-source-what" id="iam-source-a" data-i18n-skip></span>
+                        </div>
+                        <div class="iam-source">
+                            <span class="iam-source-label">B</span>
+                            <span class="iam-source-what" id="iam-source-b" data-i18n-skip></span>
+                        </div>
+                    </div>
+
+                    <div class="iam-verdict card" id="iam-verdict" hidden>
+                        <div class="iam-verdict-head">
+                            <span class="iam-verdict-mark" id="iam-verdict-mark" data-i18n-skip>=</span>
+                            <div>
+                                <div class="iam-verdict-title" id="iam-verdict-title"></div>
+                                <div class="iam-verdict-sub" id="iam-verdict-sub"></div>
+                            </div>
+                        </div>
+                        <div class="iam-chips" id="iam-chips"></div>
+                        <ul class="iam-notes" id="iam-notes"></ul>
+                    </div>
+
+                    <div class="card iam-result" id="iam-result">
+                        <div class="iam-views" id="iam-views">
+                            <div class="segmented" id="iam-group">
+                                <button type="button" class="active" data-group="">Combined</button>
+                                <button type="button" data-group="action">By action</button>
+                                <button type="button" data-group="resource">By resource</button>
+                                <button type="button" data-group="condition">By condition</button>
+                            </div>
+                        </div>
+                        <div class="iam-error" id="iam-error" hidden data-i18n-skip></div>
+                        <div class="iam-empty" id="iam-empty">Paste a policy on both sides and press <strong>Compare</strong>.</div>
+                        <div class="iam-json-wrap" id="iam-json-wrap" hidden>
+                            <table class="iam-json">
+                                <thead>
+                                    <tr>
+                                        <th></th>
+                                        <th>A</th>
+                                        <th></th>
+                                        <th>B</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="iam-json-rows" data-i18n-skip></tbody>
+                            </table>
+                        </div>
+                        <div class="iam-scroll" id="iam-table-wrap" hidden>
+                            <table class="iam-table">
+                                <thead>
+                                    <tr>
+                                        <th>Status</th>
+                                        <th>Effect</th>
+                                        <th>Action</th>
+                                        <th>Resource / Principal</th>
+                                        <th>Condition</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="iam-rows"></tbody>
+                            </table>
+                        </div>
+                        <div class="iam-fold" id="iam-fold" hidden>
+                            <button type="button" class="iam-fold-btn" id="btn-iam-show-matched"></button>
+                        </div>
+                    </div>
+
+                    <div class="iam-ruler" id="iam-ruler" hidden aria-hidden="true" title="Overview — click or drag to jump">
+                        <div class="iam-ruler-marks" id="iam-ruler-marks"></div>
+                        <div class="iam-ruler-thumb" id="iam-ruler-thumb"></div>
+                    </div>
+
+                    <div class="split-pane iam-norm" id="iam-norm" hidden>
+                        <div class="pane">
+                            <div class="pane-head">
+                                <label><span id="iam-out-label-a">A — one line per permission</span></label>
+                                <button class="btn btn-small" id="btn-iam-copy-a">Copy</button>
+                            </div>
+                            <div class="field-hint" id="iam-out-hint">Sorted and deduplicated. Paste both sides into Diff / Compare for a line-by-line read.</div>
+                            <pre class="code-view" id="iam-out-a" data-i18n-skip></pre>
+                        </div>
+                        <div class="pane">
+                            <div class="pane-head">
+                                <label><span id="iam-out-label-b">B — one line per permission</span></label>
+                                <button class="btn btn-small" id="btn-iam-copy-b">Copy</button>
+                            </div>
+                            <div class="field-hint">Account IDs and regions appear as tokens while those options are on.</div>
+                            <pre class="code-view" id="iam-out-b" data-i18n-skip></pre>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-title">Reference</div>
+                        <div class="card-subtitle">What each mode compares, and what it does not.</div>
+
+                        <div class="iam-doc-section">Modes</div>
+                        <dl class="iam-doc">
+                            <dt>Effective permissions</dt>
+                            <dd>Compares the access each side grants. Wildcards are matched by containment and an explicit Deny is applied.</dd>
+                            <dt>As written</dt>
+                            <dd>Compares how each side is phrased. Nothing is expanded and no Deny is applied, so s3:* and s3:GetObject are a difference.</dd>
+                        </dl>
+
+                        <div class="iam-doc-section">Normalization, both modes</div>
+                        <dl class="iam-doc">
+                            <dt>Sid</dt>
+                            <dd>Ignored. A name is not a permission.</dd>
+                            <dt>Order</dt>
+                            <dd>Statement order and value order are ignored.</dd>
+                            <dt>Single values</dt>
+                            <dd>A bare value and a one-element array are equal, wherever IAM accepts a list.</dd>
+                            <dt>Duplicates</dt>
+                            <dd>Removed.</dd>
+                            <dt>Account IDs and Regions</dt>
+                            <dd>Replaced with tokens while the matching option is on. Turn the option off when the account or the Region is what you are checking.</dd>
+                        </dl>
+
+                        <div class="iam-doc-section">Effective permissions</div>
+                        <dl class="iam-doc">
+                            <dt>Unit</dt>
+                            <dd>One permission: Effect, Action, Resource, Principal, Condition. Statements are flattened into these and deduplicated.</dd>
+                            <dt>Wildcards</dt>
+                            <dd>Matched by containment. A side granting s3:* covers the other side's s3:GetObject. Action names match case-insensitively, as IAM matches them; resources do not.</dd>
+                            <dt>Explicit Deny</dt>
+                            <dd>An Allow fully covered by a Deny is removed before the comparison. A Deny covering only part of an Allow, or carrying a Condition, is flagged on the row instead; subtracting it would require pattern arithmetic.</dd>
+                            <dt>One-sided Deny</dt>
+                            <dd>Counts against the side that declares it. The other side is missing a restriction, which makes the other side the wider one.</dd>
+                            <dt>NotAction, NotResource</dt>
+                            <dd>Compared literally. They describe a complement and cannot be expanded into permissions, so a difference may be larger than it appears.</dd>
+                            <dt>Conditions</dt>
+                            <dd>Compared structurally. Fewer accepted values under the same operator and key reads as narrower; a Not operator inverts this. Conditions are never evaluated.</dd>
+                        </dl>
+
+                        <div class="iam-doc-section">As written</div>
+                        <dl class="iam-doc">
+                            <dt>Unit</dt>
+                            <dd>One block: a set of actions on a set of resources under one Effect, principal and condition.</dd>
+                            <dt>Merging</dt>
+                            <dd>Blocks start as the statements were written, then merge until nothing more can: same scope and different actions become one block with the actions unioned; same actions and different scope become one block with the resources unioned. How a policy was split up is therefore not a difference, in either direction.</dd>
+                            <dt>Pairing</dt>
+                            <dd>Blocks are matched by scope first, then by content similarity, strongest match first. An Allow is never paired with a Deny.</dd>
+                            <dt>Moved actions</dt>
+                            <dd>An action both sides list, but never under the same condition, is lifted into a block of its own on each side. Left merged it would read as a deletion in one block and an unrelated block appearing elsewhere. A resource added or dropped is not a move; it stays visible inside its block.</dd>
+                            <dt>Output</dt>
+                            <dd>A line diff of the two normalized documents. Within a pair of changed lines, the parts that actually differ are marked. Each block is labelled with the Sid it was written under.</dd>
+                        </dl>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </div>
+
+    <div id="toast" class="toast">Copied to clipboard!</div>
+
+    <script src="app.js"></script>
+    <script src="iam-core.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const el = id => document.getElementById(id);
+            const taA = el('iam-a');
+            const taB = el('iam-b');
+            const optAccount = el('iam-opt-account');
+            const optRegion = el('iam-opt-region');
+            const optDeny = el('iam-opt-deny');
+            const optCond = el('iam-opt-cond');
+            const optMatched = el('iam-opt-matched');
+            const optNorm = el('iam-opt-norm');
+            const verdict = el('iam-verdict');
+            const errorBox = el('iam-error');
+            const emptyBox = el('iam-empty');
+            const tableWrap = el('iam-table-wrap');
+            const rowsBody = el('iam-rows');
+            const jsonWrap = el('iam-json-wrap');
+            const jsonRows = el('iam-json-rows');
+            const split = el('iam-split');
+            const sources = el('iam-sources');
+            const runBtn = el('btn-iam-run');
+            const editBtn = el('btn-iam-edit');
+            const resultCard = el('iam-result');
+            const views = el('iam-views');
+            const fold = el('iam-fold');
+            const foldBtn = el('btn-iam-show-matched');
+            const ruler = el('iam-ruler');
+            const rulerMarks = el('iam-ruler-marks');
+            const rulerThumb = el('iam-ruler-thumb');
+            const scroller = document.querySelector('.tools-container');
+            const normPanes = el('iam-norm');
+
+            const esc = s => String(s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+
+            // Parsing, value normalization and block merging are shared with the
+            // IAM Normalize page — see iam-core.js. Everything below is about
+            // comparing two of them.
+            const {
+                asList, hasWild, uniqSort, normalizeText,
+                canonCondition, canonPrincipal,
+                parseInput, statementUnits, movedActions, blocksFrom, policyDocument,
+            } = window.LocalUtilIAM;
+
+
+            // ------------------------------------------------------------
+            // Flattening statements into single permissions
+            // ------------------------------------------------------------
+            const MAX_ATOMS = 20000;
+
+            function principalsOf(st, opt) {
+                const out = [];
+                const add = (p, neg) => {
+                    const mark = neg ? 'NOT ' : '';
+                    if (typeof p === 'string') { out.push(mark + normalizeText(p, opt)); return; }
+                    if (!p || typeof p !== 'object') return;
+                    for (const type of Object.keys(p).sort()) {
+                        for (const v of asList(p[type])) out.push(mark + type + ':' + normalizeText(v, opt));
+                    }
+                };
+                if (st.Principal) add(st.Principal, false);
+                if (st.NotPrincipal) add(st.NotPrincipal, true);
+                return out;
+            }
+
+            // Actions are keyed case-insensitively because IAM matches them that
+            // way; resources are not, because an S3 key is case-sensitive.
+            function atomKeys(a) {
+                a.ar = a.effect + ' ' + (a.actionNeg ? '!' : '') + a.action.toLowerCase() +
+                    ' ' + (a.resourceNeg ? '!' : '') + (a.resource === null ? '' : a.resource) +
+                    ' ' + a.principal;
+                a.key = a.ar + ' ' + a.condKey;
+            }
+
+            function compareAtoms(x, y) {
+                return x.effect.localeCompare(y.effect) ||
+                    x.action.localeCompare(y.action) ||
+                    String(x.resource).localeCompare(String(y.resource)) ||
+                    x.principal.localeCompare(y.principal) ||
+                    x.condKey.localeCompare(y.condKey);
+            }
+
+            function flatten(docs, opt, notes, side) {
+                const byKey = new Map();
+                let capped = false, skipped = 0;
+                for (const doc of docs) {
+                    for (const st of asList(doc.Statement)) {
+                        if (!st || typeof st !== 'object') continue;
+                        const effect = /^deny$/i.test(String(st.Effect || '')) ? 'Deny' : 'Allow';
+                        const cond = opt.ignoreCond ? null : canonCondition(st.Condition, opt);
+                        const condKey = cond ? JSON.stringify(cond) : '';
+                        const actions = asList(st.Action).map(a => ({ v: normalizeText(a, opt), neg: false }))
+                            .concat(asList(st.NotAction).map(a => ({ v: normalizeText(a, opt), neg: true })));
+                        if (!actions.length) { skipped++; continue; }
+                        const resources = asList(st.Resource).map(r => ({ v: normalizeText(r, opt), neg: false }))
+                            .concat(asList(st.NotResource).map(r => ({ v: normalizeText(r, opt), neg: true })));
+                        const resList = resources.length ? resources : [null];
+                        const princes = principalsOf(st, opt);
+                        const prList = princes.length ? princes : [''];
+                        const sid = typeof st.Sid === 'string' ? st.Sid : '';
+                        for (const a of actions) {
+                            for (const r of resList) {
+                                for (const p of prList) {
+                                    if (byKey.size >= MAX_ATOMS) { capped = true; continue; }
+                                    const atom = {
+                                        effect,
+                                        action: a.v, actionNeg: a.neg,
+                                        resource: r ? r.v : null, resourceNeg: r ? r.neg : false,
+                                        principal: p, cond, condKey, sid, side,
+                                    };
+                                    atomKeys(atom);
+                                    if (!byKey.has(atom.key)) byKey.set(atom.key, atom);
+                                }
+                            }
+                        }
+                    }
+                }
+                if (skipped) {
+                    notes.push(side + ': ' + skipped + ' statement(s) had neither Action nor NotAction and were skipped.');
+                }
+                if (capped) {
+                    notes.push(side + ': stopped at ' + MAX_ATOMS.toLocaleString() +
+                        ' permissions — the rest were not compared. Narrow the input.');
+                }
+                return [...byKey.values()].sort(compareAtoms);
+            }
+
+            // ------------------------------------------------------------
+            // Wildcard containment
+            // ------------------------------------------------------------
+            // The question is never "does this pattern match that string" but
+            // "does every string this pattern matches also match that one" —
+            // s3:* covers s3:Get*, and s3:Get* does not cover s3:*. Only a * can
+            // absorb a *; a ? absorbs exactly one character, and everything else
+            // has to line up character for character.
+            function covers(big, small, caseInsensitive) {
+                if (big === small) return true;
+                const p = caseInsensitive ? big.toLowerCase() : big;
+                const q = caseInsensitive ? small.toLowerCase() : small;
+                if (p === q) return true;
+                if (p === '*') return true;
+                if (!hasWild(p)) return false;   // a literal only ever covers itself
+                const n = p.length, m = q.length;
+                const memo = new Uint8Array((n + 1) * (m + 1));   // 0 unknown, 1 yes, 2 no
+                const go = (i, j) => {
+                    const at = i * (m + 1) + j;
+                    if (memo[at]) return memo[at] === 1;
+                    let r;
+                    if (j === m) {
+                        r = true;
+                        for (let k = i; k < n; k++) if (p[k] !== '*') { r = false; break; }
+                    } else if (i === n) {
+                        r = false;
+                    } else if (p[i] === '*') {
+                        r = go(i + 1, j) || go(i, j + 1);
+                    } else if (q[j] === '*') {
+                        r = false;
+                    } else if (p[i] === '?') {
+                        r = go(i + 1, j + 1);
+                    } else {
+                        r = p[i] === q[j] && go(i + 1, j + 1);
+                    }
+                    memo[at] = r ? 1 : 2;
+                    return r;
+                };
+                return go(0, 0);
+            }
+
+            function resourceCovers(big, small) {
+                if (big === null || small === null) return big === small;
+                return covers(big, small, false);
+            }
+
+            // Does `big` grant everything `small` grants?
+            function atomCovers(big, small) {
+                if (big.effect !== small.effect) return false;
+                if (big.actionNeg !== small.actionNeg || big.resourceNeg !== small.resourceNeg) return false;
+                if (big.actionNeg || big.resourceNeg) {
+                    // "everything except X" is not a set this can reason about.
+                    if (big.action.toLowerCase() !== small.action.toLowerCase()) return false;
+                    if (big.resource !== small.resource) return false;
+                } else {
+                    if (!covers(big.action, small.action, true)) return false;
+                    if (!resourceCovers(big.resource, small.resource)) return false;
+                }
+                if (big.principal !== small.principal) {
+                    if (!big.principal || !small.principal) return false;
+                    if (!covers(big.principal, small.principal, false)) return false;
+                }
+                // A conditional grant does not cover an unconditional one.
+                if (big.condKey && big.condKey !== small.condKey) return false;
+                return true;
+            }
+
+            // ------------------------------------------------------------
+            // Explicit Deny
+            // ------------------------------------------------------------
+            // An explicit Deny beats every Allow, so an Allow it fully covers is
+            // not a permission at all and has no business in the comparison. One
+            // that covers only part of an Allow, or that applies only under a
+            // Condition, is reported rather than silently subtracted — the honest
+            // answer there is "this is narrower than it looks".
+            function denyStates(allows, denies) {
+                const states = new Map();
+                if (!denies.length) return states;
+                for (const a of allows) {
+                    let state = '';
+                    for (const d of denies) {
+                        if (d.principal !== a.principal) continue;
+                        if (d.actionNeg || d.resourceNeg || a.actionNeg || a.resourceNeg) continue;
+                        if (covers(d.action, a.action, true) && resourceCovers(d.resource, a.resource)) {
+                            if (!d.condKey) { state = 'full'; break; }
+                            if (!state) state = 'conditional';
+                            continue;
+                        }
+                        if (!state &&
+                            covers(a.action, d.action, true) &&
+                            (resourceCovers(a.resource, d.resource) || resourceCovers(d.resource, a.resource))) {
+                            state = d.condKey ? 'conditional' : 'partial';
+                        }
+                    }
+                    if (state) states.set(a.key, state);
+                }
+                return states;
+            }
+
+            // ------------------------------------------------------------
+            // Comparing conditions
+            // ------------------------------------------------------------
+            const valueSet = v => new Set(asList(v).map(x => JSON.stringify(x)));
+            const isSubset = (a, b) => { for (const v of a) if (!b.has(v)) return false; return true; };
+
+            // Structural only: fewer accepted values under the same operator and
+            // key reads as narrower, and a ...Not... operator flips that. Nothing
+            // here evaluates a condition, so "different" means "not comparable".
+            function condRelation(ca, cb) {
+                if (!ca && !cb) return 'same';
+                if (!ca) return 'b-narrower';
+                if (!cb) return 'a-narrower';
+                if (JSON.stringify(ca) === JSON.stringify(cb)) return 'same';
+                let aNarrower = false, bNarrower = false;
+                const ops = new Set([...Object.keys(ca), ...Object.keys(cb)]);
+                for (const op of ops) {
+                    const negated = /Not/.test(op);
+                    const ba = ca[op] || {}, bb = cb[op] || {};
+                    const keys = new Set([...Object.keys(ba), ...Object.keys(bb)]);
+                    for (const k of keys) {
+                        const inA = Object.prototype.hasOwnProperty.call(ba, k);
+                        const inB = Object.prototype.hasOwnProperty.call(bb, k);
+                        if (inA !== inB) { if (inA) aNarrower = true; else bNarrower = true; continue; }
+                        const va = valueSet(ba[k]), vb = valueSet(bb[k]);
+                        const aInB = isSubset(va, vb), bInA = isSubset(vb, va);
+                        if (aInB && bInA) continue;
+                        if (aInB) { if (negated) bNarrower = true; else aNarrower = true; }
+                        else if (bInA) { if (negated) aNarrower = true; else bNarrower = true; }
+                        else return 'different';
+                    }
+                }
+                if (aNarrower && bNarrower) return 'different';
+                if (aNarrower) return 'a-narrower';
+                if (bNarrower) return 'b-narrower';
+                return 'different';
+            }
+
+
+            const PAIR_MIN = 0.45;     // below this the two are not the same block
+            const ACTION_WEIGHT = 0.6;
+
+            function jaccard(a, b) {
+                if (!a.size && !b.size) return 1;
+                let inter = 0;
+                for (const x of a) if (b.has(x)) inter++;
+                return inter / (a.size + b.size - inter);
+            }
+
+            function similarity(a, b) {
+                if (a.effect !== b.effect) return 0;        // never pair an Allow with a Deny
+                const act = jaccard(a.tokens.actions, b.tokens.actions);
+                if (act === 0) return 0;                    // nothing in common to diff
+                return ACTION_WEIGHT * act + (1 - ACTION_WEIGHT) * jaccard(a.tokens.scope, b.tokens.scope);
+            }
+
+            // ------------------------------------------------------------
+            // Matching one side against the other
+            // ------------------------------------------------------------
+            // A permission can only be covered by an identical one or by a wider
+            // pattern, so the search is an exact lookup plus a scan of the other
+            // side's wildcard rows — never every row against every row.
+            function indexOf(atoms) {
+                const byKey = new Map(), byAr = new Map(), wild = [];
+                for (const a of atoms) {
+                    byKey.set(a.key, a);
+                    let list = byAr.get(a.ar);
+                    if (!list) byAr.set(a.ar, list = []);
+                    list.push(a);
+                    if (hasWild(a.action) || (a.resource && hasWild(a.resource)) ||
+                        (a.principal && hasWild(a.principal))) wild.push(a);
+                }
+                return { byKey, byAr, wild };
+            }
+
+            function classify(atom, idx) {
+                if (idx.byKey.has(atom.key)) return { status: 'same', peers: [idx.byKey.get(atom.key)] };
+                const sameAr = idx.byAr.get(atom.ar) || [];
+                for (const c of sameAr) if (atomCovers(c, atom)) return { status: 'covered', peers: [c] };
+                for (const c of idx.wild) if (atomCovers(c, atom)) return { status: 'covered', peers: [c] };
+                if (sameAr.length) return { status: 'cond', peers: sameAr };
+                return { status: 'only', peers: [] };
+            }
+
+            // ------------------------------------------------------------
+            // Rendering
+            // ------------------------------------------------------------
+            const MAX_ROWS = 600;
+            const TAGS = {
+                'only-a': ['a', 'Only in A'],
+                'only-b': ['b', 'Only in B'],
+                cond: ['c', 'Condition'],
+                covered: ['m', 'Covered'],
+                same: ['m', 'Identical'],
+            };
+            const ROW_CLASS = { 'only-a': 'row-a', 'only-b': 'row-b', cond: 'row-c', covered: 'row-muted', same: 'row-muted' };
+            // What the overview ruler paints for a row, per side.
+            const MARK_TYPE = { 'only-a': 'del', 'only-b': 'ins', cond: 'chg' };
+            const DENY_LABEL = {
+                full: 'cancelled by an explicit Deny',
+                partial: 'partly denied — a Deny covers some of this',
+                conditional: 'denied under a condition',
+            };
+            const REL_LABEL = {
+                'a-narrower': 'A is narrower',
+                'b-narrower': 'B is narrower',
+                different: 'not comparable',
+                same: 'same condition',
+            };
+
+            const showAction = a => (a.actionNeg ? 'NOT ' : '') + a.action;
+            const showResource = a => (a.resource === null ? '—' : (a.resourceNeg ? 'NOT ' : '') + a.resource);
+
+            function condText(x) {
+                return x.cond ? JSON.stringify(x.cond) : '';
+            }
+
+            function statusCell(kind, sid) {
+                const tag = TAGS[kind];
+                return '<td class="col-status"><span class="iam-tag ' + tag[0] + '">' + tag[1] + '</span>' +
+                    (sid ? '<div class="iam-sub" data-i18n-skip>Sid: ' + esc(sid) + '</div>' : '') + '</td>';
+            }
+
+            const effectCell = (effect, extra) =>
+                '<td class="col-effect">' + (effect === 'Deny' ? '<span class="iam-deny">Deny</span>' : 'Allow') +
+                (extra || '') + '</td>';
+
+            // Two conditions side by side, plus which of them is the narrower.
+            function condPairCell(aSide, bSide, several) {
+                const line = (cls, label, text) =>
+                    '<div class="' + cls + '" data-i18n-skip>' + label + ': ' + esc(text || '(none)') + '</div>';
+                let html = line('iam-cond-a', 'A', aSide.text) + line('iam-cond-b', 'B', bSide.text);
+                if (!several) html += '<div class="iam-sub plain">' + REL_LABEL[condRelation(aSide.cond, bSide.cond)] + '</div>';
+                return '<td>' + html + '</td>';
+            }
+
+            function rowHtml(row) {
+                const a = row.atom;
+                const denyNote = row.deny ? '<div class="iam-sub warn plain">' + DENY_LABEL[row.deny] + '</div>' : '';
+
+                let actionSub = '', resourceSub = '';
+                if (row.kind === 'covered' && row.peers.length) {
+                    const p = row.peers[0];
+                    if (p.action !== a.action) actionSub = '<div class="iam-sub" data-i18n-skip>in ' + esc(showAction(p)) + '</div>';
+                    if (p.resource !== a.resource) resourceSub = '<div class="iam-sub" data-i18n-skip>in ' + esc(showResource(p)) + '</div>';
+                }
+                if (a.principal) resourceSub += '<div class="iam-sub" data-i18n-skip>Principal: ' + esc(a.principal) + '</div>';
+
+                let condCell;
+                if (row.kind === 'cond') {
+                    const aAtom = row.side === 'A' ? a : row.peers[0];
+                    const bAtom = row.side === 'A' ? row.peers[0] : a;
+                    const several = row.peers.length > 1;
+                    condCell = condPairCell(
+                        { text: condText(aAtom), cond: aAtom.cond },
+                        {
+                            text: several && row.side === 'A'
+                                ? row.peers.map(p => condText(p) || '(none)').join('  |  ')
+                                : condText(bAtom),
+                            cond: bAtom.cond,
+                        },
+                        several);
+                } else {
+                    const c = condText(a);
+                    condCell = '<td>' + (c ? '<span data-i18n-skip>' + esc(c) + '</span>' : '<span class="iam-none">—</span>') + '</td>';
+                }
+
+                const markType = MARK_TYPE[row.kind];
+                return '<tr class="' + ROW_CLASS[row.kind] + '"' + (markType ? ' data-type="' + markType + '"' : '') + '>' +
+                    statusCell(row.kind, a.sid) +
+                    effectCell(a.effect, denyNote) +
+                    '<td class="col-action" data-i18n-skip>' + esc(showAction(a)) + actionSub + '</td>' +
+                    '<td data-i18n-skip>' + esc(showResource(a)) + resourceSub + '</td>' +
+                    condCell +
+                    '</tr>';
+            }
+
+            // Reading a statement field by field in a table turned out to be the
+            // wrong shape: a statement is a piece of text, and the question in
+            // this mode is textual. So it is rendered as a diff of the two
+            // normalized documents, pretty-printed. The pairing is structural
+            // rather than positional — matched statements are already known, so
+            // each block sits opposite its counterpart instead of wherever a
+            // line-oriented diff happened to resynchronize.
+            const jsonLines = block => JSON.stringify(block.shape, null, 2).split('\n');
+
+            // A statement is a handful of lines, so a plain LCS is the right tool
+            // here; the expensive Myers machinery would buy nothing.
+            const LCS_MAX = 40000;
+            function lineDiff(a, b) {
+                const n = a.length, m = b.length;
+                if (n * m > LCS_MAX) {
+                    return a.map(l => ['del', l, null]).concat(b.map(l => ['ins', null, l]));
+                }
+                const dp = [];
+                for (let i = 0; i <= n; i++) dp.push(new Uint16Array(m + 1));
+                for (let i = n - 1; i >= 0; i--) {
+                    for (let j = m - 1; j >= 0; j--) {
+                        dp[i][j] = a[i] === b[j]
+                            ? dp[i + 1][j + 1] + 1
+                            : Math.max(dp[i + 1][j], dp[i][j + 1]);
+                    }
+                }
+                const out = [];
+                let i = 0, j = 0;
+                while (i < n && j < m) {
+                    if (a[i] === b[j]) { out.push(['same', a[i], b[j]]); i++; j++; }
+                    else if (dp[i + 1][j] >= dp[i][j + 1]) { out.push(['del', a[i], null]); i++; }
+                    else { out.push(['ins', null, b[j]]); j++; }
+                }
+                while (i < n) { out.push(['del', a[i], null]); i++; }
+                while (j < m) { out.push(['ins', null, b[j]]); j++; }
+                return out;
+            }
+
+            // Stage two: what changed inside a pair of changed lines. The same
+            // search, over tokens instead of lines, and only for rows actually
+            // being drawn. Words and numbers stay whole — marks inside an
+            // identifier read as noise.
+            const TOKEN_RE = /[A-Za-z0-9_]+|\s+|[\s\S]/gu;
+            const WORD_RE = /^[A-Za-z0-9_]+$/;
+            const MAX_INLINE = 2000;   // chars a side; past this it is not worth marking
+
+            function inlineDiff(oldLine, newLine) {
+                if (oldLine.length > MAX_INLINE || newLine.length > MAX_INLINE) return null;
+                const oldToks = oldLine.match(TOKEN_RE) || [];
+                const newToks = newLine.match(TOKEN_RE) || [];
+                const ops = lineDiff(oldToks, newToks);
+                // Quotes, colons and commas match between any two JSON lines, so
+                // "something in common" has to mean a shared word. Otherwise the
+                // line was replaced outright: the row tint says that already, and
+                // marking every word on both sides only adds noise.
+                let shared = false;
+                for (const op of ops) if (op[0] === 'same' && WORD_RE.test(op[1])) { shared = true; break; }
+                if (!shared) return null;
+
+                let left = '', right = '', runL = '', runR = '';
+                const flush = () => {
+                    if (runL) { left += '<span class="iam-tok">' + esc(runL) + '</span>'; runL = ''; }
+                    if (runR) { right += '<span class="iam-tok">' + esc(runR) + '</span>'; runR = ''; }
+                };
+                for (const [kind, l, r] of ops) {
+                    if (kind === 'del') { runL += l; continue; }
+                    if (kind === 'ins') { runR += r; continue; }
+                    flush();
+                    left += esc(l);
+                    right += esc(r);
+                }
+                flush();
+                return [left, right];
+            }
+
+            // A removed line and an added line next to each other are one changed
+            // line, not two — zip the runs so the two sides stay level.
+            function pairRuns(ops) {
+                const rows = [];
+                let dels = [], inss = [];
+                const flush = () => {
+                    const n = Math.max(dels.length, inss.length);
+                    for (let k = 0; k < n; k++) {
+                        const l = k < dels.length ? dels[k] : null;
+                        const r = k < inss.length ? inss[k] : null;
+                        rows.push({ kind: l !== null && r !== null ? 'chg' : l !== null ? 'del' : 'ins', left: l, right: r });
+                    }
+                    dels = []; inss = [];
+                };
+                for (const [kind, l, r] of ops) {
+                    if (kind === 'del') dels.push(l);
+                    else if (kind === 'ins') inss.push(r);
+                    else { flush(); rows.push({ kind: 'same', left: l, right: r }); }
+                }
+                flush();
+                return rows;
+            }
+
+            function blockOps(row) {
+                if (!row.b) return jsonLines(row.a).map(l => ['del', l, null]);
+                if (!row.a) return jsonLines(row.b).map(l => ['ins', null, l]);
+                if (row.kind === 'same') return jsonLines(row.a).map(l => ['same', l, l]);
+                return lineDiff(jsonLines(row.a), jsonLines(row.b));
+            }
+
+            // Which statements a block came from, so a difference can be traced
+            // back to the place in the document that has to change.
+            function blockHead(row) {
+                const label = g => (g && g.sids.length ? 'Sid: ' + g.sids.join(', ') : '');
+                return '<tr class="block-head">' +
+                    '<td class="ln old"></td><td class="side old">' + esc(label(row.a)) + '</td>' +
+                    '<td class="ln new"></td><td class="side new">' + esc(label(row.b)) + '</td></tr>';
+            }
+
+            function renderJsonDiff(rows) {
+                const showMatched = optMatched.checked;
+                const blocks = rows.filter(r => showMatched || r.kind !== 'same');
+                setFold(rows.length - blocks.length, 'identical blocks hidden — show them');
+                if (!blocks.length) {
+                    jsonWrap.hidden = true;
+                    emptyBox.hidden = false;
+                    emptyBox.innerHTML = rows.length
+                        ? 'Written the same — tick Show matched to read the normalized blocks.'
+                        : 'Nothing to compare.';
+                    return;
+                }
+                let la = 0, lb = 0, printed = 0, dropped = 0, html = '';
+                for (const block of blocks) {
+                    const lines = pairRuns(blockOps(block));
+                    html += blockHead(block);
+                    for (const ln of lines) {
+                        if (printed >= MAX_ROWS) { dropped++; continue; }
+                        printed++;
+                        const cls = ln.kind === 'same' ? '' : ' class="row-' + ln.kind + '" data-type="' + ln.kind + '"';
+                        const marked = ln.kind === 'chg' ? inlineDiff(ln.left, ln.right) : null;
+                        const left = ln.left === null
+                            ? '<td class="ln old"></td><td class="side old cell-empty"></td>'
+                            : '<td class="ln old">' + (++la) + '</td><td class="side old">' +
+                              (marked ? marked[0] : esc(ln.left)) + '</td>';
+                        const right = ln.right === null
+                            ? '<td class="ln new"></td><td class="side new cell-empty"></td>'
+                            : '<td class="ln new">' + (++lb) + '</td><td class="side new">' +
+                              (marked ? marked[1] : esc(ln.right)) + '</td>';
+                        html += '<tr' + cls + '>' + left + right + '</tr>';
+                    }
+                }
+                if (dropped) {
+                    html += '<tr class="iam-cut"><td colspan="4"><b>' + dropped + '</b> ' + t('more rows not shown') + '</td></tr>';
+                }
+                jsonRows.innerHTML = html;
+                emptyBox.hidden = true;
+                jsonWrap.hidden = false;
+            }
+
+            // One line per permission, sorted — the thing to paste into a text
+            // diff when a table is not the shape you want.
+            function toLines(atoms, states) {
+                return atoms.map(a => {
+                    let line = (a.effect === 'Deny' ? 'DENY ' : 'ALLOW') + '  ' + showAction(a) +
+                        '  ->  ' + showResource(a);
+                    if (a.principal) line += '  BY ' + a.principal;
+                    if (a.condKey) line += '  IF ' + a.condKey;
+                    const s = states.get(a.key);
+                    if (s) line += '   # ' + s + ' deny';
+                    return line;
+                }).join('\n');
+            }
+
+            // ------------------------------------------------------------
+            // The comparison itself
+            // ------------------------------------------------------------
+            let mode = 'effective';
+            let groupBy = '';          // '' | 'action' | 'resource' | 'condition'
+            let effectiveRows = [];    // kept so switching views costs no recompute
+            let lastRun = false;
+
+            function setError(msg) {
+                errorBox.textContent = msg;
+                errorBox.hidden = !msg;
+                if (msg) {
+                    emptyBox.hidden = true;
+                    tableWrap.hidden = true;
+                    jsonWrap.hidden = true;
+                    verdict.hidden = true;
+                    normPanes.hidden = true;
+                    ruler.hidden = true;
+                    fold.hidden = true;
+                }
+            }
+
+            function resetOutput(message) {
+                setError('');
+                verdict.hidden = true;
+                tableWrap.hidden = true;
+                jsonWrap.hidden = true;
+                normPanes.hidden = true;
+                ruler.hidden = true;
+                fold.hidden = true;
+                emptyBox.hidden = false;
+                emptyBox.innerHTML = message;
+                lastRun = false;
+            }
+
+            const EMPTY_PROMPT = 'Paste a policy on both sides and press <strong>Compare</strong>.';
+
+            function run() {
+                const opt = {
+                    account: optAccount.checked,
+                    region: optRegion.checked,
+                    ignoreCond: optCond.checked,
+                };
+                if (!taA.value.trim() || !taB.value.trim()) {
+                    setCollapsed(false);
+                    resetOutput(EMPTY_PROMPT);
+                    return;
+                }
+                const notes = [];
+                let docsA, docsB;
+                try {
+                    docsA = parseInput(taA.value, 'A');
+                    docsB = parseInput(taB.value, 'B');
+                } catch (e) {
+                    setCollapsed(false);
+                    setError(e.message);
+                    return;
+                }
+                setError('');
+                lastRun = true;
+                if (mode === 'literal') runLiteral(docsA, docsB, opt, notes);
+                else runEffective(docsA, docsB, opt, notes);
+                normPanes.hidden = !optNorm.checked;
+                setCollapsed(true);
+                // After layout, or every row measures at its pre-render position.
+                requestAnimationFrame(measure);
+            }
+
+            function runEffective(docsA, docsB, opt, notes) {
+                const atomsA = flatten(docsA, opt, notes, 'A');
+                const atomsB = flatten(docsB, opt, notes, 'B');
+                const statesA = denyStates(atomsA.filter(x => x.effect === 'Allow'), atomsA.filter(x => x.effect === 'Deny'));
+                const statesB = denyStates(atomsB.filter(x => x.effect === 'Allow'), atomsB.filter(x => x.effect === 'Deny'));
+
+                const applyDeny = optDeny.checked;
+                const effA = atomsA.filter(a => !(applyDeny && statesA.get(a.key) === 'full'));
+                const effB = atomsB.filter(b => !(applyDeny && statesB.get(b.key) === 'full'));
+                const cancelledCount = (atomsA.length - effA.length) + (atomsB.length - effB.length);
+
+                const idxA = indexOf(effA), idxB = indexOf(effB);
+                const rows = [];
+                const consumedB = new Set();
+                let aCovered = true, bCovered = true;
+
+                // A is a subset of B when every Allow of A is covered by an Allow
+                // of B *and* every Deny of B is covered by a Deny of A: a Deny
+                // that only one side has makes the other side the wider one, so
+                // an unmatched Deny counts against the opposite direction.
+                for (const a of effA) {
+                    const r = classify(a, idxB);
+                    if (r.status === 'only' || r.status === 'cond') {
+                        if (a.effect === 'Deny') bCovered = false; else aCovered = false;
+                    }
+                    if (r.status === 'cond') r.peers.forEach(p => consumedB.add(p.key));
+                    rows.push({
+                        kind: r.status === 'only' ? 'only-a' : r.status,
+                        atom: a, peers: r.peers, deny: statesA.get(a.key) || '', side: 'A',
+                    });
+                }
+                for (const b of effB) {
+                    const r = classify(b, idxA);
+                    if (r.status === 'only' || r.status === 'cond') {
+                        if (b.effect === 'Deny') aCovered = false; else bCovered = false;
+                    }
+                    if (r.status === 'same') continue;                       // the A row already says it
+                    if (r.status === 'cond' && consumedB.has(b.key)) continue;
+                    rows.push({
+                        kind: r.status === 'only' ? 'only-b' : r.status,
+                        atom: b, peers: r.peers, deny: statesB.get(b.key) || '', side: 'B',
+                    });
+                }
+
+                const count = kind => rows.filter(r => r.kind === kind).length;
+                const onlyA = count('only-a'), onlyB = count('only-b');
+
+                // Differences first, then everything that matched; inside each
+                // group the rows sort like the permissions they describe, so an
+                // added and a removed action on the same service sit together.
+                const GROUP = { 'only-a': 0, 'only-b': 0, cond: 0, covered: 1, same: 2 };
+                rows.sort((p, q) => GROUP[p.kind] - GROUP[q.kind] || compareAtoms(p.atom, q.atom));
+
+                let tone, title, sub;
+                if (aCovered && bCovered) {
+                    tone = 'ok';
+                    title = 'Same effective permissions';
+                    sub = 'Every permission on one side is granted by the other.';
+                } else if (aCovered) {
+                    tone = 'warn';
+                    title = 'B grants everything A does — and more';
+                    sub = 'A is a subset of B. Anything that can be done with A can be done with B.';
+                } else if (bCovered) {
+                    tone = 'warn';
+                    title = 'A grants everything B does — and more';
+                    sub = 'B is a subset of A. Anything that can be done with B can be done with A.';
+                } else if (!onlyA && !onlyB) {
+                    tone = 'warn';
+                    title = 'Same actions and resources — the conditions differ';
+                    sub = 'Both sides reach the same resources with the same actions, under different conditions.';
+                } else {
+                    tone = 'bad';
+                    title = 'Each side grants something the other does not';
+                    sub = 'Neither side is a subset of the other. The rows below are the difference.';
+                }
+
+                const chips = [
+                    ['', effA.length, 'permissions in A'],
+                    ['', effB.length, 'permissions in B'],
+                    ['', count('same'), 'identical'],
+                    ['a', onlyA, 'only in A'],
+                    ['b', onlyB, 'only in B'],
+                    ['c', count('cond'), 'condition differs'],
+                ];
+                if (count('covered')) chips.push(['', count('covered'), 'covered by a wider rule']);
+                if (cancelledCount) chips.push(['', cancelledCount, 'cancelled by a Deny']);
+
+                const negated = atomsA.concat(atomsB).filter(a => a.actionNeg || a.resourceNeg).length;
+                if (negated) {
+                    notes.push('<b>' + negated + '</b> row(s) come from a NotAction or NotResource. Those describe ' +
+                        'everything except a set, so they are compared literally — a difference there may be much larger than it looks.');
+                }
+                const narrowed = [...statesA.values()].concat([...statesB.values()])
+                    .filter(s => s === 'partial' || s === 'conditional').length;
+                if (narrowed) {
+                    notes.push('<b>' + narrowed + '</b> permission(s) are narrowed by a Deny that could not be subtracted — ' +
+                        'it covers only part of the Allow, or applies only under a condition. They were compared in full.');
+                }
+                if (opt.ignoreCond) {
+                    notes.push('Conditions are being ignored, so two permissions that differ only by a condition count as the same.');
+                }
+                if (!applyDeny && atomsA.concat(atomsB).some(a => a.effect === 'Deny')) {
+                    notes.push('Explicit Deny is not being applied — Deny statements are compared as rows of their own instead of cancelling Allows.');
+                }
+
+                showVerdict(tone, title, sub, chips, notes);
+                jsonWrap.hidden = true;
+                effectiveRows = rows;
+                renderRows(rows);
+                el('iam-out-a').textContent = toLines(effA, statesA);
+                el('iam-out-b').textContent = toLines(effB, statesB);
+            }
+
+            function runLiteral(docsA, docsB, opt, notes) {
+                const unitsA = statementUnits(docsA, opt, notes, 'A');
+                const unitsB = statementUnits(docsB, opt, notes, 'B');
+                const apart = movedActions(unitsA, unitsB);
+                const A = blocksFrom(unitsA, apart);
+                const B = blocksFrom(unitsB, apart);
+                const aByScope = new Map(A.map(g => [g.pairKey, g]));
+                const bByScope = new Map(B.map(g => [g.pairKey, g]));
+
+                const rows = [];
+                const usedB = new Set();
+                const leftA = [];
+                // Same scope is the strong signal: those two blocks are about the
+                // same thing and the diff between their action lists is the answer.
+                for (const g of A) {
+                    const peer = bByScope.get(g.pairKey);
+                    if (!peer) { leftA.push(g); continue; }
+                    usedB.add(peer.pairKey);
+                    rows.push({ kind: peer.key === g.key ? 'same' : 'diff', a: g, b: peer });
+                }
+                const leftB = B.filter(g => !usedB.has(g.pairKey));
+
+                // Whatever is left is paired on content — every candidate pair
+                // scored first, then taken best-first. Walking the A side in order
+                // and letting each block grab its own best free counterpart looks
+                // equivalent and is not: a block that merely resembles one on the
+                // other side takes the counterpart that a later block matches
+                // almost exactly, and that later block is then reported as having
+                // no counterpart at all.
+                const candidates = [];
+                for (let i = 0; i < leftA.length; i++) {
+                    for (let j = 0; j < leftB.length; j++) {
+                        const score = similarity(leftA[i], leftB[j]);
+                        if (score >= PAIR_MIN) candidates.push({ score, i, j });
+                    }
+                }
+                candidates.sort((x, y) => y.score - x.score || x.i - y.i || x.j - y.j);
+                const pairedA = new Set(), pairedB = new Set();
+                for (const c of candidates) {
+                    if (pairedA.has(c.i) || pairedB.has(c.j)) continue;
+                    pairedA.add(c.i);
+                    pairedB.add(c.j);
+                    rows.push({ kind: 'diff', a: leftA[c.i], b: leftB[c.j] });
+                }
+                leftA.forEach((g, i) => { if (!pairedA.has(i)) rows.push({ kind: 'only-a', a: g, b: null }); });
+                leftB.forEach((g, j) => { if (!pairedB.has(j)) rows.push({ kind: 'only-b', a: null, b: g }); });
+
+                const count = kind => rows.filter(r => r.kind === kind).length;
+                const onlyA = count('only-a'), onlyB = count('only-b'), changed = count('diff');
+                const aIn = A.every(g => { const p = bByScope.get(g.pairKey); return !!p && p.key === g.key; });
+                const bIn = B.every(g => { const p = aByScope.get(g.pairKey); return !!p && p.key === g.key; });
+
+                const GROUP = { 'only-a': 0, 'only-b': 0, diff: 0, same: 1 };
+                rows.sort((p, q) => GROUP[p.kind] - GROUP[q.kind] ||
+                    (p.a || p.b).pairKey.localeCompare((q.a || q.b).pairKey));
+
+                let tone, title, sub;
+                if (aIn && bIn) {
+                    tone = 'ok';
+                    title = 'Written the same';
+                    sub = 'The two documents agree block for block. Only Sid, statement boundaries, order and formatting differ.';
+                } else if (aIn) {
+                    tone = 'warn';
+                    title = 'B has every block A has — and more';
+                    sub = 'A is written as a subset of B. Read the extra blocks before assuming they only add.';
+                } else if (bIn) {
+                    tone = 'warn';
+                    title = 'A has every block B has — and more';
+                    sub = 'B is written as a subset of A. Read the extra blocks before assuming they only add.';
+                } else if (!onlyA && !onlyB) {
+                    tone = 'warn';
+                    title = 'Matching blocks, with differences inside';
+                    sub = 'Every block has a counterpart on the other side. The highlighted lines are what differs.';
+                } else {
+                    tone = 'bad';
+                    title = 'Written differently';
+                    sub = 'Neither side is written as a subset of the other. This does not describe what they grant; use Effective permissions for that.';
+                }
+
+                const chips = [
+                    ['', A.length, 'blocks in A'],
+                    ['', B.length, 'blocks in B'],
+                    ['', count('same'), 'identical'],
+                    ['c', changed, 'changed'],
+                    ['a', onlyA, 'only in A'],
+                    ['b', onlyB, 'only in B'],
+                ];
+
+                notes.push('Wildcards and Deny are not interpreted in this mode. s3:* and s3:GetObject are different text.');
+                if (apart.size) {
+                    notes.push('<b>' + apart.size + '</b> action(s) appear on both sides but never under the same condition. They are lifted into blocks of their own so the move stays visible.');
+                }
+                if (opt.ignoreCond) {
+                    notes.push('Conditions are ignored. Blocks differing only by a condition are merged.');
+                }
+
+                showVerdict(tone, title, sub, chips, notes);
+                tableWrap.hidden = true;
+                renderJsonDiff(rows);
+                // A document rather than a bare array, so the listing is
+                // something this page — and anything else — will read back.
+                const asPolicy = blocks => JSON.stringify(policyDocument(blocks), null, 2);
+                el('iam-out-a').textContent = asPolicy(A);
+                el('iam-out-b').textContent = asPolicy(B);
+            }
+
+            function showVerdict(tone, title, sub, chips, notes) {
+                verdict.className = 'iam-verdict card ' + tone;
+                el('iam-verdict-mark').textContent = tone === 'ok' ? '=' : tone === 'bad' ? '≠' : '≈';
+                el('iam-verdict-title').textContent = title;
+                el('iam-verdict-sub').textContent = sub;
+                el('iam-chips').innerHTML = chips
+                    .map(([cls, n, label]) => '<span class="iam-chip ' + cls + '"><b>' + n + '</b> ' + label + '</span>')
+                    .join('');
+                // Everything the comparison could not reason about, said out loud.
+                el('iam-notes').innerHTML = notes.map(n => '<li>' + n + '</li>').join('');
+                verdict.hidden = false;
+            }
+
+            // Say how much was dropped for matching, and let it be brought back:
+            // without this a row in the listing below has nowhere to be found.
+            function setFold(n, label) {
+                fold.hidden = !n;
+                if (n) foldBtn.innerHTML = '<b>' + n + '</b> ' + label;
+            }
+
+            // The axis a row is gathered under. Principal rides along with the
+            // resource: for a trust policy it is the only scope there is.
+            const GROUP_KEY = {
+                action: r => showAction(r.atom),
+                resource: r => (r.atom.principal ? r.atom.principal + ' · ' : '') + showResource(r.atom),
+                condition: r => condText(r.atom) || '—',
+            };
+
+            function groupHeader(key, members) {
+                const n = kind => members.filter(r => r.kind === kind).length;
+                const counts = [['a', n('only-a'), 'only in A'], ['b', n('only-b'), 'only in B'],
+                    ['c', n('cond'), 'condition differs'], ['', n('same') + n('covered'), 'matched']]
+                    .filter(c => c[1])
+                    .map(([cls, count, label]) =>
+                        '<span class="iam-group-count ' + cls + '"><b>' + count + '</b> ' + label + '</span>')
+                    .join('');
+                return '<tr class="iam-group"><td colspan="5">' +
+                    '<span class="iam-group-key" data-i18n-skip>' + esc(key) + '</span>' +
+                    '<span class="iam-group-counts">' + counts + '</span></td></tr>';
+            }
+
+            function renderRows(rows) {
+                const showMatched = optMatched.checked;
+                const visible = rows.filter(r => showMatched || (r.kind !== 'same' && r.kind !== 'covered'));
+                setFold(rows.length - visible.length, 'matching permissions hidden — show them');
+                if (!visible.length) {
+                    tableWrap.hidden = true;
+                    emptyBox.hidden = false;
+                    emptyBox.innerHTML = rows.length
+                        ? 'No differences — tick Show matched to list what lined up.'
+                        : 'Nothing to compare.';
+                    return;
+                }
+                const shown = visible.slice(0, MAX_ROWS);
+                let html;
+                if (groupBy) {
+                    const keyOf = GROUP_KEY[groupBy];
+                    const groups = new Map();
+                    for (const r of shown) {
+                        const key = keyOf(r);
+                        let members = groups.get(key);
+                        if (!members) groups.set(key, members = []);
+                        members.push(r);
+                    }
+                    html = [...groups.entries()]
+                        .sort((x, y) => x[0].localeCompare(y[0]))
+                        .map(([key, members]) => groupHeader(key, members) + members.map(rowHtml).join(''))
+                        .join('');
+                } else {
+                    html = shown.map(rowHtml).join('');
+                }
+                if (visible.length > shown.length) {
+                    html += '<tr class="iam-cut"><td colspan="5"><b>' + (visible.length - shown.length) +
+                        '</b> ' + t('more rows not shown') + '</td></tr>';
+                }
+                rowsBody.innerHTML = html;
+                emptyBox.hidden = true;
+                tableWrap.hidden = false;
+            }
+
+            // ------------------------------------------------------------
+            // Collapsing the inputs
+            // ------------------------------------------------------------
+            // A comparison and the documents it came from do not both need to be
+            // on screen. Comparing puts the inputs away and leaves a line saying
+            // what each side holds; Edit brings them back.
+            let collapsed = false;
+
+            function countLines(text) {
+                let n = 1;
+                for (let i = text.indexOf('\n'); i !== -1; i = text.indexOf('\n', i + 1)) n++;
+                return n;
+            }
+
+            function describeSources() {
+                for (const side of ['a', 'b']) {
+                    const pane = sides[side], text = pane.ta.value;
+                    el('iam-source-' + side).textContent = !text
+                        ? t('empty')
+                        : (pane.file || t('pasted text')) + ' · ' + countLines(text).toLocaleString() + ' ' + t('lines');
+                }
+            }
+
+            function setCollapsed(on) {
+                collapsed = on;
+                split.hidden = on;
+                sources.hidden = !on;
+                runBtn.hidden = on;
+                editBtn.hidden = !on;
+                if (on) describeSources();
+                measure();
+            }
+
+            // ------------------------------------------------------------
+            // Overview ruler
+            // ------------------------------------------------------------
+            // Every difference gets a mark at the scroll position that brings it
+            // on screen, so a long result can be read at a glance and jumped
+            // through without scrolling for it.
+            let marks = [];
+
+            function measure() {
+                marks = [];
+                const base = scroller.getBoundingClientRect().top - scroller.scrollTop;
+                let run = null;
+                resultCard.querySelectorAll('tr[data-type]').forEach(tr => {
+                    const type = tr.dataset.type;
+                    const box = tr.getBoundingClientRect();
+                    const top = box.top - base, bottom = box.bottom - base;
+                    // Adjacent rows of one type are one mark, not a stack of them.
+                    if (run && run.type === type && top - run.bottom < 2) run.bottom = bottom;
+                    else { run = { type, top, bottom }; marks.push(run); }
+                });
+                layoutRuler();
+            }
+
+            function layoutRuler() {
+                const box = scroller.getBoundingClientRect();
+                const view = scroller.clientHeight, total = scroller.scrollHeight;
+                ruler.hidden = !marks.length || total <= view + 4;
+                if (ruler.hidden) return;
+                // Sit just left of the real scrollbar, spanning the scroll viewport.
+                ruler.style.top = box.top + 'px';
+                ruler.style.height = view + 'px';
+                // Overlay scrollbars take no layout width, so leave a lane for them.
+                const bar = Math.max(10, scroller.offsetWidth - scroller.clientWidth);
+                ruler.style.right = Math.max(0, window.innerWidth - box.right + bar) + 'px';
+                rulerMarks.innerHTML = marks.map(m => {
+                    const top = m.top / total * view;
+                    const h = Math.max(3, (m.bottom - m.top) / total * view);
+                    return '<div class="iam-mark ' + m.type + '" style="top:' + top.toFixed(1) +
+                        'px;height:' + h.toFixed(1) + 'px"></div>';
+                }).join('');
+                syncThumb();
+            }
+
+            function syncThumb() {
+                if (ruler.hidden) return;
+                const view = scroller.clientHeight, total = scroller.scrollHeight;
+                const h = Math.max(20, view / total * view);
+                rulerThumb.style.height = h + 'px';
+                rulerThumb.style.top = Math.min(view - h, scroller.scrollTop / total * view) + 'px';
+            }
+
+            let queued = false;
+            function syncSoon() {
+                if (queued) return;
+                queued = true;
+                requestAnimationFrame(() => { queued = false; syncThumb(); });
+            }
+
+            function jumpToRuler(clientY) {
+                const box = ruler.getBoundingClientRect();
+                const ratio = Math.min(1, Math.max(0, (clientY - box.top) / box.height));
+                scroller.scrollTop = ratio * scroller.scrollHeight - scroller.clientHeight / 2;
+            }
+
+            scroller.addEventListener('scroll', syncSoon, { passive: true });
+            window.addEventListener('resize', measure);
+            ruler.addEventListener('pointerdown', e => {
+                ruler.setPointerCapture(e.pointerId);
+                jumpToRuler(e.clientY);
+            });
+            ruler.addEventListener('pointermove', e => { if (e.buttons) jumpToRuler(e.clientY); });
+
+            // ------------------------------------------------------------
+            // Loading a side from a dropped file
+            // ------------------------------------------------------------
+            const sides = {
+                a: { ta: taA, pane: el('iam-pane-a'), note: el('iam-file-a') },
+                b: { ta: taB, pane: el('iam-pane-b'), note: el('iam-file-b') },
+            };
+
+            function showFile(side, name, size) {
+                const note = sides[side].note;
+                sides[side].file = name || '';
+                if (!name) { note.hidden = true; note.textContent = ''; return; }
+                note.textContent = name + ' · ' + size.toLocaleString() + ' bytes';
+                note.hidden = false;
+            }
+
+            async function loadFile(side, file) {
+                if (!file) return null;
+                sides[side].ta.value = await file.text();
+                showFile(side, file.name, file.size);
+                return file.name;
+            }
+
+            // Dragged text keeps the browser's own drop behaviour — only a file
+            // drag is intercepted.
+            const hasFiles = dt => !!dt && Array.prototype.indexOf.call(dt.types || [], 'Files') !== -1;
+
+            Object.keys(sides).forEach(side => {
+                const pane = sides[side].pane;
+                let depth = 0;   // dragenter/dragleave also fire for every child
+                pane.addEventListener('dragenter', e => {
+                    if (!hasFiles(e.dataTransfer)) return;
+                    e.preventDefault();
+                    depth++;
+                    pane.classList.add('dragover');
+                });
+                pane.addEventListener('dragover', e => {
+                    if (!hasFiles(e.dataTransfer)) return;
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = 'copy';
+                });
+                pane.addEventListener('dragleave', () => {
+                    if (--depth <= 0) { depth = 0; pane.classList.remove('dragover'); }
+                });
+                pane.addEventListener('drop', async e => {
+                    if (!hasFiles(e.dataTransfer)) return;
+                    e.preventDefault();
+                    depth = 0;
+                    pane.classList.remove('dragover');
+                    const files = Array.from(e.dataTransfer.files);
+                    // Two files at once fill both sides: the pane you dropped on
+                    // takes the first, the other side takes the second.
+                    const loaded = [await loadFile(side, files[0])];
+                    if (files[1]) loaded.push(await loadFile(side === 'a' ? 'b' : 'a', files[1]));
+                    const ok = loaded.filter(Boolean);
+                    if (!ok.length) return;
+                    showToast(t('Loaded') + ': ' + ok.join(', '));
+                    run();
+                });
+            });
+
+            // A file that lands next to a pane rather than on it would otherwise
+            // make the browser navigate to it, taking both sides with it.
+            document.addEventListener('dragover', e => { if (hasFiles(e.dataTransfer)) e.preventDefault(); });
+            document.addEventListener('drop', e => { if (hasFiles(e.dataTransfer)) e.preventDefault(); });
+
+            // Hand-editing a loaded side makes the file note a lie — drop it.
+            taA.addEventListener('input', () => showFile('a', null));
+            taB.addEventListener('input', () => showFile('b', null));
+
+            // ------------------------------------------------------------
+            // Wiring
+            // ------------------------------------------------------------
+            runBtn.addEventListener('click', run);
+            editBtn.addEventListener('click', () => setCollapsed(false));
+            foldBtn.addEventListener('click', () => { optMatched.checked = true; run(); });
+            [optAccount, optRegion, optDeny, optCond, optMatched].forEach(o =>
+                o.addEventListener('change', () => { if (lastRun) run(); }));
+            // Only a matter of what is on screen — nothing to recompute.
+            optNorm.addEventListener('change', () => {
+                if (!lastRun) return;
+                normPanes.hidden = !optNorm.checked;
+                measure();
+            });
+
+            // The two modes answer different questions, so the chrome moves with
+            // them: Apply explicit Deny means nothing when nothing is being
+            // reasoned about, and the listings below hold statements, not lines.
+            const MODE_HINT = {
+                effective: 'Compares the access each side grants. Wildcards are matched by containment and an explicit Deny is applied.',
+                literal: 'Compares how each side is phrased. Actions are grouped by the scope they apply to and diffed as text; nothing is expanded and no Deny is applied.',
+            };
+            const OUT_LABEL = {
+                effective: ['A — one line per permission', 'B — one line per permission'],
+                literal: ['A — normalized policy', 'B — normalized policy'],
+            };
+            const OUT_HINT = {
+                effective: 'Sorted and deduplicated. Paste both sides into Diff / Compare for a line-by-line read.',
+                literal: 'A policy document holding the normalized blocks. Paste it back in to check the normalization against the original.',
+            };
+
+            function setMode(next) {
+                if (next === mode) return;
+                mode = next;
+                el('iam-mode').querySelectorAll('button').forEach(b =>
+                    b.classList.toggle('active', b.dataset.mode === mode));
+                el('iam-mode-hint').textContent = MODE_HINT[mode];
+                el('iam-deny-option').hidden = mode === 'literal';
+                views.hidden = mode === 'literal';
+                el('iam-out-label-a').textContent = OUT_LABEL[mode][0];
+                el('iam-out-label-b').textContent = OUT_LABEL[mode][1];
+                el('iam-out-hint').textContent = OUT_HINT[mode];
+                if (lastRun) run(); else resetOutput(EMPTY_PROMPT);
+            }
+
+            el('iam-group').addEventListener('click', e => {
+                const btn = e.target.closest('button[data-group]');
+                if (!btn || btn.dataset.group === groupBy) return;
+                groupBy = btn.dataset.group;
+                el('iam-group').querySelectorAll('button').forEach(b =>
+                    b.classList.toggle('active', b.dataset.group === groupBy));
+                if (!lastRun || mode === 'literal') return;
+                renderRows(effectiveRows);
+                measure();
+            });
+
+            el('iam-mode').addEventListener('click', e => {
+                const btn = e.target.closest('button[data-mode]');
+                if (btn) setMode(btn.dataset.mode);
+            });
+
+            el('btn-iam-swap').addEventListener('click', () => {
+                const tmp = taA.value;
+                taA.value = taB.value;
+                taB.value = tmp;
+                showFile('a', null);
+                showFile('b', null);
+                if (lastRun) run();
+            });
+
+            el('btn-iam-clear').addEventListener('click', () => {
+                taA.value = '';
+                taB.value = '';
+                showFile('a', null);
+                showFile('b', null);
+                setCollapsed(false);
+                resetOutput(EMPTY_PROMPT);
+            });
+
+            const copy = (id, label) => el(id).addEventListener('click', () => {
+                navigator.clipboard.writeText(el(label).textContent)
+                    .then(() => showToast(t('Copied to clipboard')))
+                    .catch(() => showToast(t('Copy failed'), true));
+            });
+            copy('btn-iam-copy-a', 'iam-out-a');
+            copy('btn-iam-copy-b', 'iam-out-b');
+
+            // Ctrl/Cmd+Enter from either textarea compares, like every other
+            // two-pane tool on this site.
+            [taA, taB].forEach(ta => ta.addEventListener('keydown', e => {
+                if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); run(); }
+            }));
+
+            // ------------------------------------------------------------
+            // Example — one of each thing this page can tell you
+            // ------------------------------------------------------------
+            el('btn-iam-example').addEventListener('click', () => {
+                taA.value = JSON.stringify({
+                    Version: '2012-10-17',
+                    Statement: [
+                        {
+                            Sid: 'Params', Effect: 'Allow',
+                            Action: ['ssm:GetParameter', 'ssm:GetParameters', 'ssm:PutParameter'],
+                            Resource: 'arn:aws:ssm:ap-northeast-2:111122223333:parameter/app/*',
+                        },
+                        {
+                            Sid: 'Artifacts', Effect: 'Allow', Action: 's3:*',
+                            Resource: ['arn:aws:s3:::app-artifacts', 'arn:aws:s3:::app-artifacts/*'],
+                        },
+                        { Sid: 'NeverDropTheBucket', Effect: 'Deny', Action: 's3:DeleteBucket', Resource: '*' },
+                        {
+                            Sid: 'Deploy', Effect: 'Allow', Action: 'sts:AssumeRole',
+                            Resource: 'arn:aws:iam::444455556666:role/deploy',
+                            Condition: { StringEquals: { 'sts:ExternalId': 'ab12cd' } },
+                        },
+                    ],
+                }, null, 2);
+                // Two documents in a row, in another account and region, with the
+                // same access split differently — none of which is a difference.
+                taB.value = JSON.stringify({
+                    Version: '2012-10-17',
+                    Statement: [
+                        { Sid: 'p1', Effect: 'Allow', Action: 'ssm:GetParameter', Resource: 'arn:aws:ssm:us-east-1:999988887777:parameter/app/*' },
+                        { Sid: 'p2', Effect: 'Allow', Action: 'ssm:GetParameters', Resource: 'arn:aws:ssm:us-east-1:999988887777:parameter/app/*' },
+                        { Sid: 'p3', Effect: 'Allow', Action: 'ssm:GetParametersByPath', Resource: 'arn:aws:ssm:us-east-1:999988887777:parameter/app/*' },
+                    ],
+                }, null, 2) + '\n' + JSON.stringify({
+                    Version: '2012-10-17',
+                    Statement: [
+                        {
+                            Sid: 'p4', Effect: 'Allow',
+                            Action: ['s3:GetObject', 's3:PutObject', 's3:ListBucket'],
+                            Resource: ['arn:aws:s3:::app-artifacts', 'arn:aws:s3:::app-artifacts/*'],
+                        },
+                        { Sid: 'p5', Effect: 'Allow', Action: 'sts:AssumeRole', Resource: 'arn:aws:iam::444455556666:role/deploy' },
+                    ],
+                }, null, 2);
+                showFile('a', null);
+                showFile('b', null);
+                run();
+            });
+        });
+    </script>
+</body>
+
+</html>

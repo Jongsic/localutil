@@ -1,0 +1,774 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
+    <title>SEO Meta Tag Checker — LocalUtil</title>
+    <!-- social / favicon -->
+    <meta name="description" content="Audit title, description, canonical, robots, Open Graph, and JSON-LD from a page URL or pasted HTML — with search and social previews. Runs in your browser.">
+    <link rel="canonical" href="https://jongsic.github.io/localutil/seo-check.html">
+    <link rel="icon" href="favicon.ico" sizes="any">
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="LocalUtil">
+    <meta property="og:title" content="SEO Meta Tag Checker — LocalUtil">
+    <meta property="og:description" content="Audit title, description, canonical, robots, Open Graph, and JSON-LD from a page URL or pasted HTML — with search and social previews. Runs in your browser.">
+    <meta property="og:image" content="https://jongsic.github.io/localutil/og.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:url" content="https://jongsic.github.io/localutil/seo-check.html">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:image" content="https://jongsic.github.io/localutil/og.png">
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebApplication","name":"SEO Meta Tag Checker","url":"https://jongsic.github.io/localutil/seo-check.html","description":"Audit title, description, canonical, robots, Open Graph, and JSON-LD from a page URL or pasted HTML — with search and social previews. Runs in your browser.","applicationCategory":"DeveloperApplication","operatingSystem":"Any","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"isPartOf":{"@type":"WebSite","name":"LocalUtil","url":"https://jongsic.github.io/localutil/"}}</script>
+    <!-- /social -->
+    <script src="theme-init.js"></script>
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        .seo-url-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+        .seo-url-row input { flex: 1; min-width: 200px; }
+        .btn:disabled { opacity: 0.45; cursor: default; }
+
+        #seo-src { min-height: 140px; }
+
+        /* --- checklist --- */
+        .seo-check-list { display: flex; flex-direction: column; }
+        .seo-check-row {
+            display: flex;
+            gap: 10px;
+            align-items: baseline;
+            padding: 7px 0;
+            border-bottom: 1px solid var(--border-color);
+            font-size: 0.83rem;
+        }
+        .seo-check-row:last-child { border-bottom: none; }
+        .seo-check-status {
+            flex: 0 0 18px;
+            text-align: center;
+            font-weight: 700;
+        }
+        .seo-check-row.ok .seo-check-status { color: var(--success); }
+        .seo-check-row.warn .seo-check-status { color: var(--warning); }
+        .seo-check-row.fail .seo-check-status { color: var(--danger); }
+        .seo-check-row.opt .seo-check-status { color: var(--text-faint); }
+        .seo-check-row.opt .seo-check-label { color: var(--text-muted); }
+        .seo-check-summary { font-weight: 600; margin: 8px 0 2px; }
+        .seo-check-label { flex: 0 0 150px; font-weight: 600; }
+        .seo-check-note { color: var(--text-muted); word-break: break-all; min-width: 0; }
+        .seo-check-note a { color: var(--primary); }
+        @media (max-width: 560px) {
+            .seo-check-row { flex-wrap: wrap; }
+            .seo-check-label { flex-basis: calc(100% - 28px); }
+            .seo-check-note { margin-left: 28px; flex-basis: 100%; }
+        }
+
+        /* --- tag tables --- */
+        .seo-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+        .seo-table td {
+            text-align: left;
+            padding: 6px 10px;
+            border-bottom: 1px solid var(--border-color);
+            vertical-align: top;
+            word-break: break-all;
+        }
+        .seo-table td.k {
+            color: var(--text-muted);
+            white-space: nowrap;
+            width: 1%;
+            font-family: var(--font-mono);
+        }
+        .seo-table td.v { font-family: var(--font-mono); }
+        .seo-table td.v a { color: var(--primary); }
+        .seo-table .tag-help {
+            /* prose, not code — undo the mono stack of td.v */
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Pretendard", Roboto, Helvetica, Arial, sans-serif;
+            font-size: 0.73rem;
+            color: var(--text-faint);
+            margin-top: 3px;
+            word-break: normal;
+        }
+        .seo-table tr:last-child td { border-bottom: none; }
+        .seo-subtitle {
+            font-size: 0.78rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            margin: 14px 0 4px;
+        }
+        .seo-subtitle:first-child { margin-top: 0; }
+
+        /* --- search result previews --- */
+        .seo-previews { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+        @media (max-width: 860px) { .seo-previews { grid-template-columns: 1fr; } }
+        .serp {
+            border: 1px solid var(--border-color);
+            border-radius: var(--r-sm);
+            padding: 14px 16px;
+            background: var(--bg-input);
+            min-width: 0;
+        }
+        .serp-kind { font-size: 0.72rem; font-weight: 600; color: var(--text-faint); margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.04em; }
+        .serp-site { display: flex; align-items: center; gap: 8px; min-width: 0; }
+        .serp-favicon {
+            flex: 0 0 26px; height: 26px;
+            border-radius: 50%;
+            background: var(--bg-subtle);
+            border: 1px solid var(--border-color);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 0.7rem; color: var(--text-faint);
+        }
+        .serp-site-name { font-size: 0.8rem; color: var(--text-main); }
+        .serp-url { font-size: 0.72rem; color: var(--text-muted); word-break: break-all; }
+        .serp-title {
+            margin-top: 8px;
+            font-size: 1.02rem;
+            color: #1a0dab;
+            line-height: 1.3;
+            overflow: hidden;
+            display: -webkit-box;
+            -webkit-box-orient: vertical;
+            -webkit-line-clamp: 1;
+        }
+        [data-theme="dark"] .serp-title { color: #8ab4f8; }
+        .serp.mobile .serp-title { -webkit-line-clamp: 2; }
+        .serp-desc {
+            margin-top: 5px;
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            line-height: 1.45;
+            overflow: hidden;
+            display: -webkit-box;
+            -webkit-box-orient: vertical;
+            -webkit-line-clamp: 2;
+        }
+        .serp.mobile { max-width: 400px; }
+        .serp.mobile .serp-desc { -webkit-line-clamp: 3; }
+        .serp .missing { color: var(--danger); font-style: italic; }
+
+        /* --- social card preview --- */
+        .og-card {
+            max-width: 520px;
+            border: 1px solid var(--border-strong);
+            border-radius: var(--r-md);
+            overflow: hidden;
+            background: var(--bg-input);
+        }
+        .og-card-image {
+            aspect-ratio: 1.91 / 1;
+            background: var(--bg-subtle);
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            align-items: center;
+            justify-content: center;
+            padding: 12px;
+            text-align: center;
+            font-size: 0.78rem;
+            color: var(--text-muted);
+        }
+        .og-card-image a { color: var(--primary); word-break: break-all; }
+        .og-card-image .missing { color: var(--danger); }
+        .og-card-body { padding: 10px 14px 12px; }
+        .og-card-site { font-size: 0.72rem; color: var(--text-faint); text-transform: uppercase; }
+        .og-card-title { font-size: 0.92rem; font-weight: 700; margin-top: 3px; }
+        .og-card-desc { font-size: 0.8rem; color: var(--text-muted); margin-top: 3px; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+
+        .seo-jsonld details { border: 1px solid var(--border-color); border-radius: var(--r-sm); padding: 8px 12px; margin-top: 8px; }
+        .seo-jsonld summary { cursor: pointer; font-size: 0.82rem; font-weight: 600; }
+        .seo-jsonld pre {
+            margin-top: 8px;
+            font-family: var(--font-mono);
+            font-size: 0.74rem;
+            white-space: pre-wrap;
+            word-break: break-all;
+            color: var(--text-muted);
+        }
+        .seo-jsonld .fail { color: var(--danger); }
+    </style>
+</head>
+
+<body>
+    <div class="app-container">
+        <aside class="sidebar" id="app-sidebar"></aside>
+
+        <main class="main-content">
+            <header class="topbar" id="app-topbar">
+                <div class="topbar-title">
+                    <h1 id="current-tool-title">SEO Checker</h1>
+                    <p id="current-tool-desc" class="topbar-desc">Audit SEO meta tags from page HTML — checklist, search and social previews</p>
+                </div>
+            </header>
+
+            <div class="tools-container">
+                <section id="tool-seo-check" class="tool-section active">
+                    <div class="tool-shell">
+
+                        <div class="card">
+                            <div class="card-title" style="margin:0;">Page source</div>
+                            <div class="field-hint mb-2">Browsers refuse to open <span class="mono">view-source:</span> pages
+                                from a link (Safari even shows an “invalid address” error), so the button copies the address —
+                                open a new tab, paste it, copy the whole source, and paste it below. Pasting source alone works
+                                too; the URL doubles as the base for resolving relative links.</div>
+                            <div class="flex-col" style="gap:10px;">
+                                <div class="seo-url-row">
+                                    <input type="text" id="seo-url" placeholder="Page URL — e.g. https://example.com/page.html (also used to resolve relative links)" autocomplete="off" spellcheck="false">
+                                    <button id="seo-view-source" class="btn btn-small" disabled>Copy view-source link</button>
+                                    <button id="btn-seo-fetch" class="btn btn-small">Fetch (same-site only)</button>
+                                </div>
+                                <div>
+                                    <label for="seo-src">HTML source</label>
+                                    <textarea id="seo-src" class="mono" placeholder="Paste the page's HTML source here…" spellcheck="false"></textarea>
+                                </div>
+                                <div class="flex-row gap-1">
+                                    <button id="btn-seo-self" class="btn btn-small btn-ghost">Check this page</button>
+                                    <button id="btn-seo-clear" class="btn btn-small btn-ghost" style="margin-left:auto;">Clear</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="seo-results" style="display:none; flex-direction:column; gap:16px;">
+
+                            <div class="card">
+                                <div class="card-title" style="margin:0;">At a glance — what to fix, what is done</div>
+                                <div class="field-hint">Every item a page should (or could) have is listed, including the ones this
+                                    page is missing. ✕ broken &nbsp;·&nbsp; ! should fix &nbsp;·&nbsp; ○ optional, not set &nbsp;·&nbsp; ✓ done</div>
+                                <div class="field-hint seo-check-summary" id="seo-check-summary"></div>
+                                <div class="seo-check-list" id="seo-checklist"></div>
+                            </div>
+
+                            <div class="card">
+                                <div class="card-title" style="margin:0 0 10px;">Search result preview</div>
+                                <div class="seo-previews">
+                                    <div class="serp" id="serp-desktop">
+                                        <div class="serp-kind">Desktop</div>
+                                    </div>
+                                    <div class="serp mobile" id="serp-mobile">
+                                        <div class="serp-kind">Mobile</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="card">
+                                <div class="card-title" style="margin:0 0 10px;">Social share preview</div>
+                                <div class="field-hint mb-2" id="og-card-note"></div>
+                                <div class="og-card" id="og-card"></div>
+                            </div>
+
+                            <div class="card">
+                                <div class="card-title" style="margin:0 0 6px;">Detected tags</div>
+                                <div id="seo-tags"></div>
+                            </div>
+
+                            <div class="card" id="seo-site-card" style="display:none;">
+                                <div class="card-title" style="margin:0 0 6px;">Site-level files</div>
+                                <div class="field-hint mb-2">Not part of the page source — open these to check them:</div>
+                                <table class="seo-table" id="seo-site-table"></table>
+                            </div>
+
+                            <div class="card seo-jsonld">
+                                <div class="card-title" style="margin:0;">Structured data (JSON-LD)</div>
+                                <div id="seo-jsonld"></div>
+                            </div>
+
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </div>
+
+    <div id="toast" class="toast">Copied to clipboard</div>
+
+    <script src="app.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const urlInput = document.getElementById('seo-url');
+            const srcInput = document.getElementById('seo-src');
+            const viewSourceBtn = document.getElementById('seo-view-source');
+            const results = document.getElementById('seo-results');
+            const checklist = document.getElementById('seo-checklist');
+            const tagsMount = document.getElementById('seo-tags');
+            const jsonldMount = document.getElementById('seo-jsonld');
+
+            // ---------- helpers ----------
+            function parsedUrl(v) {
+                try {
+                    const u = new URL(v.trim());
+                    return /^https?:$/.test(u.protocol) ? u : null;
+                } catch (e) { return null; }
+            }
+
+            function baseUrl() {
+                return urlInput.value.trim() || null;
+            }
+
+            // Resolve href against the base; returns null when it cannot be resolved.
+            function resolveUrl(href) {
+                try { return new URL(href, baseUrl() || undefined).href; } catch (e) { return null; }
+            }
+
+            // Only http(s) results become clickable — pasted source is untrusted.
+            function linkOrText(value) {
+                const abs = resolveUrl(value);
+                if (abs && /^https?:\/\//i.test(abs)) {
+                    const a = document.createElement('a');
+                    a.href = abs;
+                    a.target = '_blank';
+                    a.rel = 'noopener nofollow';
+                    a.textContent = value === abs ? value : value + ' → ' + abs;
+                    return a;
+                }
+                const s = document.createElement('span');
+                s.textContent = value + (/^[a-z][a-z0-9+.-]*:/i.test(value) ? '' : '  (relative — enter the page URL above to resolve)');
+                return s;
+            }
+
+            function el(tag, className, text) {
+                const e = document.createElement(tag);
+                if (className) e.className = className;
+                if (text !== undefined) e.textContent = text;
+                return e;
+            }
+
+            // ---------- URL row ----------
+            function syncUrlRow() {
+                viewSourceBtn.disabled = !parsedUrl(urlInput.value);
+            }
+
+            // No browser lets a page navigate to view-source: (Safari errors, Chrome
+            // silently blocks), so this only copies the address for manual pasting.
+            viewSourceBtn.addEventListener('click', () => {
+                const u = parsedUrl(urlInput.value);
+                if (!u) return;
+                navigator.clipboard.writeText('view-source:' + u.href)
+                    .then(() => showToast('Copied — open a new tab and paste it into the address bar'))
+                    .catch(() => showToast('Copy failed', true));
+            });
+
+            document.getElementById('btn-seo-fetch').addEventListener('click', async () => {
+                const u = parsedUrl(urlInput.value);
+                if (!u) { showToast('Enter a valid http(s) URL first', true); return; }
+                try {
+                    const res = await fetch(u.href);
+                    srcInput.value = await res.text();
+                    analyze();
+                    showToast('Fetched ' + res.status);
+                } catch (e) {
+                    showToast('Fetch blocked (CORS/CSP) — use the view-source button instead', true);
+                }
+            });
+
+            document.getElementById('btn-seo-self').addEventListener('click', async () => {
+                urlInput.value = location.href;
+                syncUrlRow();
+                try {
+                    srcInput.value = await (await fetch(location.href)).text();
+                } catch (e) {
+                    srcInput.value = '<!DOCTYPE html>' + document.documentElement.outerHTML;
+                }
+                analyze();
+            });
+
+            document.getElementById('btn-seo-clear').addEventListener('click', () => {
+                urlInput.value = '';
+                srcInput.value = '';
+                syncUrlRow();
+                analyze();
+                urlInput.focus();
+            });
+
+            urlInput.addEventListener('input', () => { syncUrlRow(); analyze(); });
+            srcInput.addEventListener('input', analyze);
+
+            // ---------- extraction ----------
+            function meta(doc, sel) {
+                const e = doc.querySelector(sel);
+                return e ? (e.getAttribute('content') || '').trim() : null;
+            }
+
+            function extract(doc) {
+                const d = {};
+                d.title = doc.querySelector('title') ? doc.querySelector('title').textContent.trim() : null;
+                d.description = meta(doc, 'meta[name="description" i]');
+                d.charset = doc.querySelector('meta[charset]') ? doc.querySelector('meta[charset]').getAttribute('charset')
+                    : (meta(doc, 'meta[http-equiv="Content-Type" i]') || '').match(/charset=([^;\s]+)/i)?.[1] || null;
+                d.viewport = meta(doc, 'meta[name="viewport" i]');
+                d.themeColor = meta(doc, 'meta[name="theme-color" i]');
+                d.lang = doc.documentElement.getAttribute('lang');
+                d.robots = meta(doc, 'meta[name="robots" i]');
+                d.canonical = doc.querySelector('link[rel="canonical" i]')?.getAttribute('href')?.trim() || null;
+                d.h1s = [...doc.querySelectorAll('h1')].map(h => h.textContent.trim());
+                d.icons = [...doc.querySelectorAll('link[rel~="icon" i], link[rel^="apple-touch-icon" i], link[rel="manifest" i], link[rel="mask-icon" i]')]
+                    .map(l => ({
+                        rel: (l.getAttribute('rel') || '').toLowerCase(),
+                        href: l.getAttribute('href'),
+                        sizes: l.getAttribute('sizes'),
+                        type: l.getAttribute('type'),
+                    }));
+                d.og = [...doc.querySelectorAll('meta[property^="og:" i]')]
+                    .map(m => [m.getAttribute('property'), (m.getAttribute('content') || '').trim()]);
+                d.twitter = [...doc.querySelectorAll('meta[name^="twitter:" i]')]
+                    .map(m => [m.getAttribute('name'), (m.getAttribute('content') || '').trim()]);
+                d.hreflang = [...doc.querySelectorAll('link[rel="alternate" i][hreflang]')]
+                    .map(l => [l.getAttribute('hreflang'), l.getAttribute('href')]);
+                d.jsonld = [...doc.querySelectorAll('script[type="application/ld+json" i]')].map(s => {
+                    try { return { ok: true, data: JSON.parse(s.textContent) }; }
+                    catch (e) { return { ok: false, error: e.message, raw: s.textContent }; }
+                });
+                d.ogMap = Object.fromEntries(d.og);
+                d.twMap = Object.fromEntries(d.twitter);
+                return d;
+            }
+
+            // ---------- checklist ----------
+            // Every recommended item appears here whether the page has it or not —
+            // this is a to-do list, not a dump of what happens to be set.
+            // fail = broken, warn = should fix, opt = optional and not set, ok = done.
+            const MARKS = { fail: '✕', warn: '!', opt: '○', ok: '✓' };
+            const RANK = { fail: 0, warn: 1, opt: 2, ok: 3 };
+            let checkItems = [];
+
+            function addCheck(status, label, note, linkValue) {
+                checkItems.push({ status, label, note, linkValue });
+            }
+
+            function renderChecklist() {
+                checklist.innerHTML = '';
+
+                const counts = { fail: 0, warn: 0, opt: 0, ok: 0 };
+                checkItems.forEach(i => counts[i.status]++);
+                const summary = [];
+                if (counts.fail) summary.push(counts.fail + ' broken');
+                if (counts.warn) summary.push(counts.warn + ' to fix');
+                if (counts.opt) summary.push(counts.opt + ' optional not set');
+                summary.push(counts.ok + ' OK');
+                document.getElementById('seo-check-summary').textContent =
+                    summary.join(' · ') + ' — worst first:';
+
+                checkItems
+                    .slice()
+                    .sort((a, b) => RANK[a.status] - RANK[b.status])
+                    .forEach(({ status, label, note, linkValue }) => {
+                        const row = el('div', 'seo-check-row ' + status);
+                        row.appendChild(el('span', 'seo-check-status', MARKS[status]));
+                        row.appendChild(el('span', 'seo-check-label', label));
+                        const noteEl = el('span', 'seo-check-note');
+                        if (note) noteEl.appendChild(document.createTextNode(note));
+                        if (linkValue) {
+                            if (note) noteEl.appendChild(document.createTextNode(' — '));
+                            noteEl.appendChild(linkOrText(linkValue));
+                        }
+                        row.appendChild(noteEl);
+                        checklist.appendChild(row);
+                    });
+            }
+
+            function runChecklist(d) {
+                checkItems = [];
+
+                if (!d.title) addCheck('fail', 'Title', 'missing — the single most important tag');
+                else if (d.title.length > 60) addCheck('warn', 'Title', d.title.length + ' chars — may be cut off in results (aim ≤ 60)');
+                else addCheck('ok', 'Title', d.title.length + ' chars');
+
+                if (!d.description) addCheck('fail', 'Meta description', 'missing — search engines will pick their own snippet');
+                else if (d.description.length > 165) addCheck('warn', 'Meta description', d.description.length + ' chars — may be truncated (aim ≤ 160)');
+                else if (d.description.length < 50) addCheck('warn', 'Meta description', d.description.length + ' chars — likely too short to be a useful snippet');
+                else addCheck('ok', 'Meta description', d.description.length + ' chars');
+
+                if (!d.canonical) addCheck('warn', 'Canonical URL', 'missing — duplicate URLs may split ranking signals');
+                else addCheck('ok', 'Canonical URL', null, d.canonical);
+
+                if (d.robots && /noindex/i.test(d.robots)) addCheck('fail', 'Robots', '"' + d.robots + '" — this page will NOT appear in search results');
+                else if (d.robots) addCheck('ok', 'Robots', '"' + d.robots + '"');
+                else addCheck('ok', 'Robots', 'not set (indexable by default)');
+
+                if (d.h1s.length === 1) addCheck('ok', 'H1 heading', '"' + d.h1s[0].slice(0, 80) + '"');
+                else if (d.h1s.length === 0) addCheck('warn', 'H1 heading', 'none found — pages should have exactly one H1');
+                else addCheck('warn', 'H1 heading', d.h1s.length + ' found — pages should have exactly one H1');
+
+                if (!d.viewport) addCheck('warn', 'Viewport', 'missing — page will render zoomed-out on mobile');
+                else addCheck('ok', 'Viewport', d.viewport);
+
+                if (!d.lang) addCheck('warn', 'Language', '<html lang> missing');
+                else addCheck('ok', 'Language', 'lang="' + d.lang + '"');
+
+                if (!d.charset) addCheck('warn', 'Charset', 'no <meta charset>');
+                else addCheck('ok', 'Charset', d.charset);
+
+                const fav = d.icons.filter(i => /(^|\s)icon(\s|$)/.test(i.rel) || i.rel === 'shortcut icon');
+                if (!fav.length) addCheck('warn', 'Favicon', 'no rel="icon" links — tabs, bookmarks, and search results show a blank icon');
+                else addCheck('ok', 'Favicon', fav.map(i =>
+                    (i.sizes || 'default') + (i.type ? ' · ' + i.type.replace('image/', '') : '')).join('  |  '));
+
+                const touch = d.icons.filter(i => i.rel.startsWith('apple-touch-icon'));
+                if (!touch.length) addCheck('warn', 'Apple touch icon', 'missing — iOS home screen / share sheet falls back to a page screenshot; add a 180×180 PNG');
+                else addCheck('ok', 'Apple touch icon', (touch[0].sizes || 'no sizes attr (one 180×180 PNG serves all devices)'), touch[0].href);
+
+                const ogNeeded = ['og:title', 'og:description', 'og:image', 'og:url'];
+                const ogMissing = ogNeeded.filter(k => !d.ogMap[k]);
+                if (!d.og.length) addCheck('warn', 'Open Graph', 'no og: tags — shared links get no card on social/chat apps');
+                else if (ogMissing.length) addCheck('warn', 'Open Graph', 'missing ' + ogMissing.join(', '));
+                else addCheck('ok', 'Open Graph', 'og:title / og:description / og:image / og:url all set');
+
+                if (d.ogMap['og:image']) {
+                    if (!d.ogMap['og:image:width'] || !d.ogMap['og:image:height'])
+                        addCheck('warn', 'OG image size', 'og:image:width/height missing — first share may render without the image', d.ogMap['og:image']);
+                    else
+                        addCheck('ok', 'OG image', d.ogMap['og:image:width'] + '×' + d.ogMap['og:image:height'], d.ogMap['og:image']);
+                }
+
+                if (!d.twMap['twitter:card']) addCheck('warn', 'Twitter card', 'twitter:card missing — X falls back to a plain link');
+                else addCheck('ok', 'Twitter card', d.twMap['twitter:card'] +
+                    (CARD_TYPES[d.twMap['twitter:card']] ? ' = ' + CARD_TYPES[d.twMap['twitter:card']] : ''));
+
+                if (d.canonical && d.ogMap['og:url'] && resolveUrl(d.canonical) !== resolveUrl(d.ogMap['og:url']))
+                    addCheck('warn', 'Canonical vs og:url', 'they differ — pick one URL: ' + d.canonical + ' vs ' + d.ogMap['og:url']);
+
+                const bad = d.jsonld.filter(j => !j.ok);
+                if (!d.jsonld.length) addCheck('warn', 'Structured data', 'no JSON-LD — rich results (ratings, breadcrumbs, …) unavailable');
+                else if (bad.length) addCheck('fail', 'Structured data', bad.length + ' JSON-LD block(s) fail to parse');
+                else addCheck('ok', 'Structured data', d.jsonld.length + ' JSON-LD block(s)');
+
+                // Optional extras — always listed so a gap is visible, but a page
+                // without them is not broken.
+                const manifest = d.icons.find(i => i.rel === 'manifest');
+                if (!manifest) addCheck('opt', 'Web app manifest', 'not set — add one only if you want install-to-home-screen / PWA; it declares the Android icons (192×192, 512×512)');
+                else addCheck('ok', 'Web app manifest', null, manifest.href);
+
+                if (!d.themeColor) addCheck('opt', 'Theme color', 'not set — <meta name="theme-color"> tints the browser UI on Android/Safari; purely cosmetic');
+                else addCheck('ok', 'Theme color', d.themeColor);
+
+                if (!d.hreflang.length) addCheck('opt', 'hreflang', 'not set — only needed when the page exists in multiple languages');
+                else addCheck('ok', 'hreflang', d.hreflang.map(([l]) => l).join(', '));
+
+                renderChecklist();
+            }
+
+            // ---------- previews ----------
+            function displayUrl(d) {
+                return resolveUrl(d.canonical || d.ogMap['og:url'] || '') || urlInput.value.trim() || baseUrl() || '';
+            }
+
+            function renderSerp(mount, kind, d) {
+                mount.innerHTML = '';
+                mount.appendChild(el('div', 'serp-kind', kind));
+                const u = displayUrl(d);
+                let host = '', crumb = '';
+                try {
+                    const p = new URL(u);
+                    host = p.hostname;
+                    crumb = host + p.pathname.split('/').filter(Boolean).map(s => ' › ' + s).join('');
+                } catch (e) { crumb = u || 'example.com'; host = crumb; }
+
+                const site = el('div', 'serp-site');
+                site.appendChild(el('div', 'serp-favicon', 'ico'));
+                const names = el('div');
+                names.appendChild(el('div', 'serp-site-name', d.ogMap['og:site_name'] || host || 'Site name'));
+                names.appendChild(el('div', 'serp-url', crumb));
+                site.appendChild(names);
+                mount.appendChild(site);
+
+                const title = el('div', 'serp-title');
+                if (d.title) title.textContent = d.title;
+                else title.appendChild(el('span', 'missing', '(no title)'));
+                mount.appendChild(title);
+
+                const desc = el('div', 'serp-desc');
+                if (d.description) desc.textContent = d.description;
+                else desc.appendChild(el('span', 'missing', '(no meta description — search engines will pick text from the page)'));
+                mount.appendChild(desc);
+            }
+
+            function renderOgCard(d) {
+                const card = document.getElementById('og-card');
+                const note = document.getElementById('og-card-note');
+                card.innerHTML = '';
+
+                const img = el('div', 'og-card-image');
+                if (d.ogMap['og:image']) {
+                    img.appendChild(el('div', null, 'og:image (not fetched):'));
+                    img.appendChild(linkOrText(d.ogMap['og:image']));
+                } else {
+                    img.appendChild(el('span', 'missing', 'no og:image — the card renders without an image'));
+                }
+                card.appendChild(img);
+
+                const body = el('div', 'og-card-body');
+                let host = '';
+                try { host = new URL(displayUrl(d)).hostname; } catch (e) { /* keep empty */ }
+                body.appendChild(el('div', 'og-card-site', d.ogMap['og:site_name'] || host || ' '));
+                body.appendChild(el('div', 'og-card-title', d.ogMap['og:title'] || d.title || '(no title)'));
+                body.appendChild(el('div', 'og-card-desc', d.ogMap['og:description'] || d.description || ''));
+                card.appendChild(body);
+
+                note.textContent = 'How chat apps and social feeds render the link. Card type: ' +
+                    (d.twMap['twitter:card'] || 'not set') +
+                    (d.ogMap['og:type'] ? ' · og:type: ' + d.ogMap['og:type'] : '');
+            }
+
+            // ---------- tag tables (with plain-language explanations) ----------
+            const TAG_HELP = {
+                '<title>': 'The clickable headline in search results and the browser tab. Aim for ≤ 60 chars, keywords first.',
+                'description': 'The grey snippet under your title in search results. Aim for 50–160 chars that state what the page does.',
+                'charset': 'Text encoding; UTF-8 is the standard.',
+                'viewport': 'Required for mobile rendering — without it phones show a zoomed-out desktop page, which also hurts ranking.',
+                'html lang': 'Content language for search engines and screen readers.',
+                'canonical': 'The one official URL for this content. Consolidates duplicates (http/https, trailing slash, params) into one ranking signal.',
+                'robots': 'Crawler directives. "noindex" removes the page from search; unset means index,follow.',
+                'og:title': 'Headline on the link card in chat apps and social feeds. Falls back to <title> if missing.',
+                'og:description': 'Sub-text on the link card. Falls back to the meta description.',
+                'og:image': 'The card image. Use an absolute URL, ~1200×630 px (1.91:1 ratio).',
+                'og:image:width': 'Declaring the size up front lets the very first share render the image without the scraper fetching it.',
+                'og:image:height': 'See og:image:width.',
+                'og:url': 'Canonical URL for shares — should match rel="canonical".',
+                'og:type': '"website" for tools/landing pages, "article" for posts. Affects how platforms group the link.',
+                'og:site_name': 'The small site label shown above the card title.',
+                'og:locale': 'Language/region of the content, e.g. en_US or ko_KR.',
+                'twitter:card': null, // handled per-value below
+                'twitter:image': 'Card image for X (Twitter). Falls back to og:image if missing.',
+                'twitter:site': '@handle credited on the card. Optional.',
+                'twitter:title': 'Falls back to og:title — usually unnecessary to set separately.',
+                'twitter:description': 'Falls back to og:description.',
+            };
+            const CARD_TYPES = {
+                'summary': 'small card with a square thumbnail',
+                'summary_large_image': 'large full-width image card — the usual choice for content pages',
+                'player': 'card with an embedded video/audio player',
+                'app': 'mobile-app install card',
+            };
+            const ICON_HELP = {
+                'icon': 'Browser tab, bookmarks, and Google mobile results. Cover 16×16 + 32×32 (an .ico with sizes="any" does both).',
+                'shortcut icon': 'Legacy alias of rel="icon" for very old browsers.',
+                'apple-touch-icon': 'iOS/iPadOS home screen, share sheet, and Safari favourites. One 180×180 PNG serves all current devices (older sizes like 152/167 are optional).',
+                'apple-touch-icon-precomposed': 'Legacy iOS ≤ 6 variant that skips the gloss effect — rarely needed today.',
+                'mask-icon': 'Safari pinned-tab monochrome SVG.',
+                'manifest': 'Web-app manifest: declares Android / PWA install icons (192×192 and 512×512) and app metadata.',
+            };
+
+            function tagHelp(key, value) {
+                if (key === 'twitter:card') {
+                    return CARD_TYPES[value]
+                        ? '"' + value + '" = ' + CARD_TYPES[value] + '. Other twitter:* tags fall back to og:*.'
+                        : 'How X (Twitter) renders the link. Common values: summary, summary_large_image.';
+                }
+                return TAG_HELP[key] || null;
+            }
+
+            function addTable(title, rows, linkKeys) {
+                if (!rows.length) return;
+                tagsMount.appendChild(el('div', 'seo-subtitle', title));
+                const table = el('table', 'seo-table');
+                rows.forEach(([k, v, help]) => {
+                    const tr = document.createElement('tr');
+                    const tdK = el('td', 'k', k);
+                    const tdV = el('td', 'v');
+                    if (v && linkKeys && linkKeys.test(k)) tdV.appendChild(linkOrText(v));
+                    else tdV.textContent = v == null ? '—' : v;
+                    const h = help !== undefined ? help : tagHelp(k, v);
+                    if (h) tdV.appendChild(el('div', 'tag-help', h));
+                    tr.append(tdK, tdV);
+                    table.appendChild(tr);
+                });
+                tagsMount.appendChild(table);
+            }
+
+            function renderTags(d) {
+                tagsMount.innerHTML = '';
+                addTable('Basics', [
+                    ['<title>', d.title],
+                    ['description', d.description],
+                    ['charset', d.charset],
+                    ['viewport', d.viewport],
+                    ['html lang', d.lang],
+                ]);
+                addTable('Indexing', [
+                    ['canonical', d.canonical],
+                    ['robots', d.robots || '(not set)'],
+                    ...d.hreflang.map(([l, h]) => ['hreflang ' + l, h, 'Points search engines at the ' + l + ' version of this page.']),
+                ], /canonical|hreflang/);
+                addTable('Open Graph', d.og, /image$|url$/);
+                addTable('Twitter', d.twitter, /image$|url$/);
+                addTable('Icons & manifest', d.icons.map(i => [
+                    i.rel + (i.sizes ? ' ' + i.sizes : '') + (i.type ? ' (' + i.type.replace('image/', '') + ')' : ''),
+                    i.href,
+                    ICON_HELP[i.rel] || null,
+                ]), /./);
+            }
+
+            // ---------- site-level files (not part of the page source) ----------
+            function renderSiteFiles() {
+                const card = document.getElementById('seo-site-card');
+                const mount = document.getElementById('seo-site-table');
+                const u = parsedUrl(urlInput.value);
+                if (!u) { card.style.display = 'none'; return; }
+                mount.innerHTML = '';
+                [
+                    ['robots.txt', u.origin + '/robots.txt',
+                        'Crawl rules for the whole site. Should exist and point at your sitemap (Sitemap: …).'],
+                    ['sitemap.xml', u.origin + '/sitemap.xml',
+                        'List of every indexable URL. Submit it once in Google Search Console and Bing Webmaster Tools so new pages get discovered fast.'],
+                ].forEach(([k, href, help]) => {
+                    const tr = document.createElement('tr');
+                    const tdK = el('td', 'k', k);
+                    const tdV = el('td', 'v');
+                    const a = el('a', null, href);
+                    a.href = href;
+                    a.target = '_blank';
+                    a.rel = 'noopener nofollow';
+                    tdV.appendChild(a);
+                    tdV.appendChild(el('div', 'tag-help', help));
+                    tr.append(tdK, tdV);
+                    mount.appendChild(tr);
+                });
+                card.style.display = '';
+            }
+
+            function renderJsonLd(d) {
+                jsonldMount.innerHTML = '';
+                if (!d.jsonld.length) {
+                    jsonldMount.appendChild(el('div', 'field-hint', 'No JSON-LD blocks found.'));
+                    return;
+                }
+                d.jsonld.forEach((j, i) => {
+                    const det = document.createElement('details');
+                    const sum = document.createElement('summary');
+                    if (j.ok) {
+                        const types = [].concat(j.data).map(b => b && b['@type']).filter(Boolean).join(', ');
+                        sum.textContent = 'Block ' + (i + 1) + ' — @type: ' + (types || '(none)');
+                        det.appendChild(sum);
+                        det.appendChild(el('pre', null, JSON.stringify(j.data, null, 2)));
+                    } else {
+                        sum.appendChild(el('span', 'fail', 'Block ' + (i + 1) + ' — invalid JSON: ' + j.error));
+                        det.appendChild(sum);
+                        det.appendChild(el('pre', null, j.raw.trim()));
+                    }
+                    jsonldMount.appendChild(det);
+                });
+            }
+
+            // ---------- main ----------
+            function analyze() {
+                const src = srcInput.value.trim();
+                if (!src) { results.style.display = 'none'; return; }
+                // DOMParser documents are inert: nothing loads, nothing executes.
+                const doc = new DOMParser().parseFromString(src, 'text/html');
+                const d = extract(doc);
+                runChecklist(d);
+                renderSerp(document.getElementById('serp-desktop'), 'Desktop', d);
+                renderSerp(document.getElementById('serp-mobile'), 'Mobile', d);
+                renderOgCard(d);
+                renderTags(d);
+                renderSiteFiles();
+                renderJsonLd(d);
+                results.style.display = 'flex';
+            }
+
+            syncUrlRow();
+            analyze();
+        });
+    </script>
+</body>
+
+</html>

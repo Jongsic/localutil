@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
+    <title>Cron Expression Parser — LocalUtil</title>
+    <!-- social / favicon -->
+    <meta name="description" content="Explain a cron expression in plain English and preview its next run times. Runs 100% in your browser — nothing is uploaded.">
+    <link rel="canonical" href="https://jongsic.github.io/localutil/cron.html">
+    <link rel="icon" href="favicon.ico" sizes="any">
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="LocalUtil">
+    <meta property="og:title" content="Cron Expression Parser — LocalUtil">
+    <meta property="og:description" content="Explain a cron expression in plain English and preview its next run times. Runs 100% in your browser — nothing is uploaded.">
+    <meta property="og:image" content="https://jongsic.github.io/localutil/og.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:url" content="https://jongsic.github.io/localutil/cron.html">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:image" content="https://jongsic.github.io/localutil/og.png">
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebApplication","name":"Cron Expression Parser","url":"https://jongsic.github.io/localutil/cron.html","description":"Explain a cron expression in plain English and preview its next run times. Runs 100% in your browser — nothing is uploaded.","applicationCategory":"DeveloperApplication","operatingSystem":"Any","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"isPartOf":{"@type":"WebSite","name":"LocalUtil","url":"https://jongsic.github.io/localutil/"}}</script>
+    <!-- /social -->
+    <script src="theme-init.js"></script>
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        #cron-input { font-family: var(--font-mono); font-size: 1.15rem; letter-spacing: 0.04em; text-align: center; }
+        .cron-error { color: var(--danger); font-weight: 600; font-size: 0.88rem; margin-top: 8px; min-height: 1em; }
+
+        .cron-desc {
+            font-size: 1.05rem; font-weight: 600; color: var(--text-main);
+            padding: 16px 18px; background: var(--primary-soft); color: var(--active-text);
+            border-radius: var(--r-sm); margin-top: 4px;
+        }
+
+        .cron-fields { width: 100%; border-collapse: collapse; margin-top: 16px; font-size: 0.85rem; }
+        .cron-fields th, .cron-fields td { padding: 9px 12px; text-align: left; border-bottom: 1px solid var(--border-color); }
+        .cron-fields th { color: var(--text-faint); font-weight: 700; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; }
+        .cron-fields .field-val { font-family: var(--font-mono); color: var(--primary); font-weight: 600; }
+        .cron-fields .field-desc { color: var(--text-muted); }
+
+        .cron-next { list-style: none; padding: 0; margin: 8px 0 0; }
+        .cron-next li {
+            display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+            padding: 10px 14px; border: 1px solid var(--border-color); border-radius: var(--r-sm);
+            margin-bottom: 8px; font-size: 0.88rem; background: var(--bg-input);
+        }
+        .cron-next .abs { font-family: var(--font-mono); color: var(--text-main); }
+        .cron-next .rel { color: var(--text-muted); }
+
+        .cron-examples { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+        .cron-examples button {
+            font-family: var(--font-mono); font-size: 0.8rem; padding: 6px 10px;
+            background: var(--bg-subtle); border: 1px solid var(--border-color);
+            border-radius: var(--r-sm); color: var(--text-muted); cursor: pointer;
+        }
+        .cron-examples button:hover { color: var(--text-main); border-color: var(--primary); }
+    </style>
+</head>
+
+<body>
+    <div class="app-container">
+        <aside class="sidebar" id="app-sidebar"></aside>
+
+        <main class="main-content">
+            <header class="topbar" id="app-topbar">
+                <div class="topbar-title">
+                    <h1 id="current-tool-title">Cron Parser</h1>
+                    <p id="current-tool-desc" class="topbar-desc">Explain cron expressions and preview next runs</p>
+                </div>
+            </header>
+
+            <div class="tools-container">
+                <section id="tool-cron" class="tool-section active">
+                    <div class="card" style="padding:20px;">
+                        <label for="cron-input">Cron expression</label>
+                        <div class="field-hint">Standard 5 fields: <code>minute hour day-of-month month day-of-week</code>. Times are in your local timezone.</div>
+                        <input type="text" id="cron-input" placeholder="*/5 * * * *" autocomplete="off" spellcheck="false" value="*/5 * * * *">
+                        <div class="cron-error" id="cron-error"></div>
+                        <div class="cron-examples" id="cron-examples"></div>
+                    </div>
+
+                    <div class="card" style="padding:20px; margin-top:16px;">
+                        <div class="cron-desc" id="cron-desc">—</div>
+                        <table class="cron-fields" id="cron-fields"></table>
+                    </div>
+
+                    <div class="card" style="padding:20px; margin-top:16px;">
+                        <label>Next runs</label>
+                        <div class="field-hint">The upcoming 5 scheduled times.</div>
+                        <ul class="cron-next" id="cron-next"></ul>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </div>
+
+    <div id="toast" class="toast">Copied to clipboard!</div>
+
+    <script src="app.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const input = document.getElementById('cron-input');
+            const errorEl = document.getElementById('cron-error');
+            const descEl = document.getElementById('cron-desc');
+            const fieldsEl = document.getElementById('cron-fields');
+            const nextEl = document.getElementById('cron-next');
+            const examplesEl = document.getElementById('cron-examples');
+
+            const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+            const DOWS = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+
+            const FIELDS = [
+                { name: 'Minute', min: 0, max: 59 },
+                { name: 'Hour', min: 0, max: 23 },
+                { name: 'Day of month', min: 1, max: 31 },
+                { name: 'Month', min: 1, max: 12, names: MONTHS },
+                { name: 'Day of week', min: 0, max: 7, names: DOWS }
+            ];
+
+            const EXAMPLES = [
+                '* * * * *', '*/5 * * * *', '0 * * * *', '0 0 * * *',
+                '30 9 * * 1-5', '0 0 1 * *', '0 12 * * 0', '15 14 1 * *'
+            ];
+
+            // Parse one field into a sorted array of allowed values.
+            function parseField(expr, field) {
+                const { min, max, names } = field;
+                const resolve = (tok) => {
+                    if (names) {
+                        const idx = names.indexOf(tok.toUpperCase());
+                        if (idx !== -1) return field.name === 'Month' ? idx + 1 : idx;
+                    }
+                    if (!/^\d+$/.test(tok)) throw new Error('Invalid value "' + tok + '" in ' + field.name);
+                    return parseInt(tok, 10);
+                };
+                const set = new Set();
+                for (const part of expr.split(',')) {
+                    let step = 1, range = part;
+                    const slash = part.split('/');
+                    if (slash.length === 2) { range = slash[0]; step = parseInt(slash[1], 10); if (!step) throw new Error('Invalid step in ' + field.name); }
+                    else if (slash.length > 2) throw new Error('Invalid syntax "' + part + '" in ' + field.name);
+
+                    let lo, hi;
+                    if (range === '*') { lo = min; hi = max; }
+                    else if (range.includes('-')) {
+                        const [a, b] = range.split('-');
+                        lo = resolve(a); hi = resolve(b);
+                    } else { lo = hi = resolve(range); if (slash.length === 2) hi = max; }
+
+                    if (lo < min || hi > max || lo > hi) throw new Error(field.name + ' value out of range (' + min + '-' + max + ')');
+                    for (let v = lo; v <= hi; v += step) set.add(field.max === 7 && v === 7 ? 0 : v);
+                }
+                return [...set].sort((a, b) => a - b);
+            }
+
+            function parse(expr) {
+                const parts = expr.trim().split(/\s+/);
+                if (parts.length !== 5) throw new Error('Expected 5 fields, got ' + parts.length + '.');
+                return {
+                    raw: parts,
+                    minute: parseField(parts[0], FIELDS[0]),
+                    hour: parseField(parts[1], FIELDS[1]),
+                    dom: parseField(parts[2], FIELDS[2]),
+                    month: parseField(parts[3], FIELDS[3]),
+                    dow: parseField(parts[4], FIELDS[4]),
+                    domStar: parts[2] === '*',
+                    dowStar: parts[4] === '*'
+                };
+            }
+
+            // ---- Human-readable description ----
+            function listPhrase(vals, max, singular, fmt) {
+                fmt = fmt || (v => v);
+                if (vals.length === max + 1 || (max === 59 && vals.length === 60)) return null; // every value
+                if (vals.length === 1) return 'at ' + singular + ' ' + fmt(vals[0]);
+                if (isConsecutive(vals)) return singular + ' ' + fmt(vals[0]) + ' through ' + fmt(vals[vals.length - 1]);
+                return singular + ' ' + vals.map(fmt).join(', ');
+            }
+            function isConsecutive(vals) {
+                for (let i = 1; i < vals.length; i++) if (vals[i] !== vals[i - 1] + 1) return false;
+                return vals.length > 1;
+            }
+            function pad(n) { return String(n).padStart(2, '0'); }
+
+            function describe(c) {
+                const parts = [];
+                const everyMin = c.minute.length === 60;
+                const everyHour = c.hour.length === 24;
+
+                if (everyMin && everyHour) parts.push('Every minute');
+                else if (c.minute.length === 1 && c.hour.length === 1) {
+                    parts.push('At ' + pad(c.hour[0]) + ':' + pad(c.minute[0]));
+                } else {
+                    if (everyMin) parts.push('Every minute');
+                    else if (c.minute.length === 1) parts.push('At minute ' + c.minute[0]);
+                    else parts.push('At minutes ' + c.minute.join(', '));
+                    if (!everyHour) {
+                        if (c.hour.length === 1) parts.push('past hour ' + c.hour[0]);
+                        else parts.push('past hours ' + c.hour.join(', '));
+                    }
+                }
+
+                if (!c.domStar) {
+                    parts.push('on day-of-month ' + c.dom.join(', '));
+                }
+                if (c.month.length !== 12) {
+                    parts.push('in ' + c.month.map(m => MONTHS[m - 1]).join(', '));
+                }
+                if (!c.dowStar) {
+                    parts.push('on ' + c.dow.map(d => DOWS[d]).join(', '));
+                }
+                return parts.join(', ') + '.';
+            }
+
+            function fieldDescr(expr, field, vals) {
+                if (expr === '*') return 'every ' + field.name.toLowerCase().replace('day of', 'day-of');
+                if (field.names) {
+                    const nm = field.name === 'Month' ? vals.map(v => MONTHS[v - 1]) : vals.map(v => DOWS[v]);
+                    return nm.join(', ');
+                }
+                if (vals.length === 1) return String(vals[0]);
+                if (isConsecutive(vals)) return vals[0] + '–' + vals[vals.length - 1];
+                return vals.join(', ');
+            }
+
+            // ---- Next run computation ----
+            function matches(c, d) {
+                if (!c.minute.includes(d.getMinutes())) return false;
+                if (!c.hour.includes(d.getHours())) return false;
+                if (!c.month.includes(d.getMonth() + 1)) return false;
+                const domOK = c.dom.includes(d.getDate());
+                const dowOK = c.dow.includes(d.getDay());
+                // Standard rule: if both DOM and DOW are restricted, match either.
+                if (!c.domStar && !c.dowStar) return domOK || dowOK;
+                return domOK && dowOK;
+            }
+
+            function nextRuns(c, count) {
+                const runs = [];
+                const d = new Date();
+                d.setSeconds(0, 0);
+                d.setMinutes(d.getMinutes() + 1);
+                const limit = 366 * 24 * 60 * 2; // ~2 years of minutes
+                for (let i = 0; i < limit && runs.length < count; i++) {
+                    if (matches(c, d)) runs.push(new Date(d));
+                    d.setMinutes(d.getMinutes() + 1);
+                }
+                return runs;
+            }
+
+            function relTime(d) {
+                let secs = Math.round((d - new Date()) / 1000);
+                const units = [['day', 86400], ['hour', 3600], ['minute', 60]];
+                const out = [];
+                for (const [name, s] of units) {
+                    const n = Math.floor(secs / s);
+                    if (n > 0) { out.push(n + ' ' + name + (n === 1 ? '' : 's')); secs -= n * s; }
+                    if (out.length === 2) break;
+                }
+                return out.length ? 'in ' + out.join(', ') : 'in under a minute';
+            }
+
+            function fmtAbs(d) {
+                const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+                return days[d.getDay()] + ' ' + d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) +
+                    ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+            }
+
+            function render() {
+                let c;
+                try {
+                    c = parse(input.value);
+                    errorEl.textContent = '';
+                } catch (e) {
+                    errorEl.textContent = e.message;
+                    descEl.textContent = '—';
+                    fieldsEl.innerHTML = '';
+                    nextEl.innerHTML = '';
+                    return;
+                }
+
+                descEl.textContent = describe(c);
+
+                const valsByField = [c.minute, c.hour, c.dom, c.month, c.dow];
+                let rows = '<tr><th>Field</th><th>Value</th><th>Meaning</th></tr>';
+                FIELDS.forEach((f, i) => {
+                    rows += '<tr><td>' + f.name + '</td><td class="field-val">' + escapeHtml(c.raw[i]) +
+                        '</td><td class="field-desc">' + escapeHtml(fieldDescr(c.raw[i], f, valsByField[i])) + '</td></tr>';
+                });
+                fieldsEl.innerHTML = rows;
+
+                const runs = nextRuns(c, 5);
+                nextEl.innerHTML = runs.length
+                    ? runs.map(d => '<li><span class="abs">' + fmtAbs(d) + '</span><span class="rel">' + relTime(d) + '</span></li>').join('')
+                    : '<li><span class="rel">No upcoming runs within 2 years.</span></li>';
+            }
+
+            function escapeHtml(s) {
+                return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            }
+
+            examplesEl.innerHTML = EXAMPLES.map(e => '<button data-cron="' + e + '">' + e + '</button>').join('');
+            examplesEl.querySelectorAll('button').forEach(b =>
+                b.addEventListener('click', () => { input.value = b.dataset.cron; render(); }));
+
+            input.addEventListener('input', render);
+            render();
+        });
+    </script>
+</body>
+
+</html>

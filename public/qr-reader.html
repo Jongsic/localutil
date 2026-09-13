@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
+    <title>QR Code Reader from Image — LocalUtil</title>
+    <!-- social / favicon -->
+    <meta name="description" content="Read and decode a QR code from an image file or screenshot. Runs 100% in your browser — images are never uploaded.">
+    <link rel="canonical" href="https://jongsic.github.io/localutil/qr-reader.html">
+    <link rel="icon" href="favicon.ico" sizes="any">
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="LocalUtil">
+    <meta property="og:title" content="QR Code Reader from Image — LocalUtil">
+    <meta property="og:description" content="Read and decode a QR code from an image file or screenshot. Runs 100% in your browser — images are never uploaded.">
+    <meta property="og:image" content="https://jongsic.github.io/localutil/og.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:url" content="https://jongsic.github.io/localutil/qr-reader.html">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:image" content="https://jongsic.github.io/localutil/og.png">
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebApplication","name":"QR Code Reader from Image","url":"https://jongsic.github.io/localutil/qr-reader.html","description":"Read and decode a QR code from an image file or screenshot. Runs 100% in your browser — images are never uploaded.","applicationCategory":"DeveloperApplication","operatingSystem":"Any","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"isPartOf":{"@type":"WebSite","name":"LocalUtil","url":"https://jongsic.github.io/localutil/"}}</script>
+    <!-- /social -->
+    <script src="theme-init.js"></script>
+    <link rel="stylesheet" href="styles.css">
+    <script src="vendor/jsQR.min.js"></script>
+    <style>
+        /* Page-specific: the QR image drop zone */
+        .qr-drop-zone {
+            flex: 1;
+            width: 100%;
+            min-height: 300px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            border: 2px dashed var(--border-strong);
+            border-radius: var(--r-md);
+            background-color: var(--bg-subtle);
+            cursor: pointer;
+            overflow: hidden;
+            transition: border-color 0.18s, background-color 0.18s;
+        }
+        .qr-drop-zone:hover {
+            border-color: var(--primary);
+            background-color: var(--bg-hover);
+        }
+        .qr-drop-zone.dragover {
+            border-color: var(--primary);
+            background-color: var(--primary-soft);
+        }
+
+        .qr-canvas {
+            display: none;
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+            border-radius: var(--r-sm);
+        }
+
+        .qr-placeholder {
+            text-align: center;
+            color: var(--text-muted);
+        }
+        .qr-placeholder-icon {
+            color: var(--primary);
+            opacity: 0.8;
+            margin-bottom: 14px;
+        }
+        .qr-placeholder-main {
+            font-size: 0.95rem;
+            font-weight: 600;
+            color: var(--text-main);
+            margin-bottom: 6px;
+        }
+        .qr-placeholder-sub {
+            font-size: 0.82rem;
+            color: var(--text-muted);
+        }
+    </style>
+</head>
+
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar" id="app-sidebar"></aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <header class="topbar" id="app-topbar">
+                <div class="topbar-title">
+                    <h1 id="current-tool-title">QR Reader</h1>
+                    <p id="current-tool-desc" class="topbar-desc">Read QR codes from an image</p>
+                </div>
+            </header>
+
+            <div class="tools-container">
+                <section id="tool-qr" class="tool-section active">
+                    <div class="tool-shell">
+                        <div class="split-pane">
+                            <div class="pane">
+                                <div>
+                                    <div class="card-title" style="margin:0;">Image</div>
+                                    <div class="field-hint">Drop, click, or paste an image that contains a QR code.</div>
+                                </div>
+                                <div id="qr-drop-zone" class="qr-drop-zone">
+                                    <canvas id="qr-canvas" class="qr-canvas"></canvas>
+                                    <div id="qr-placeholder" class="qr-placeholder">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="52" height="52" viewBox="0 0 24 24" fill="none"
+                                            stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"
+                                            class="qr-placeholder-icon">
+                                            <rect x="3" y="3" width="7" height="7"></rect>
+                                            <rect x="14" y="3" width="7" height="7"></rect>
+                                            <rect x="3" y="14" width="7" height="7"></rect>
+                                            <rect x="14" y="14" width="3" height="3"></rect>
+                                            <line x1="21" y1="14" x2="21" y2="21"></line>
+                                            <line x1="14" y1="21" x2="21" y2="21"></line>
+                                        </svg>
+                                        <p class="qr-placeholder-main">Drop an image here, or click to upload</p>
+                                        <p class="qr-placeholder-sub">You can also paste from clipboard · Ctrl/⌘ + V</p>
+                                        <p class="field-hint" style="margin-top:10px;">Supports PNG, JPG, GIF, BMP, WebP</p>
+                                    </div>
+                                </div>
+                                <input type="file" id="qr-file-input" accept="image/*" style="display:none;">
+                                <div class="flex-row gap-1">
+                                    <button id="btn-qr-clear" class="btn btn-ghost" style="margin-left:auto;">Clear</button>
+                                </div>
+                            </div>
+
+                            <div class="pane">
+                                <label for="qr-result">Decoded text</label>
+                                <textarea id="qr-result" placeholder="Decoded QR content will appear here…" readonly></textarea>
+                                <button class="btn btn-small copy-btn" data-clipboard-target="#qr-result">Copy</button>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="toast">Copied to clipboard!</div>
+
+    <script src="app.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const dropZone = document.getElementById('qr-drop-zone');
+            const fileInput = document.getElementById('qr-file-input');
+            const canvas = document.getElementById('qr-canvas');
+            const placeholder = document.getElementById('qr-placeholder');
+            const resultArea = document.getElementById('qr-result');
+            const ctx = canvas.getContext('2d');
+
+            function processImage(imageSource) {
+                const img = new Image();
+                img.onload = () => {
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    ctx.drawImage(img, 0, 0);
+
+                    canvas.style.display = 'block';
+                    placeholder.style.display = 'none';
+
+                    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                    const code = jsQR(imageData.data, imageData.width, imageData.height);
+
+                    if (code) {
+                        resultArea.value = code.data;
+                    } else {
+                        resultArea.value = 'No QR code found in this image.';
+                    }
+                };
+                img.onerror = () => {
+                    resultArea.value = 'Failed to load image.';
+                };
+
+                if (typeof imageSource === 'string') {
+                    img.src = imageSource;
+                } else {
+                    const reader = new FileReader();
+                    reader.onload = (e) => { img.src = e.target.result; };
+                    reader.readAsDataURL(imageSource);
+                }
+            }
+
+            // Click to upload
+            dropZone.addEventListener('click', () => {
+                fileInput.click();
+            });
+
+            fileInput.addEventListener('change', (e) => {
+                const file = e.target.files[0];
+                if (file) processImage(file);
+            });
+
+            // Drag & drop
+            dropZone.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                dropZone.classList.add('dragover');
+            });
+
+            dropZone.addEventListener('dragleave', () => {
+                dropZone.classList.remove('dragover');
+            });
+
+            dropZone.addEventListener('drop', (e) => {
+                e.preventDefault();
+                dropZone.classList.remove('dragover');
+                const file = e.dataTransfer.files[0];
+                if (file && file.type.startsWith('image/')) {
+                    processImage(file);
+                }
+            });
+
+            // Clipboard paste (Ctrl+V / Cmd+V)
+            document.addEventListener('paste', (e) => {
+                const items = e.clipboardData.items;
+                for (let i = 0; i < items.length; i++) {
+                    if (items[i].type.startsWith('image/')) {
+                        e.preventDefault();
+                        const blob = items[i].getAsFile();
+                        processImage(blob);
+                        return;
+                    }
+                }
+            });
+
+            // Clear
+            document.getElementById('btn-qr-clear').addEventListener('click', () => {
+                canvas.style.display = 'none';
+                placeholder.style.display = '';
+                resultArea.value = '';
+                fileInput.value = '';
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+            });
+        });
+    </script>
+</body>
+
+</html>

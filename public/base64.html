@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
+    <title>Base64 Encode / Decode Online — LocalUtil</title>
+    <!-- social / favicon -->
+    <meta name="description" content="Encode text to Base64 and decode Base64 back to text. Runs 100% in your browser — nothing is uploaded.">
+    <link rel="canonical" href="https://jongsic.github.io/localutil/base64.html">
+    <link rel="icon" href="favicon.ico" sizes="any">
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="LocalUtil">
+    <meta property="og:title" content="Base64 Encode / Decode Online — LocalUtil">
+    <meta property="og:description" content="Encode text to Base64 and decode Base64 back to text. Runs 100% in your browser — nothing is uploaded.">
+    <meta property="og:image" content="https://jongsic.github.io/localutil/og.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:url" content="https://jongsic.github.io/localutil/base64.html">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:image" content="https://jongsic.github.io/localutil/og.png">
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebApplication","name":"Base64 Encode / Decode Online","url":"https://jongsic.github.io/localutil/base64.html","description":"Encode text to Base64 and decode Base64 back to text. Runs 100% in your browser — nothing is uploaded.","applicationCategory":"DeveloperApplication","operatingSystem":"Any","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"isPartOf":{"@type":"WebSite","name":"LocalUtil","url":"https://jongsic.github.io/localutil/"}}</script>
+    <!-- /social -->
+    <script src="theme-init.js"></script>
+    <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+    <div class="app-container">
+        <aside class="sidebar" id="app-sidebar"></aside>
+
+        <main class="main-content">
+            <header class="topbar" id="app-topbar">
+                <div class="topbar-title">
+                    <h1 id="current-tool-title">Base64</h1>
+                    <p id="current-tool-desc" class="topbar-desc">Encode &amp; decode Base64 text</p>
+                </div>
+            </header>
+
+            <div class="tools-container">
+                <section id="tool-base64" class="tool-section active">
+                    <div class="tool-shell">
+                        <div class="split-pane">
+                            <div class="pane">
+                                <label for="b64-input">Input</label>
+                                <textarea id="b64-input" placeholder="Type or paste text to encode, or Base64 to decode…"></textarea>
+                                <div class="flex-row gap-1">
+                                    <button id="btn-b64-encode" class="btn btn-primary">Encode →</button>
+                                    <button id="btn-b64-decode" class="btn">← Decode</button>
+                                    <button id="btn-b64-clear" class="btn btn-ghost" style="margin-left:auto;">Clear</button>
+                                </div>
+                            </div>
+                            <div class="pane">
+                                <label for="b64-output">Output</label>
+                                <textarea id="b64-output" placeholder="Result appears here…" readonly></textarea>
+                                <button class="btn btn-small copy-btn" data-clipboard-target="#b64-output">Copy</button>
+                            </div>
+                        </div>
+
+                        <div class="card">
+                            <div class="log-header mb-2">
+                                <div>
+                                    <div class="card-title" style="margin:0;">Recent conversions</div>
+                                    <div class="field-hint">Stored locally · last 10</div>
+                                </div>
+                                <button id="btn-b64-clear-log" class="btn btn-small">Clear</button>
+                            </div>
+                            <ul id="b64-log" class="log-list"></ul>
+                            <div id="b64-log-empty" class="field-hint">No conversions yet.</div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </div>
+
+    <div id="toast" class="toast">Copied to clipboard</div>
+
+    <script src="app.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const input = document.getElementById('b64-input');
+            const output = document.getElementById('b64-output');
+            const logList = document.getElementById('b64-log');
+            const logEmpty = document.getElementById('b64-log-empty');
+            const LOG_KEY = 'localutil-b64-log';
+
+            let logs = [];
+            try {
+                const stored = localStorage.getItem(LOG_KEY);
+                if (stored) {
+                    logs = JSON.parse(stored);
+                    if (!Array.isArray(logs)) logs = [];
+                }
+            } catch (e) { logs = []; }
+
+            function truncate(str, len) {
+                return str.length > len ? str.substring(0, len) + '…' : str;
+            }
+
+            function addLog(op, inputVal, outputVal) {
+                const entry = op + ': ' + truncate(inputVal, 40) + ' → ' + truncate(outputVal, 40);
+                logs.unshift(entry);
+                if (logs.length > 10) logs.pop();
+                try { localStorage.setItem(LOG_KEY, JSON.stringify(logs)); } catch (e) {}
+                renderLog();
+            }
+
+            function renderLog() {
+                logList.innerHTML = '';
+                logEmpty.style.display = logs.length ? 'none' : 'block';
+                logs.forEach(entry => {
+                    const li = document.createElement('li');
+                    li.className = 'history-item';
+                    li.textContent = entry;
+                    logList.appendChild(li);
+                });
+            }
+
+            renderLog();
+
+            document.getElementById('btn-b64-encode').addEventListener('click', () => {
+                try {
+                    const result = btoa(unescape(encodeURIComponent(input.value)));
+                    output.value = result;
+                    output.classList.remove('error');
+                    addLog('Encode', input.value, result);
+                } catch (e) {
+                    output.value = e.message;
+                    output.classList.add('error');
+                }
+            });
+
+            document.getElementById('btn-b64-decode').addEventListener('click', () => {
+                try {
+                    const result = decodeURIComponent(escape(atob(input.value.trim())));
+                    output.value = result;
+                    output.classList.remove('error');
+                    addLog('Decode', input.value.trim(), result);
+                } catch (e) {
+                    output.value = 'Invalid Base64 format.';
+                    output.classList.add('error');
+                }
+            });
+
+            document.getElementById('btn-b64-clear').addEventListener('click', () => {
+                input.value = '';
+                output.value = '';
+                output.classList.remove('error');
+                input.focus();
+            });
+
+            document.getElementById('btn-b64-clear-log').addEventListener('click', () => {
+                logs.length = 0;
+                try { localStorage.removeItem(LOG_KEY); } catch (e) {}
+                renderLog();
+            });
+        });
+    </script>
+</body>
+
+</html>

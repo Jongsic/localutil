@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
+    <title>GPG / PGP Key Inspector — LocalUtil</title>
+    <!-- social / favicon -->
+    <meta name="description" content="Inspect a GPG / PGP key: key ID, fingerprint, algorithm, subkeys, and expiry. Runs 100% in your browser — keys never leave your machine.">
+    <link rel="canonical" href="https://jongsic.github.io/localutil/gpg.html">
+    <link rel="icon" href="favicon.ico" sizes="any">
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="LocalUtil">
+    <meta property="og:title" content="GPG / PGP Key Inspector — LocalUtil">
+    <meta property="og:description" content="Inspect a GPG / PGP key: key ID, fingerprint, algorithm, subkeys, and expiry. Runs 100% in your browser — keys never leave your machine.">
+    <meta property="og:image" content="https://jongsic.github.io/localutil/og.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:url" content="https://jongsic.github.io/localutil/gpg.html">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:image" content="https://jongsic.github.io/localutil/og.png">
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebApplication","name":"GPG / PGP Key Inspector","url":"https://jongsic.github.io/localutil/gpg.html","description":"Inspect a GPG / PGP key: key ID, fingerprint, algorithm, subkeys, and expiry. Runs 100% in your browser — keys never leave your machine.","applicationCategory":"DeveloperApplication","operatingSystem":"Any","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"isPartOf":{"@type":"WebSite","name":"LocalUtil","url":"https://jongsic.github.io/localutil/"}}</script>
+    <!-- /social -->
+    <script src="theme-init.js"></script>
+    <link rel="stylesheet" href="styles.css">
+    <script src="vendor/openpgp.min.js"></script>
+    <style>
+        /* GPG inspector — page-specific readout layout */
+        #gpg-input { min-height: 160px; }
+
+        .gpg-row {
+            display: flex;
+            gap: 16px;
+            padding: 9px 0;
+            align-items: baseline;
+        }
+        .gpg-row + .gpg-row { border-top: 1px solid var(--border-color); }
+
+        .gpg-row-key {
+            flex: 0 0 190px;
+            color: var(--text-muted);
+            font-size: 0.82rem;
+            font-weight: 600;
+        }
+        .gpg-row-val {
+            flex: 1;
+            min-width: 0;
+            font-family: var(--font-mono);
+            font-size: 0.85rem;
+            word-break: break-word;
+            white-space: pre-wrap;
+            color: var(--text-main);
+        }
+
+        .gpg-key-heading {
+            font-size: 0.72rem;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: var(--primary);
+            margin-top: 8px;
+        }
+
+        @media (max-width: 560px) {
+            .gpg-row { flex-direction: column; gap: 3px; }
+            .gpg-row-key { flex-basis: auto; }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar" id="app-sidebar"></aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <header class="topbar" id="app-topbar">
+                <div class="topbar-title">
+                    <h1 id="current-tool-title">GPG Key Inspector</h1>
+                    <p id="current-tool-desc" class="topbar-desc">Inspect GPG / PGP key details</p>
+                </div>
+            </header>
+
+            <div class="tools-container">
+                <section id="tool-gpg" class="tool-section active">
+                    <div class="tool-shell">
+                        <div class="card">
+                            <div class="card-title">Paste a PGP / GPG key</div>
+                            <div class="card-subtitle">Drop in an ASCII-armored public (or private) key block and we'll break down what's inside — parsing happens locally and no key material is sent to a server.</div>
+
+                            <div class="field-group">
+                                <label for="gpg-input">Key block</label>
+                                <textarea id="gpg-input" rows="8"
+                                    placeholder="-----BEGIN PGP PUBLIC KEY BLOCK-----&#10;...&#10;-----END PGP PUBLIC KEY BLOCK-----"></textarea>
+                                <div class="field-hint">Starts with <code>-----BEGIN PGP PUBLIC KEY BLOCK-----</code>. A block containing several keys is fine.</div>
+                            </div>
+
+                            <div class="flex-row gap-1 mt-2">
+                                <button id="btn-gpg-inspect" class="btn btn-primary">Inspect key</button>
+                                <button id="btn-gpg-clear" class="btn btn-ghost">Clear</button>
+                            </div>
+                        </div>
+
+                        <div id="gpg-error" class="card error-text" style="display:none;border-color:var(--danger);"></div>
+
+                        <div id="gpg-results" class="flex-col gap-2" style="display:none;"></div>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="toast">Copied to clipboard!</div>
+
+    <script src="app.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const input = document.getElementById('gpg-input');
+            const resultsEl = document.getElementById('gpg-results');
+            const errorEl = document.getElementById('gpg-error');
+
+            const SYMMETRIC = { 1: 'IDEA', 2: '3DES', 3: 'CAST5', 4: 'Blowfish', 7: 'AES-128', 8: 'AES-192', 9: 'AES-256', 10: 'Twofish', 11: 'Camellia-128', 12: 'Camellia-192', 13: 'Camellia-256' };
+            const HASH = { 1: 'MD5', 2: 'SHA-1', 3: 'RIPEMD-160', 8: 'SHA-256', 9: 'SHA-384', 10: 'SHA-512', 11: 'SHA-224' };
+            const COMPRESSION = { 0: 'Uncompressed', 1: 'ZIP', 2: 'ZLIB', 3: 'BZip2' };
+            const AEAD = { 1: 'EAX', 2: 'OCB', 3: 'GCM' };
+
+            const KEY_FLAGS = [
+                [0x01, 'Certify'],
+                [0x02, 'Sign'],
+                [0x04, 'Encrypt communications'],
+                [0x08, 'Encrypt storage'],
+                [0x10, 'Split key'],
+                [0x20, 'Authenticate'],
+                [0x80, 'Group key'],
+            ];
+
+            function showError(msg) {
+                errorEl.textContent = msg;
+                errorEl.style.display = 'block';
+                resultsEl.style.display = 'none';
+            }
+
+            function clearError() {
+                errorEl.style.display = 'none';
+                errorEl.textContent = '';
+            }
+
+            function fmtDate(d) {
+                if (!d) return '—';
+                try { return new Date(d).toISOString().replace('T', ' ').replace('.000Z', ' UTC'); }
+                catch (e) { return String(d); }
+            }
+
+            function fmtFingerprint(fp) {
+                if (!fp) return '—';
+                const up = fp.toUpperCase();
+                return up.replace(/(.{4})/g, '$1 ').trim();
+            }
+
+            function mapFlags(arr) {
+                if (!arr) return [];
+                // arr may be Uint8Array or Array of bytes
+                let byte = 0;
+                for (let i = 0; i < arr.length; i++) byte |= arr[i];
+                return KEY_FLAGS.filter(([bit]) => (byte & bit)).map(([, name]) => name);
+            }
+
+            function mapList(arr, table) {
+                if (!arr || !arr.length) return [];
+                return Array.from(arr).map(v => table[v] || ('#' + v));
+            }
+
+            function algoDescription(info) {
+                if (!info) return '—';
+                let s = info.algorithm || 'unknown';
+                if (info.bits) s += ' (' + info.bits + ' bits)';
+                else if (info.curve) s += ' (' + info.curve + ')';
+                return s;
+            }
+
+            function expiryInfo(exp) {
+                if (!exp || exp === Infinity) return 'Never';
+                const date = fmtDate(exp);
+                const expired = new Date(exp).getTime() < Date.now();
+                return date + (expired ? '  ⚠ EXPIRED' : '');
+            }
+
+            function makeRow(key, value) {
+                const row = document.createElement('div');
+                row.className = 'gpg-row';
+                const k = document.createElement('div');
+                k.className = 'gpg-row-key';
+                k.textContent = key;
+                const v = document.createElement('div');
+                v.className = 'gpg-row-val';
+                v.textContent = (value === null || value === undefined || value === '') ? '—' : value;
+                row.appendChild(k);
+                row.appendChild(v);
+                return row;
+            }
+
+            function makeCard(title, rows) {
+                const card = document.createElement('div');
+                card.className = 'card';
+                const h = document.createElement('div');
+                h.className = 'card-title';
+                h.textContent = title;
+                card.appendChild(h);
+                rows.forEach(([k, v]) => card.appendChild(makeRow(k, v)));
+                return card;
+            }
+
+            function firstSelfCert(user) {
+                if (!user) return null;
+                const certs = user.selfCertifications || [];
+                if (!certs.length) return null;
+                // pick the most recent valid-looking cert
+                let best = certs[0];
+                certs.forEach(c => {
+                    if (c.created && best.created && new Date(c.created) > new Date(best.created)) best = c;
+                });
+                return best;
+            }
+
+            function makeKeyHeading(text) {
+                const h = document.createElement('div');
+                h.className = 'gpg-key-heading';
+                h.textContent = text;
+                return h;
+            }
+
+            function render(key, keyIndex, total) {
+                if (total > 1) {
+                    resultsEl.appendChild(makeKeyHeading('Key ' + (keyIndex + 1) + ' of ' + total));
+                }
+
+                const isPrivate = key.isPrivate && key.isPrivate();
+                const primaryAlgo = key.getAlgorithmInfo();
+                const fp = key.getFingerprint();
+                const keyId = key.getKeyID().toHex().toUpperCase();
+                const version = key.keyPacket && key.keyPacket.version;
+
+                let expiration = null;
+                // getExpirationTime is async; handled by caller passing resolved value
+                expiration = key._resolvedExpiration;
+
+                const primaryRows = [
+                    ['Type', isPrivate ? 'Private key (⚠ contains secret material)' : 'Public key'],
+                    ['Version', version ? ('v' + version) : '—'],
+                    ['Fingerprint', fmtFingerprint(fp)],
+                    ['Key ID (long)', keyId],
+                    ['Key ID (short)', keyId.slice(-8)],
+                    ['Algorithm', algoDescription(primaryAlgo)],
+                    ['Created', fmtDate(key.getCreationTime())],
+                    ['Expires', expiryInfo(expiration)],
+                ];
+                resultsEl.appendChild(makeCard('Primary Key', primaryRows));
+
+                // User IDs
+                const users = key.users || [];
+                users.forEach((user, idx) => {
+                    const uid = user.userID || {};
+                    const cert = firstSelfCert(user);
+                    const rows = [
+                        ['User ID', uid.userID],
+                        ['Name', uid.name],
+                        ['Email', uid.email],
+                        ['Comment', uid.comment],
+                        ['Is primary', user.isPrimaryUser ? 'reported by lib' : (idx === 0 ? 'likely (first)' : 'no')],
+                    ];
+                    if (cert) {
+                        rows.push(['Self-sig created', fmtDate(cert.created)]);
+                        const flags = mapFlags(cert.keyFlags);
+                        if (flags.length) rows.push(['Key usage flags', flags.join(', ')]);
+                        const sym = mapList(cert.preferredSymmetricAlgorithms, SYMMETRIC);
+                        if (sym.length) rows.push(['Pref. ciphers', sym.join(', ')]);
+                        const aead = mapList(cert.preferredAEADAlgorithms, AEAD);
+                        if (aead.length) rows.push(['Pref. AEAD', aead.join(', ')]);
+                        const hash = mapList(cert.preferredHashAlgorithms, HASH);
+                        if (hash.length) rows.push(['Pref. hashes', hash.join(', ')]);
+                        const comp = mapList(cert.preferredCompressionAlgorithms, COMPRESSION);
+                        if (comp.length) rows.push(['Pref. compression', comp.join(', ')]);
+                        if (cert.keyServer) rows.push(['Pref. key server', cert.keyServer]);
+                        const feats = [];
+                        if (cert.features) {
+                            const fbyte = cert.features[0] || 0;
+                            if (fbyte & 0x01) feats.push('MDC');
+                            if (fbyte & 0x02) feats.push('AEAD');
+                            if (fbyte & 0x04) feats.push('v5 keys');
+                        }
+                        if (feats.length) rows.push(['Features', feats.join(', ')]);
+                        if (cert.isPrimaryUserID) rows.push(['Primary UID flag', 'true']);
+                    }
+                    resultsEl.appendChild(makeCard('User ID #' + (idx + 1), rows));
+                });
+
+                // Subkeys
+                const subkeys = key.getSubkeys ? key.getSubkeys() : (key.subkeys || []);
+                subkeys.forEach((sub, idx) => {
+                    const sAlgo = sub.getAlgorithmInfo();
+                    const binding = (sub.bindingSignatures && sub.bindingSignatures[0]) || null;
+                    const rows = [
+                        ['Fingerprint', fmtFingerprint(sub.getFingerprint())],
+                        ['Key ID', sub.getKeyID().toHex().toUpperCase()],
+                        ['Algorithm', algoDescription(sAlgo)],
+                        ['Created', fmtDate(sub.getCreationTime())],
+                        ['Expires', expiryInfo(sub._resolvedExpiration)],
+                    ];
+                    if (binding) {
+                        const flags = mapFlags(binding.keyFlags);
+                        if (flags.length) rows.push(['Key usage flags', flags.join(', ')]);
+                        rows.push(['Binding sig created', fmtDate(binding.created)]);
+                    }
+                    resultsEl.appendChild(makeCard('Subkey #' + (idx + 1), rows));
+                });
+
+                // Raw armored echo / packet count
+                const packetRows = [
+                    ['Total user IDs', String(users.length)],
+                    ['Total subkeys', String(subkeys.length)],
+                    ['Armored length', String((input.value || '').trim().length) + ' chars'],
+                ];
+                resultsEl.appendChild(makeCard('Summary', packetRows));
+            }
+
+            async function inspect() {
+                clearError();
+                const raw = (input.value || '').trim();
+                if (!raw) { showError('Please paste a PGP/GPG public key.'); return; }
+
+                if (typeof openpgp === 'undefined') {
+                    showError('OpenPGP library failed to load. Check your network connection.');
+                    return;
+                }
+
+                let keys;
+                try {
+                    // readKeys handles blocks containing one or many keys
+                    keys = await openpgp.readKeys({ armoredKeys: raw });
+                } catch (e) {
+                    showError('Could not parse the key: ' + (e && e.message ? e.message : e));
+                    return;
+                }
+
+                if (!keys || !keys.length) {
+                    showError('No keys found in the input.');
+                    return;
+                }
+
+                // Resolve async expiration times and attach for the synchronous renderer
+                for (const key of keys) {
+                    try { key._resolvedExpiration = await key.getExpirationTime(); } catch (e) { key._resolvedExpiration = null; }
+                    const subs = key.getSubkeys ? key.getSubkeys() : [];
+                    for (const sub of subs) {
+                        try { sub._resolvedExpiration = await sub.getExpirationTime(); } catch (e) { sub._resolvedExpiration = null; }
+                    }
+                }
+
+                resultsEl.innerHTML = '';
+                keys.forEach((key, i) => render(key, i, keys.length));
+                resultsEl.style.display = 'flex';
+            }
+
+            document.getElementById('btn-gpg-inspect').addEventListener('click', inspect);
+            document.getElementById('btn-gpg-clear').addEventListener('click', () => {
+                input.value = '';
+                clearError();
+                resultsEl.style.display = 'none';
+                resultsEl.innerHTML = '';
+            });
+        });
+    </script>
+</body>
+
+</html>

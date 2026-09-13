@@ -1,0 +1,12 @@
+{
+  "name": "localutil-tests",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test",
+    "setup": "npm install && playwright install chromium"
+  },
+  "devDependencies": {
+    "playwright": "^1.61.1"
+  }
+}

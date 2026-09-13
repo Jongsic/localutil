@@ -1,0 +1,1576 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
+    <title>Image to Base64 Data URI Converter — LocalUtil</title>
+    <!-- social / favicon -->
+    <meta name="description" content="Convert an image to a Base64 data URI and decode data URIs back to images. Resize first, cap how long the output may get, compare PNG / JPEG / WebP sizes, and copy the ready-made HTML img or CSS background snippet. Runs 100% in your browser — nothing is uploaded.">
+    <link rel="canonical" href="https://jongsic.github.io/localutil/image-base64.html">
+    <link rel="icon" href="favicon.ico" sizes="any">
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="LocalUtil">
+    <meta property="og:title" content="Image to Base64 Data URI Converter — LocalUtil">
+    <meta property="og:description" content="Convert an image to a Base64 data URI and decode data URIs back to images. Resize first, cap how long the output may get, compare PNG / JPEG / WebP sizes, and copy the ready-made HTML img or CSS background snippet. Runs 100% in your browser — nothing is uploaded.">
+    <meta property="og:image" content="https://jongsic.github.io/localutil/og.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:url" content="https://jongsic.github.io/localutil/image-base64.html">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:image" content="https://jongsic.github.io/localutil/og.png">
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebApplication","name":"Image to Base64 Data URI Converter","url":"https://jongsic.github.io/localutil/image-base64.html","description":"Convert an image to a Base64 data URI and decode data URIs back to images. Resize first, cap how long the output may get, compare PNG / JPEG / WebP sizes, and copy the ready-made HTML img or CSS background snippet. Runs 100% in your browser — nothing is uploaded.","applicationCategory":"DeveloperApplication","operatingSystem":"Any","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"isPartOf":{"@type":"WebSite","name":"LocalUtil","url":"https://jongsic.github.io/localutil/"}}</script>
+    <!-- /social -->
+    <script src="theme-init.js"></script>
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        /* Drop zone */
+        .ib-drop-zone {
+            width: 100%;
+            min-height: 120px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 16px;
+            border: 2px dashed var(--border-strong);
+            border-radius: var(--r-md);
+            background-color: var(--bg-subtle);
+            cursor: pointer;
+            text-align: center;
+            transition: border-color 0.18s, background-color 0.18s;
+        }
+        .ib-drop-zone:hover { border-color: var(--primary); background-color: var(--bg-hover); }
+        .ib-drop-zone.dragover { border-color: var(--primary); background-color: var(--primary-soft); }
+        .ib-drop-icon { color: var(--primary); opacity: 0.85; margin-bottom: 10px; }
+        .ib-drop-main { font-size: 0.92rem; font-weight: 600; color: var(--text-main); margin-bottom: 5px; }
+        .ib-drop-sub { font-size: 0.8rem; color: var(--text-muted); }
+
+        .ib-source-row { display: flex; align-items: center; gap: 12px; }
+        .ib-source-thumb {
+            width: 56px; height: 56px; flex-shrink: 0;
+            border-radius: var(--r-sm);
+            border: 1px solid var(--border-color);
+            object-fit: contain;
+            background: var(--bg-subtle);
+        }
+
+        /* Multi-image strip */
+        .ib-strip { display: flex; flex-wrap: wrap; gap: 8px; }
+        .ib-strip-item {
+            position: relative;
+            width: 62px;
+            padding: 4px 4px 3px;
+            border: 1px solid var(--border-color);
+            border-radius: var(--r-sm);
+            background: var(--bg-subtle);
+            cursor: pointer;
+            text-align: center;
+        }
+        .ib-strip-item:hover { border-color: var(--border-strong); }
+        .ib-strip-item.selected { border-color: var(--primary); background: var(--primary-soft); }
+        .ib-strip-item img {
+            width: 100%; height: 42px; object-fit: contain; display: block;
+        }
+        .ib-strip-size {
+            font-size: 0.62rem; color: var(--text-muted);
+            font-variant-numeric: tabular-nums;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        .ib-strip-item.over .ib-strip-size { color: var(--danger); }
+        .ib-strip-del {
+            position: absolute; top: -6px; right: -6px;
+            width: 18px; height: 18px; line-height: 16px;
+            border-radius: 50%;
+            border: 1px solid var(--border-strong);
+            background: var(--bg-elevated);
+            color: var(--text-muted);
+            font-size: 0.7rem; padding: 0; cursor: pointer;
+        }
+        .ib-strip-del:hover { color: #fff; background: var(--danger); border-color: var(--danger); }
+
+        /* Option rows */
+        .ib-opt-row { display: flex; align-items: center; gap: 10px; }
+        .ib-opt-row > label { min-width: 104px; margin: 0; flex-shrink: 0; }
+        .ib-opt-row select { width: auto; flex: 1; min-width: 0; }
+        .ib-opt-row input[type="range"] { flex: 1; min-width: 0; }
+        .ib-opt-val {
+            min-width: 42px; text-align: right;
+            font-size: 0.82rem; color: var(--text-muted);
+            font-variant-numeric: tabular-nums;
+        }
+        .ib-custom-row { display: flex; align-items: center; gap: 8px; }
+        .ib-custom-row input { width: 100%; padding: 8px 11px; }
+        .ib-custom-row span { color: var(--text-muted); font-size: 0.85rem; }
+        .ib-check-row { display: flex; align-items: center; gap: 8px; font-size: 0.85rem; }
+        .ib-check-row input { margin: 0; }
+        .ib-color {
+            width: 44px; height: 30px; padding: 2px;
+            border: 1px solid var(--border-color);
+            border-radius: var(--r-sm);
+            background: var(--bg-subtle);
+            cursor: pointer;
+        }
+
+        /* Format comparison */
+        .ib-compare { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+        .ib-compare-btn {
+            padding: 5px 9px;
+            font-size: 0.75rem;
+            border-radius: var(--r-xs);
+            font-variant-numeric: tabular-nums;
+        }
+        .ib-compare-btn .ib-compare-size { color: var(--text-muted); margin-left: 5px; }
+        .ib-compare-btn.selected {
+            border-color: var(--primary);
+            background-color: var(--primary-soft);
+            color: var(--active-text);
+        }
+        .ib-compare-btn.selected .ib-compare-size { color: var(--active-text); }
+        .ib-compare-btn.over .ib-compare-size { color: var(--danger); }
+
+        /* Stats */
+        .ib-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 10px 16px;
+            padding: 12px 14px;
+            border: 1px solid var(--border-color);
+            border-radius: var(--r-sm);
+            background-color: var(--bg-subtle);
+        }
+        .ib-stats div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+        .ib-stats span { font-size: 0.74rem; color: var(--text-muted); }
+        .ib-stats strong {
+            font-size: 0.85rem; font-weight: 600;
+            font-variant-numeric: tabular-nums;
+            word-break: break-word;
+        }
+        .ib-stats strong.over { color: var(--danger); }
+
+        /* Preview */
+        .ib-preview-wrap {
+            display: flex; align-items: center; justify-content: center;
+            padding: 14px;
+            min-height: 190px;
+            border: 1px solid var(--border-strong);
+            border-radius: var(--r-sm);
+            /* checkerboard shows through transparent areas */
+            background-color: #ffffff;
+            background-image:
+                linear-gradient(45deg, #d7dbe0 25%, transparent 25%),
+                linear-gradient(-45deg, #d7dbe0 25%, transparent 25%),
+                linear-gradient(45deg, transparent 75%, #d7dbe0 75%),
+                linear-gradient(-45deg, transparent 75%, #d7dbe0 75%);
+            background-size: 18px 18px;
+            background-position: 0 0, 0 9px, 9px -9px, -9px 0;
+            overflow: hidden;
+        }
+        .ib-preview-wrap img {
+            display: block; width: auto; height: auto;
+            max-width: 100%; max-height: 340px;
+        }
+        .ib-empty {
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            gap: 10px; min-height: 190px; width: 100%;
+            border: 2px dashed var(--border-strong);
+            border-radius: var(--r-md);
+            background-color: var(--bg-subtle);
+            color: var(--text-muted);
+            font-size: 0.88rem; text-align: center; padding: 18px;
+        }
+        .ib-empty svg { color: var(--primary); opacity: 0.85; }
+
+        /* Notices */
+        .ib-note {
+            display: flex; gap: 8px;
+            font-size: 0.8rem; line-height: 1.5;
+            color: var(--text-muted);
+        }
+        .ib-note::before { content: "•"; color: var(--text-faint); }
+        .ib-note.alarm { color: var(--warning); }
+        .ib-note.alarm::before { content: "!"; font-weight: 700; }
+        .ib-warn {
+            padding: 11px 13px;
+            border: 1px solid var(--warning);
+            border-radius: var(--r-sm);
+            background-color: var(--bg-subtle);
+            font-size: 0.85rem;
+            line-height: 1.55;
+        }
+        .ib-warn strong { color: var(--warning); }
+        .ib-warn .ib-warn-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+
+        /* Output */
+        #ib-datauri, #ib-decode-input { resize: vertical; font-size: 0.78rem; }
+        #ib-datauri { min-height: 108px; }
+        #ib-decode-input { min-height: 190px; flex: 1; }
+
+        /* Snippet blocks */
+        .ib-block + .ib-block { margin-top: 12px; }
+        .ib-block-head {
+            display: flex; align-items: center; gap: 10px;
+            margin-bottom: 5px;
+        }
+        .ib-block-title { font-size: 0.8rem; font-weight: 600; }
+        .ib-block-head .btn { margin-left: auto; }
+        .ib-block-code { min-height: 0; font-size: 0.8rem; }
+
+        /* The CSS demo sits on the plain page background on purpose — that is what a
+           CSS background actually looks like in a page. The dashed border marks the box. */
+        .ib-css-demo { margin-top: 10px; }
+        .ib-css-demo-label { font-size: 0.75rem; color: var(--text-muted); margin-bottom: 8px; }
+        .ib-css-demo-box {
+            max-width: 100%;
+            max-height: 300px;
+            border: 1px dashed var(--border-strong);
+            border-radius: var(--r-sm);
+            background-repeat: no-repeat;
+            background-size: contain;
+            background-position: center;
+        }
+
+        /* Six tabs do not fit a phone in one row, so let them wrap. */
+        #ib-tabs { flex-wrap: wrap; max-width: 100%; }
+
+        #ib-download-btn:disabled, #ib-decode-download:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        /* The shared copy button pins itself to the pane corner; here it belongs in the row. */
+        .pane-head .copy-btn { position: static; }
+
+        .hidden { display: none !important; }
+    </style>
+</head>
+
+<body>
+    <div class="app-container">
+        <aside class="sidebar" id="app-sidebar"></aside>
+
+        <main class="main-content">
+            <header class="topbar" id="app-topbar">
+                <div class="topbar-title">
+                    <h1 id="current-tool-title">Image to Base64</h1>
+                    <p id="current-tool-desc" class="topbar-desc">Encode images as Base64 data URIs or decode one back — resize, cap the output, compare formats, copy the HTML / CSS / JSX snippet</p>
+                </div>
+            </header>
+
+            <div class="tools-container">
+                <section class="tool-section active">
+                    <div class="tool-shell">
+                        <div class="segmented" id="ib-mode" role="tablist" style="align-self:flex-start;">
+                            <button type="button" class="active" data-mode="encode" role="tab">Encode</button>
+                            <button type="button" data-mode="decode" role="tab">Decode</button>
+                        </div>
+
+                        <!-- ============================ ENCODE ============================ -->
+                        <div class="split-pane" id="ib-encode-view">
+                            <!-- Left: source + options -->
+                            <div class="pane">
+                                <div>
+                                    <div class="card-title" style="margin:0;">Image</div>
+                                    <div class="field-hint">Drop, click, or paste an image — several at once is fine. Nothing leaves your browser.</div>
+                                </div>
+
+                                <div id="ib-drop-zone" class="ib-drop-zone">
+                                    <div id="ib-drop-empty">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="38" height="38" viewBox="0 0 24 24"
+                                            fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
+                                            stroke-linejoin="round" class="ib-drop-icon">
+                                            <rect x="3" y="3" width="18" height="18" rx="2"></rect>
+                                            <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                                            <path d="m21 15-5-5L5 21"></path>
+                                        </svg>
+                                        <p class="ib-drop-main">Drop images, or click to upload</p>
+                                        <p class="ib-drop-sub">Paste works too · Ctrl/⌘ + V</p>
+                                    </div>
+                                    <div id="ib-source-row" class="ib-source-row hidden">
+                                        <img id="ib-source-thumb" class="ib-source-thumb" alt="source">
+                                        <div style="text-align:left;min-width:0;">
+                                            <div id="ib-source-name" style="font-weight:600;font-size:0.88rem;word-break:break-all;"></div>
+                                            <div id="ib-source-dim" class="field-hint" style="margin:2px 0 0;"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <input type="file" id="ib-file-input" accept="image/*" multiple style="display:none;">
+
+                                <div id="ib-strip" class="ib-strip hidden"></div>
+
+                                <div style="margin-top:2px;">
+                                    <div class="card-title" style="margin:0;">Output options</div>
+                                    <div class="field-hint">Resizing happens before encoding, so a huge screenshot still becomes a small data URI.</div>
+                                </div>
+
+                                <div class="ib-opt-row">
+                                    <label for="ib-maxdim">Max size</label>
+                                    <select id="ib-maxdim" class="select">
+                                        <option value="128">128 × 128</option>
+                                        <option value="256">256 × 256</option>
+                                        <option value="512" selected>512 × 512</option>
+                                        <option value="768">768 × 768</option>
+                                        <option value="1024">1024 × 1024</option>
+                                        <option value="2048">2048 × 2048</option>
+                                        <option value="custom">Custom…</option>
+                                        <option value="original">Original (no resize)</option>
+                                    </select>
+                                </div>
+                                <div class="ib-custom-row hidden" id="ib-custom-row" style="margin-left:114px;">
+                                    <input type="number" id="ib-max-w" min="1" step="1" value="512" aria-label="Max width">
+                                    <span>×</span>
+                                    <input type="number" id="ib-max-h" min="1" step="1" value="512" aria-label="Max height">
+                                    <span>px</span>
+                                </div>
+                                <div class="field-hint" style="margin-top:-4px;">The image is fitted inside that box and never enlarged — a smaller image stays its own size.</div>
+
+                                <div class="ib-opt-row">
+                                    <label for="ib-format">Format</label>
+                                    <select id="ib-format" class="select">
+                                        <option value="auto" selected>Keep original</option>
+                                        <option value="image/png">PNG</option>
+                                        <option value="image/jpeg">JPEG</option>
+                                        <option value="image/webp">WebP</option>
+                                        <option value="svg-url">SVG, URL-encoded</option>
+                                    </select>
+                                </div>
+
+                                <div class="ib-opt-row hidden" id="ib-quality-row">
+                                    <label for="ib-quality">Quality</label>
+                                    <input type="range" id="ib-quality" min="10" max="100" step="1" value="85">
+                                    <span id="ib-quality-val" class="ib-opt-val">85%</span>
+                                </div>
+
+                                <div class="ib-opt-row hidden" id="ib-bg-row">
+                                    <label for="ib-bg">Flatten onto</label>
+                                    <input type="color" id="ib-bg" class="ib-color" value="#ffffff">
+                                    <span class="field-hint" style="margin:0;">JPEG has no alpha, so transparency needs a colour.</span>
+                                </div>
+
+                                <div class="ib-opt-row">
+                                    <label for="ib-limit">Size cap</label>
+                                    <select id="ib-limit" class="select">
+                                        <option value="25600">25 KB</option>
+                                        <option value="51200">50 KB</option>
+                                        <option value="102400" selected>100 KB</option>
+                                        <option value="204800">200 KB</option>
+                                        <option value="512000">500 KB</option>
+                                        <option value="1048576">1 MB</option>
+                                        <option value="0">Unlimited</option>
+                                    </select>
+                                </div>
+                                <div class="field-hint" style="margin-top:-4px;">The cap is on the encoded data URI — the text that actually lands in your HTML or CSS, which Base64 makes about a third larger than the file.</div>
+
+                                <div class="ib-check-row hidden" id="ib-strip-row">
+                                    <input type="checkbox" id="ib-strip-meta">
+                                    <label for="ib-strip-meta" style="margin:0;cursor:pointer;">Strip metadata (forces a re-encode)</label>
+                                </div>
+
+                                <div class="hidden" id="ib-compare-wrap">
+                                    <div class="field-hint" style="margin-bottom:6px;">Same pixels, each format — pick the smallest that still looks right.</div>
+                                    <div class="ib-compare" id="ib-compare"></div>
+                                </div>
+
+                                <div class="ib-stats" id="ib-stats">
+                                    <div>
+                                        <span>Source</span>
+                                        <strong id="ib-stat-src">—</strong>
+                                    </div>
+                                    <div>
+                                        <span>Encoded image</span>
+                                        <strong id="ib-stat-out">—</strong>
+                                    </div>
+                                    <div>
+                                        <span>Data URI</span>
+                                        <strong id="ib-stat-uri">—</strong>
+                                    </div>
+                                    <div>
+                                        <span>Encoding overhead</span>
+                                        <strong id="ib-stat-overhead">—</strong>
+                                    </div>
+                                </div>
+
+                                <div id="ib-notes" class="flex-col" style="gap:5px;"></div>
+                            </div>
+
+                            <!-- Right: preview + output -->
+                            <div class="pane">
+                                <div>
+                                    <div class="card-title" style="margin:0;">Preview</div>
+                                    <div class="field-hint">Rendered from the data URI itself — what you see is what the snippet below produces.</div>
+                                </div>
+
+                                <div id="ib-empty" class="ib-empty">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24"
+                                        fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
+                                        stroke-linejoin="round">
+                                        <rect x="2" y="2.5" width="13" height="13" rx="2"></rect>
+                                        <circle cx="6.2" cy="6.7" r="1.2"></circle>
+                                        <path d="m2 12.2 3.2-3.2 3.6 3.6"></path>
+                                        <polyline points="17.5 15.5 21 19 17.5 22.5"></polyline>
+                                        <polyline points="13.5 22.5 10 19 13.5 15.5"></polyline>
+                                    </svg>
+                                    <div>Add an image to see it encoded as a data URI</div>
+                                </div>
+                                <div class="ib-preview-wrap hidden" id="ib-preview-wrap">
+                                    <img id="ib-preview" alt="encoded result">
+                                </div>
+
+                                <div class="ib-warn hidden" id="ib-warn">
+                                    <div id="ib-warn-text"></div>
+                                    <div class="ib-warn-actions">
+                                        <button id="ib-shrink-btn" class="btn btn-small" type="button">Shrink to fit</button>
+                                        <button id="ib-uncap-btn" class="btn btn-small" type="button">Remove the cap</button>
+                                    </div>
+                                </div>
+
+                                <div class="pane-head" style="margin-top:4px;">
+                                    <label for="ib-datauri" style="margin:0;">Data URI</label>
+                                    <div class="flex-row gap-1">
+                                        <button class="btn btn-small copy-btn" data-clipboard-target="#ib-datauri">Copy</button>
+                                        <button id="ib-download-btn" class="btn btn-small" type="button" disabled>Download image</button>
+                                    </div>
+                                </div>
+                                <textarea id="ib-datauri" class="mono" readonly spellcheck="false"
+                                    placeholder="data:image/png;base64,…"></textarea>
+
+                                <div style="margin-top:4px;">
+                                    <div class="card-title" style="margin:0;">How to use it</div>
+                                    <div class="field-hint">The data URI is abbreviated below so the snippets stay readable — Copy always gives you the full thing.</div>
+                                </div>
+
+                                <div class="segmented" id="ib-tabs" role="tablist" style="align-self:flex-start;">
+                                    <button type="button" class="active" data-tab="html" role="tab">HTML</button>
+                                    <button type="button" data-tab="css" role="tab">CSS</button>
+                                    <button type="button" data-tab="jsx" role="tab">JSX</button>
+                                    <button type="button" data-tab="md" role="tab">Markdown</button>
+                                    <button type="button" data-tab="raw" role="tab">Payload</button>
+                                    <button type="button" data-tab="batch" role="tab" class="hidden">All images</button>
+                                </div>
+
+                                <div id="ib-blocks"></div>
+
+                                <div class="ib-css-demo hidden" id="ib-css-demo">
+                                    <div class="ib-css-demo-label">Live — that rule, applied. The dashed outline is the element box, clamped to fit this pane.</div>
+                                    <div class="ib-css-demo-box" id="ib-css-demo-box"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- ============================ DECODE ============================ -->
+                        <div class="split-pane hidden" id="ib-decode-view">
+                            <div class="pane">
+                                <div>
+                                    <div class="card-title" style="margin:0;">Data URI or Base64</div>
+                                    <div class="field-hint">Paste a full data: URI, or bare Base64 — the image type is read from the bytes either way.</div>
+                                </div>
+                                <textarea id="ib-decode-input" class="mono" spellcheck="false"
+                                    placeholder="data:image/png;base64,iVBORw0KGgo…"></textarea>
+
+                                <div class="ib-stats" id="ib-decode-stats">
+                                    <div>
+                                        <span>Input</span>
+                                        <strong id="ib-dstat-input">—</strong>
+                                    </div>
+                                    <div>
+                                        <span>Type</span>
+                                        <strong id="ib-dstat-type">—</strong>
+                                    </div>
+                                    <div>
+                                        <span>Dimensions</span>
+                                        <strong id="ib-dstat-dim">—</strong>
+                                    </div>
+                                    <div>
+                                        <span>Decoded size</span>
+                                        <strong id="ib-dstat-size">—</strong>
+                                    </div>
+                                </div>
+
+                                <div id="ib-decode-error" class="error-text hidden"></div>
+                                <div id="ib-decode-notes" class="flex-col" style="gap:5px;"></div>
+
+                                <div class="flex-row gap-1 wrap" style="margin-top:auto;">
+                                    <button id="ib-decode-download" class="btn btn-primary" type="button" disabled>Download image</button>
+                                    <button id="ib-decode-toencode" class="btn" type="button" disabled>Re-encode this</button>
+                                </div>
+                            </div>
+
+                            <div class="pane">
+                                <div>
+                                    <div class="card-title" style="margin:0;">Preview</div>
+                                    <div class="field-hint">The decoded bytes, rendered.</div>
+                                </div>
+                                <div id="ib-decode-empty" class="ib-empty">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24"
+                                        fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
+                                        stroke-linejoin="round">
+                                        <polyline points="6.5 2 3 5.5 6.5 9"></polyline>
+                                        <polyline points="10.5 9 14 5.5 10.5 2"></polyline>
+                                        <rect x="9" y="9" width="13" height="13" rx="2"></rect>
+                                        <circle cx="13" cy="13.5" r="1.2"></circle>
+                                        <path d="m9 19 3.5-3.5L16 19"></path>
+                                    </svg>
+                                    <div>Paste a data URI to see what it holds</div>
+                                </div>
+                                <div class="ib-preview-wrap hidden" id="ib-decode-preview-wrap">
+                                    <img id="ib-decode-preview" alt="decoded result">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </div>
+
+    <div id="toast" class="toast">Copied to clipboard</div>
+
+    <script src="app.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // Guardrails so a huge source can't allocate a runaway canvas.
+            const MAX_SIDE = 12000;
+            const MAX_AREA = 80 * 1000 * 1000;
+            // Anything below 4 MP re-encodes fast enough to compare all formats on every edit.
+            const COMPARE_AREA = 4 * 1000 * 1000;
+            // Canvas can only encode these; anything else has to be re-encoded as PNG.
+            const CANVAS_MIMES = ['image/png', 'image/jpeg', 'image/webp'];
+            const LOSSY_MIMES = ['image/jpeg', 'image/webp'];
+            // Shrink-to-fit will not make an image uglier than this on its own.
+            const QUALITY_FLOOR = 40;
+
+            // ---- Elements ----
+            const modeTabs = document.getElementById('ib-mode');
+            const encodeView = document.getElementById('ib-encode-view');
+            const decodeView = document.getElementById('ib-decode-view');
+
+            const dropZone = document.getElementById('ib-drop-zone');
+            const dropEmpty = document.getElementById('ib-drop-empty');
+            const fileInput = document.getElementById('ib-file-input');
+            const sourceRow = document.getElementById('ib-source-row');
+            const sourceThumb = document.getElementById('ib-source-thumb');
+            const sourceName = document.getElementById('ib-source-name');
+            const sourceDim = document.getElementById('ib-source-dim');
+            const strip = document.getElementById('ib-strip');
+
+            const maxDimSel = document.getElementById('ib-maxdim');
+            const customRow = document.getElementById('ib-custom-row');
+            const maxWIn = document.getElementById('ib-max-w');
+            const maxHIn = document.getElementById('ib-max-h');
+            const formatSel = document.getElementById('ib-format');
+            const svgOption = formatSel.querySelector('option[value="svg-url"]');
+            const qualityRow = document.getElementById('ib-quality-row');
+            const qualityIn = document.getElementById('ib-quality');
+            const qualityVal = document.getElementById('ib-quality-val');
+            const bgRow = document.getElementById('ib-bg-row');
+            const bgInput = document.getElementById('ib-bg');
+            const limitSel = document.getElementById('ib-limit');
+            const stripRow = document.getElementById('ib-strip-row');
+            const stripMeta = document.getElementById('ib-strip-meta');
+            const compareWrap = document.getElementById('ib-compare-wrap');
+            const compareBox = document.getElementById('ib-compare');
+
+            const statSrc = document.getElementById('ib-stat-src');
+            const statOut = document.getElementById('ib-stat-out');
+            const statUri = document.getElementById('ib-stat-uri');
+            const statOverhead = document.getElementById('ib-stat-overhead');
+            const notesBox = document.getElementById('ib-notes');
+
+            const emptyBox = document.getElementById('ib-empty');
+            const previewWrap = document.getElementById('ib-preview-wrap');
+            const preview = document.getElementById('ib-preview');
+            const warnBox = document.getElementById('ib-warn');
+            const warnText = document.getElementById('ib-warn-text');
+            const shrinkBtn = document.getElementById('ib-shrink-btn');
+            const uncapBtn = document.getElementById('ib-uncap-btn');
+
+            const uriOut = document.getElementById('ib-datauri');
+            const downloadBtn = document.getElementById('ib-download-btn');
+            const tabs = document.getElementById('ib-tabs');
+            const batchTab = tabs.querySelector('button[data-tab="batch"]');
+            const blocksBox = document.getElementById('ib-blocks');
+            const cssDemo = document.getElementById('ib-css-demo');
+            const cssDemoBox = document.getElementById('ib-css-demo-box');
+
+            const decodeIn = document.getElementById('ib-decode-input');
+            const dStatInput = document.getElementById('ib-dstat-input');
+            const dStatType = document.getElementById('ib-dstat-type');
+            const dStatDim = document.getElementById('ib-dstat-dim');
+            const dStatSize = document.getElementById('ib-dstat-size');
+            const decodeError = document.getElementById('ib-decode-error');
+            const decodeNotes = document.getElementById('ib-decode-notes');
+            const decodeEmpty = document.getElementById('ib-decode-empty');
+            const decodePreviewWrap = document.getElementById('ib-decode-preview-wrap');
+            const decodePreview = document.getElementById('ib-decode-preview');
+            const decodeDownload = document.getElementById('ib-decode-download');
+            const decodeToEncode = document.getElementById('ib-decode-toencode');
+
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+
+            // ---- State ----
+            let sources = [];   // { name, mime, size, bytes, dataUri, img, w, h, sizeUnknown, meta }
+            let selected = 0;
+            let out = null;     // { dataUri, mime, w, h, bytes, raw, urlEncoded }
+            let capped = false; // out exists but is over the size cap, so it is withheld
+            let activeTab = 'html';
+            let blockFull = []; // full-length snippets behind the abbreviated ones on screen
+            let recomputeTimer = null;
+            let decodeTimer = null;
+            let decoded = null; // { uri, mime, bytes, w, h }
+
+            // ---- Formatting helpers ----
+            const clamp = (n, lo, hi) => Math.min(hi, Math.max(lo, n));
+            function fmtBytes(n) {
+                if (n < 1024) return n + ' B';
+                if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB';
+                return (n / 1024 / 1024).toFixed(2) + ' MB';
+            }
+            function fmtNum(n) { return n.toLocaleString('en-US'); }
+            const MIME_LABELS = {
+                'image/png': 'PNG', 'image/jpeg': 'JPEG', 'image/webp': 'WebP', 'image/gif': 'GIF',
+                'image/svg+xml': 'SVG', 'image/bmp': 'BMP', 'image/avif': 'AVIF', 'image/x-icon': 'ICO',
+            };
+            function mimeLabel(mime) {
+                return MIME_LABELS[mime] || ((mime || '').split('/')[1] || '?').toUpperCase();
+            }
+            function extFor(mime) {
+                const map = {
+                    'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp', 'image/gif': 'gif',
+                    'image/svg+xml': 'svg', 'image/bmp': 'bmp', 'image/avif': 'avif', 'image/x-icon': 'ico',
+                };
+                return map[mime] || 'bin';
+            }
+            function esc(s) {
+                return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            }
+            function baseName(name) {
+                const dot = name.lastIndexOf('.');
+                return (dot > 0 ? name.slice(0, dot) : name).replace(/[^\w.-]+/g, '_') || 'image';
+            }
+            // A file name turned into something usable as a CSS class / JSON key.
+            function cssName(name) {
+                const dot = name.lastIndexOf('.');
+                let s = (dot > 0 ? name.slice(0, dot) : name)
+                    .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+                if (!s) s = 'image';
+                if (/^[0-9]/.test(s)) s = 'img-' + s;
+                return s;
+            }
+            function jsName(kebab) {
+                return kebab.replace(/-([a-z0-9])/g, (_, c) => c.toUpperCase());
+            }
+            function payloadOf(uri) {
+                const comma = uri.indexOf(',');
+                return comma < 0 ? '' : uri.slice(comma + 1);
+            }
+            function mimeOf(uri) {
+                const m = /^data:([^;,]*)/.exec(uri);
+                return m ? m[1] : '';
+            }
+            // Decoded byte count of a base64 payload, without decoding it.
+            function decodedSize(payload) {
+                const pad = payload.endsWith('==') ? 2 : payload.endsWith('=') ? 1 : 0;
+                return Math.max(0, Math.floor(payload.length / 4) * 3 - pad);
+            }
+
+            // ---- Bytes ----
+            function bytesToBase64(bytes) {
+                let bin = '';
+                const CHUNK = 0x8000;   // fromCharCode.apply blows the stack on huge arrays
+                for (let i = 0; i < bytes.length; i += CHUNK) {
+                    bin += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK));
+                }
+                return btoa(bin);
+            }
+            function base64ToBytes(b64) {
+                let s = b64.replace(/-/g, '+').replace(/_/g, '/');
+                if (s.length % 4) s += '='.repeat(4 - (s.length % 4));
+                const bin = atob(s);
+                const bytes = new Uint8Array(bin.length);
+                for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+                return bytes;
+            }
+            function ascii(bytes, off, len) {
+                let s = '';
+                for (let i = 0; i < len && off + i < bytes.length; i++) s += String.fromCharCode(bytes[off + i]);
+                return s;
+            }
+            // Identify an image from its leading bytes, for input that arrives without a type.
+            function sniffMime(bytes) {
+                const b = bytes;
+                if (b.length > 8 && b[0] === 0x89 && ascii(b, 1, 3) === 'PNG') return 'image/png';
+                if (b.length > 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return 'image/jpeg';
+                if (ascii(b, 0, 4) === 'GIF8') return 'image/gif';
+                if (ascii(b, 0, 4) === 'RIFF' && ascii(b, 8, 4) === 'WEBP') return 'image/webp';
+                if (ascii(b, 4, 8) === 'ftypavif') return 'image/avif';
+                if (b.length > 4 && b[0] === 0x00 && b[1] === 0x00 && b[2] === 0x01 && b[3] === 0x00) return 'image/x-icon';
+                if (b.length > 2 && b[0] === 0x42 && b[1] === 0x4d) return 'image/bmp';
+                const head = ascii(b, 0, 2000).replace(/^﻿/, '').trimStart();
+                if (/^<(\?xml|svg)/i.test(head) && /<svg/i.test(head)) return 'image/svg+xml';
+                return '';
+            }
+
+            // ---- Metadata sniffing --------------------------------------------------
+            // Re-encoding through canvas drops every one of these; using the original bytes
+            // keeps them, which matters because a data URI ends up pasted into public HTML.
+            // The TIFF block behind EXIF is the same shape wherever it is embedded — after
+            // "Exif\0\0" in a JPEG APP1 segment, or as a PNG eXIf chunk's whole payload.
+            function tiffHasGps(bytes, t) {
+                if (t + 8 > bytes.length) return false;
+                const le = ascii(bytes, t, 2) === 'II';
+                const u16 = p => le ? bytes[p] | (bytes[p + 1] << 8) : (bytes[p] << 8) | bytes[p + 1];
+                const u32 = p => (le
+                    ? bytes[p] | (bytes[p + 1] << 8) | (bytes[p + 2] << 16) | (bytes[p + 3] << 24)
+                    : (bytes[p] << 24) | (bytes[p + 1] << 16) | (bytes[p + 2] << 8) | bytes[p + 3]) >>> 0;
+                const ifd0 = t + u32(t + 4);
+                if (ifd0 + 2 > bytes.length) return false;
+                const n = u16(ifd0);
+                for (let i = 0; i < n && i < 512; i++) {
+                    const e = ifd0 + 2 + i * 12;
+                    if (e + 12 > bytes.length) break;
+                    if (u16(e) === 0x8825) return true;  // GPS IFD pointer
+                }
+                return false;
+            }
+            const withGps = has => has ? 'EXIF, including GPS coordinates' : 'EXIF';
+            function sniffMetadata(bytes, mime) {
+                const found = new Set();
+                try {
+                    if (mime === 'image/jpeg') {
+                        let o = 2;
+                        while (o + 4 < bytes.length && bytes[o] === 0xff) {
+                            const marker = bytes[o + 1];
+                            if (marker === 0xd8 || (marker >= 0xd0 && marker <= 0xd9)) { o += 2; continue; }
+                            if (marker === 0xda) break;          // start of scan; metadata all precedes it
+                            const size = (bytes[o + 2] << 8) | bytes[o + 3];
+                            if (size < 2) break;
+                            const seg = o + 4;
+                            if (marker === 0xe1) {
+                                if (ascii(bytes, seg, 4) === 'Exif' && bytes[seg + 4] === 0) {
+                                    found.add(withGps(tiffHasGps(bytes, seg + 6)));
+                                } else if (ascii(bytes, seg, 23) === 'http://ns.adobe.com/xap') found.add('XMP');
+                            } else if (marker === 0xe2 && ascii(bytes, seg, 11) === 'ICC_PROFILE') found.add('an ICC profile');
+                            else if (marker === 0xed) found.add('IPTC / Photoshop data');
+                            else if (marker === 0xfe) found.add('a comment');
+                            o = seg + size - 2;
+                        }
+                    } else if (mime === 'image/png') {
+                        let o = 8;
+                        while (o + 12 <= bytes.length) {
+                            const len = ((bytes[o] << 24) | (bytes[o + 1] << 16) | (bytes[o + 2] << 8) | bytes[o + 3]) >>> 0;
+                            const type = ascii(bytes, o + 4, 4);
+                            if (type === 'IEND' || len > bytes.length) break;
+                            if (type === 'eXIf') found.add(withGps(tiffHasGps(bytes, o + 8)));
+                            else if (type === 'tEXt' || type === 'iTXt' || type === 'zTXt') found.add('text chunks');
+                            else if (type === 'iCCP') found.add('an ICC profile');
+                            o += 12 + len;
+                        }
+                    } else if (mime === 'image/webp') {
+                        let o = 12;
+                        while (o + 8 <= bytes.length) {
+                            const type = ascii(bytes, o, 4);
+                            const len = (bytes[o + 4] | (bytes[o + 5] << 8) | (bytes[o + 6] << 16) | (bytes[o + 7] << 24)) >>> 0;
+                            if (!len || len > bytes.length) break;
+                            if (type === 'EXIF') found.add(withGps(tiffHasGps(bytes, o + 8)));
+                            else if (type === 'XMP ') found.add('XMP');
+                            else if (type === 'ICCP') found.add('an ICC profile');
+                            o += 8 + len + (len & 1);
+                        }
+                    }
+                } catch (e) { /* a malformed file simply reports nothing */ }
+                return [...found];
+            }
+
+            // ---- Options ------------------------------------------------------------
+            function currentLimit() {
+                const v = parseInt(limitSel.value, 10);
+                return v > 0 ? v : Infinity;
+            }
+            function currentQuality() {
+                return clamp(parseInt(qualityIn.value, 10) || 85, 10, 100) / 100;
+            }
+            // The box the image is fitted into, or null for "keep the original size".
+            function currentBox() {
+                const v = maxDimSel.value;
+                if (v === 'original') return null;
+                if (v === 'custom') {
+                    return {
+                        w: Math.max(1, Math.round(parseFloat(maxWIn.value) || 1)),
+                        h: Math.max(1, Math.round(parseFloat(maxHIn.value) || 1)),
+                    };
+                }
+                const n = parseInt(v, 10);
+                return { w: n, h: n };
+            }
+            // Fit inside the box without ever enlarging, then clamp to the canvas guardrails.
+            function targetSizeFor(source, box) {
+                let w = source.w, h = source.h;
+                if (box) {
+                    const k = Math.min(box.w / w, box.h / h, 1);
+                    w = Math.max(1, Math.round(w * k));
+                    h = Math.max(1, Math.round(h * k));
+                }
+                if (w > MAX_SIDE || h > MAX_SIDE || w * h > MAX_AREA) {
+                    const k = Math.min(MAX_SIDE / w, MAX_SIDE / h, Math.sqrt(MAX_AREA / (w * h)));
+                    w = Math.max(1, Math.floor(w * k));
+                    h = Math.max(1, Math.floor(h * k));
+                }
+                return { w, h };
+            }
+            // What canvas will actually be asked to encode, given the format choice.
+            function rasterMime(source, fmt) {
+                if (fmt && fmt !== 'auto' && fmt !== 'svg-url') return fmt;
+                return CANVAS_MIMES.includes(source.mime) ? source.mime : 'image/png';
+            }
+
+            function syncOptionRows() {
+                const source = sources[selected];
+                customRow.classList.toggle('hidden', maxDimSel.value !== 'custom');
+
+                // The vector option only means anything for a vector source.
+                const svgSource = !!source && source.mime === 'image/svg+xml';
+                svgOption.disabled = !svgSource;
+                if (!svgSource && formatSel.value === 'svg-url') formatSel.value = 'auto';
+
+                const effective = source ? rasterMime(source, formatSel.value) : formatSel.value;
+                const lossy = formatSel.value !== 'svg-url' && LOSSY_MIMES.includes(effective);
+                qualityRow.classList.toggle('hidden', !lossy);
+                bgRow.classList.toggle('hidden', formatSel.value === 'svg-url' || effective !== 'image/jpeg');
+                qualityVal.textContent = qualityIn.value + '%';
+
+                stripRow.classList.toggle('hidden', !sources.some(s => s.meta.length));
+                batchTab.classList.toggle('hidden', sources.length < 2);
+            }
+
+            // ---- Encoding -----------------------------------------------------------
+            // Draw at the requested size and encode. Canvas silently falls back to PNG for
+            // a mime it cannot write, so the returned mime is read back off the result.
+            function encodeCanvas(source, w, h, mime, quality) {
+                canvas.width = w;
+                canvas.height = h;
+                ctx.setTransform(1, 0, 0, 1, 0, 0);
+                ctx.clearRect(0, 0, w, h);
+                if (mime === 'image/jpeg') {
+                    // JPEG has no alpha — flatten onto the chosen colour instead of black.
+                    ctx.fillStyle = bgInput.value;
+                    ctx.fillRect(0, 0, w, h);
+                }
+                ctx.imageSmoothingEnabled = true;
+                ctx.imageSmoothingQuality = 'high';
+                ctx.drawImage(source.img, 0, 0, w, h);
+                const uri = LOSSY_MIMES.includes(mime)
+                    ? canvas.toDataURL(mime, quality)
+                    : canvas.toDataURL(mime);
+                return { dataUri: uri, mime: mimeOf(uri) };
+            }
+
+            // Percent-encoding beats Base64 for SVG: it escapes a handful of characters
+            // instead of inflating every byte by a third. The recipe is the well-known one —
+            // collapse whitespace, swap double quotes for single, escape what url() and an
+            // HTML attribute would otherwise choke on.
+            const SVG_ESCAPE = /[\r\n%#()<>?\[\]^`{|}&]/g;
+            function svgUrlEncode(source, w, h) {
+                let text = new TextDecoder().decode(source.bytes)
+                    .replace(/^﻿/, '')
+                    .replace(/<\?xml[\s\S]*?\?>/g, '')
+                    .replace(/<!--[\s\S]*?-->/g, '')
+                    .replace(/>\s+</g, '><')
+                    .replace(/\s{2,}/g, ' ')
+                    .trim();
+                const hadDoubleQuotes = text.indexOf('"') >= 0;
+                text = text.replace(/"/g, "'");
+                const enc = text.replace(SVG_ESCAPE, c => '%' + c.charCodeAt(0).toString(16).toUpperCase().padStart(2, '0'));
+                const utf8 = new TextEncoder().encode(text);
+                return {
+                    dataUri: 'data:image/svg+xml,' + enc,
+                    mime: 'image/svg+xml',
+                    w, h,
+                    bytes: utf8.length,
+                    raw: false,
+                    urlEncoded: true,
+                    hadDoubleQuotes,
+                    hasXmlns: /xmlns\s*=/.test(text),
+                    base64Length: 'data:image/svg+xml;base64,'.length + Math.ceil(utf8.length / 3) * 4,
+                };
+            }
+
+            // The single place that turns a source plus the current options into output.
+            function buildOutput(source, fmtOverride) {
+                const fmt = fmtOverride || formatSel.value;
+                const { w, h } = targetSizeFor(source, currentBox());
+
+                if (fmt === 'svg-url' && source.mime === 'image/svg+xml') return svgUrlEncode(source, w, h);
+
+                const stripping = stripMeta.checked && source.meta.length > 0;
+                const untouched = fmt === 'auto' && w === source.w && h === source.h && !source.sizeUnknown;
+                if (untouched && !stripping) {
+                    return { dataUri: source.dataUri, mime: source.mime, w, h, bytes: source.size, raw: true };
+                }
+                const r = encodeCanvas(source, w, h, rasterMime(source, fmt), currentQuality());
+                return {
+                    dataUri: r.dataUri, mime: r.mime, w, h,
+                    bytes: decodedSize(payloadOf(r.dataUri)),
+                    raw: false, stripped: stripping,
+                };
+            }
+
+            // Encoding every source on every edit is wasteful, so results are memoised
+            // against the settings that produced them.
+            let cacheKey = null;
+            let outCache = new Map();
+            function settingsKey() {
+                return [maxDimSel.value, maxWIn.value, maxHIn.value, formatSel.value,
+                    qualityIn.value, bgInput.value, stripMeta.checked].join('|');
+            }
+            function outputFor(index) {
+                const key = settingsKey();
+                if (key !== cacheKey) { cacheKey = key; outCache = new Map(); }
+                if (!outCache.has(index)) outCache.set(index, buildOutput(sources[index]));
+                return outCache.get(index);
+            }
+            function invalidateCache() { cacheKey = null; outCache = new Map(); }
+
+            // ---- Snippets -----------------------------------------------------------
+            // Keep the head of the payload so the format stays recognizable.
+            function abbreviate(uri) {
+                if (uri.length <= 96) return uri;
+                const comma = uri.indexOf(',');
+                const head = comma >= 0 ? uri.slice(0, comma + 1) : '';
+                const body = comma >= 0 ? uri.slice(comma + 1) : uri;
+                return head + body.slice(0, 40) + '…';
+            }
+            function abbreviatePayload(payload) {
+                return payload.length <= 96 ? payload : payload.slice(0, 40) + '…';
+            }
+
+            function blocksFor(tab, uri, payload) {
+                const w = out.w, h = out.h;
+                const name = cssName(sources[selected].name);
+                if (tab === 'html') {
+                    return [
+                        { title: 'Inline image', code: '<img src="' + uri + '" width="' + w + '" height="' + h + '" alt="">' },
+                        { title: 'Favicon', code: '<link rel="icon" href="' + uri + '">' },
+                    ];
+                }
+                if (tab === 'css') {
+                    return [
+                        {
+                            title: 'Background image', code: '.' + name + ' {\n' +
+                                '  width: ' + w + 'px;\n' +
+                                '  height: ' + h + 'px;\n' +
+                                '  background-image: url("' + uri + '");\n' +
+                                '  background-size: contain;\n' +
+                                '  background-repeat: no-repeat;\n}',
+                        },
+                        {
+                            title: 'Custom property', code: ':root {\n' +
+                                '  --' + name + ': url("' + uri + '");\n}\n\n' +
+                                '.' + name + ' {\n  background-image: var(--' + name + ');\n}',
+                        },
+                    ];
+                }
+                if (tab === 'jsx') {
+                    return [
+                        { title: 'React element', code: '<img src="' + uri + '" width={' + w + '} height={' + h + '} alt="" />' },
+                        { title: 'Module constant', code: 'export const ' + jsName(name) + ' = "' + uri + '";' },
+                    ];
+                }
+                if (tab === 'md') {
+                    return [{ title: 'Markdown', code: '![alt text](' + uri + ')' }];
+                }
+                return [{
+                    title: out.urlEncoded ? 'Percent-encoded payload' : 'Base64 payload',
+                    code: payload,
+                }];
+            }
+
+            // Every image at once, as a stylesheet and as a JSON map. Anything over the cap
+            // is called out rather than quietly dropped.
+            function batchBlocks(abbrev) {
+                const limit = currentLimit();
+                const items = sources.map((s, i) => {
+                    const o = outputFor(i);
+                    return {
+                        name: cssName(s.name), file: s.name, uri: o.dataUri,
+                        w: o.w, h: o.h, over: o.dataUri.length > limit,
+                    };
+                });
+                const u = it => abbrev ? abbreviate(it.uri) : it.uri;
+                const css = items.map(it => it.over
+                    ? '/* ' + it.file + ' skipped: ' + fmtBytes(it.uri.length) + ' is over the cap */'
+                    : '.' + it.name + ' {\n' +
+                    '  width: ' + it.w + 'px;\n' +
+                    '  height: ' + it.h + 'px;\n' +
+                    '  background-image: url("' + u(it) + '");\n' +
+                    '  background-size: contain;\n' +
+                    '  background-repeat: no-repeat;\n}').join('\n\n');
+                const kept = items.filter(it => !it.over);
+                const json = kept.length
+                    ? '{\n' + kept.map(it => '  "' + it.name + '": "' + u(it) + '"').join(',\n') + '\n}'
+                    : '{}';
+                return [
+                    { title: 'CSS — ' + kept.length + ' of ' + items.length, code: css },
+                    { title: 'JSON map', code: json },
+                ];
+            }
+
+            function renderBlocks() {
+                const withheld = !out || (capped && activeTab !== 'batch');
+                cssDemo.classList.toggle('hidden', withheld || activeTab !== 'css');
+
+                if (withheld) {
+                    blockFull = [];
+                    blocksBox.innerHTML = '<pre class="code-view ib-block-code" data-i18n-skip>—</pre>';
+                    return;
+                }
+                let shown, full;
+                if (activeTab === 'batch') {
+                    shown = batchBlocks(true);
+                    full = batchBlocks(false);
+                } else {
+                    const uri = out.dataUri;
+                    const payload = payloadOf(uri);
+                    shown = blocksFor(activeTab, abbreviate(uri), abbreviatePayload(payload));
+                    full = blocksFor(activeTab, uri, payload);
+                }
+                blockFull = full.map(b => b.code);
+
+                const abbreviated = shown.some((b, i) => b.code !== full[i].code);
+                blocksBox.innerHTML = shown.map((b, i) =>
+                    '<div class="ib-block">' +
+                    '<div class="ib-block-head"><span class="ib-block-title">' + esc(b.title) + '</span>' +
+                    '<button type="button" class="btn btn-small" data-copy-idx="' + i + '">Copy</button></div>' +
+                    '<pre class="code-view ib-block-code" data-i18n-skip>' + esc(b.code) + '</pre>' +
+                    '</div>').join('') +
+                    (abbreviated
+                        ? '<div class="field-hint" style="margin-top:8px;">Shortened for reading — Copy hands over the full ' +
+                        fmtNum(full.reduce((n, b) => Math.max(n, b.code.length), 0)) + ' characters.</div>'
+                        : '');
+
+                if (activeTab === 'css') {
+                    cssDemoBox.style.width = out.w + 'px';
+                    cssDemoBox.style.height = out.h + 'px';
+                    cssDemoBox.style.backgroundImage = 'url("' + out.dataUri + '")';
+                }
+            }
+
+            function selectTab(tab) {
+                activeTab = tab;
+                tabs.querySelectorAll('button').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+                renderBlocks();
+            }
+
+            // ---- Format comparison --------------------------------------------------
+            function renderCompare(source) {
+                const { w, h } = targetSizeFor(source, currentBox());
+                if (w * h > COMPARE_AREA) {
+                    compareWrap.classList.add('hidden');
+                    return;
+                }
+                const limit = currentLimit();
+                const items = [];
+                // "Keep original" only earns a row when it really means the untouched bytes.
+                const original = buildOutput(source, 'auto');
+                if (original.raw) items.push({ value: 'auto', label: 'Original', len: original.dataUri.length });
+                CANVAS_MIMES.forEach(m => items.push({
+                    value: m, label: mimeLabel(m),
+                    len: encodeCanvas(source, w, h, m, currentQuality()).dataUri.length,
+                }));
+                if (source.mime === 'image/svg+xml') {
+                    items.push({ value: 'svg-url', label: 'SVG', len: svgUrlEncode(source, w, h).dataUri.length });
+                }
+                const active = formatSel.value !== 'auto' ? formatSel.value
+                    : out && out.raw ? 'auto'
+                        : out && out.urlEncoded ? 'svg-url'
+                            : out ? out.mime : '';
+
+                compareBox.innerHTML = items.map(it =>
+                    '<button type="button" class="btn ib-compare-btn' +
+                    (it.value === active ? ' selected' : '') + (it.len > limit ? ' over' : '') +
+                    '" data-format="' + it.value + '">' + esc(it.label) +
+                    '<span class="ib-compare-size">' + fmtBytes(it.len) + '</span></button>').join('');
+                compareWrap.classList.remove('hidden');
+            }
+
+            // ---- Notes --------------------------------------------------------------
+            function renderNotes() {
+                const source = sources[selected];
+                if (!out || !source) { notesBox.innerHTML = ''; return; }
+                const notes = [];
+                if (source.sizeUnknown) {
+                    notes.push(['This SVG has no intrinsic width and height, so it was rasterized at ' + out.w + ' × ' + out.h + '.', false]);
+                }
+                if (out.urlEncoded) {
+                    const saved = Math.round((1 - out.dataUri.length / out.base64Length) * 100);
+                    notes.push(['Percent-encoding this SVG is ' + Math.abs(saved) + '% ' + (saved >= 0 ? 'smaller' : 'larger') + ' than Base64 would be, and it stays vector.', false]);
+                    if (out.hadDoubleQuotes) {
+                        notes.push(['Double quotes inside the SVG were switched to single quotes so the URI can sit inside url("…") and src="…".', false]);
+                    }
+                    if (!out.hasXmlns) {
+                        notes.push(['This SVG has no xmlns attribute. A data URI needs xmlns="http://www.w3.org/2000/svg" or the browser will refuse to render it.', true]);
+                    }
+                }
+                if (!out.raw && source.mime === 'image/gif') {
+                    notes.push(['Re-encoding a GIF keeps only the first frame. Pick Original + Keep original to preserve the animation.', false]);
+                }
+                if (!out.raw && !out.urlEncoded && formatSel.value === 'auto' && !CANVAS_MIMES.includes(source.mime)) {
+                    notes.push(['Canvas cannot write ' + mimeLabel(source.mime) + ', so the resized image was encoded as PNG.', false]);
+                }
+                if (!out.raw && !out.urlEncoded && formatSel.value !== 'auto' && out.mime !== formatSel.value) {
+                    notes.push(['This browser cannot encode ' + mimeLabel(formatSel.value) + ' — it fell back to ' + mimeLabel(out.mime) + '.', false]);
+                }
+                if (out.mime === 'image/jpeg') {
+                    notes.push(['JPEG has no alpha channel — transparent pixels were flattened onto ' + bgInput.value + '.', false]);
+                }
+                if (source.meta.length) {
+                    const list = source.meta.join(', ');
+                    const gps = source.meta.some(m => m.indexOf('GPS') >= 0);
+                    if (out.raw) {
+                        notes.push(['The original bytes carry ' + list + '. A data URI usually ends up in a public page, so tick "Strip metadata" if you would rather not publish it.', gps]);
+                    } else {
+                        notes.push(['The source carried ' + list + '; re-encoding dropped all of it.', false]);
+                    }
+                }
+                if (out.raw) {
+                    notes.push(['The original file bytes are used as-is: no re-encoding, no quality loss.', false]);
+                }
+                notesBox.innerHTML = notes.map(([text, alarm]) =>
+                    '<div class="ib-note' + (alarm ? ' alarm' : '') + '">' + esc(text) + '</div>').join('');
+            }
+
+            // ---- Source strip -------------------------------------------------------
+            function renderStrip() {
+                strip.classList.toggle('hidden', sources.length < 2);
+                if (sources.length < 2) { strip.innerHTML = ''; return; }
+                const limit = currentLimit();
+                strip.innerHTML = sources.map((s, i) => {
+                    const len = outputFor(i).dataUri.length;
+                    return '<div class="ib-strip-item' + (i === selected ? ' selected' : '') +
+                        (len > limit ? ' over' : '') + '" data-idx="' + i + '" title="' + esc(s.name) + '">' +
+                        '<button type="button" class="ib-strip-del" data-del="' + i + '" aria-label="Remove image">×</button>' +
+                        '<img src="' + s.dataUri + '" alt="">' +
+                        '<div class="ib-strip-size">' + fmtBytes(len) + '</div></div>';
+                }).join('');
+            }
+
+            // ---- Main recompute -----------------------------------------------------
+            function clearOutputs() {
+                out = null; capped = false;
+                emptyBox.classList.remove('hidden');
+                previewWrap.classList.add('hidden');
+                warnBox.classList.add('hidden');
+                compareWrap.classList.add('hidden');
+                uriOut.value = '';
+                uriOut.placeholder = 'data:image/png;base64,…';
+                downloadBtn.disabled = true;
+                statSrc.textContent = statOut.textContent = statUri.textContent = statOverhead.textContent = '—';
+                statUri.classList.remove('over');
+                notesBox.innerHTML = '';
+                renderBlocks();
+            }
+
+            function recompute() {
+                syncOptionRows();
+                const source = sources[selected];
+                if (!source) {
+                    dropEmpty.classList.remove('hidden');
+                    sourceRow.classList.add('hidden');
+                    strip.classList.add('hidden');
+                    clearOutputs();
+                    return;
+                }
+                if (sources.length < 2 && activeTab === 'batch') { activeTab = 'html'; }
+
+                out = outputFor(selected);
+                const uriLen = out.dataUri.length;
+                const limit = currentLimit();
+                capped = uriLen > limit;
+
+                dropEmpty.classList.add('hidden');
+                sourceRow.classList.remove('hidden');
+                sourceThumb.src = source.dataUri;
+                sourceName.textContent = source.name;
+                sourceDim.textContent = (source.sizeUnknown ? 'no intrinsic size' : source.w + ' × ' + source.h + ' px') +
+                    ' · ' + fmtBytes(source.size);
+
+                statSrc.textContent = source.w + ' × ' + source.h + ' · ' + mimeLabel(source.mime) + ' · ' + fmtBytes(source.size);
+                statOut.textContent = out.w + ' × ' + out.h + ' · ' + mimeLabel(out.mime) +
+                    (out.urlEncoded ? ' (vector)' : '') + ' · ' + fmtBytes(out.bytes);
+                statUri.textContent = fmtBytes(uriLen) + ' · ' + fmtNum(uriLen) + ' chars';
+                statUri.classList.toggle('over', capped);
+                statOverhead.textContent = out.bytes > 0
+                    ? '+' + Math.round((uriLen - out.bytes) / out.bytes * 100) + '%'
+                    : '—';
+
+                // The preview always renders, capped or not — seeing the image is what tells
+                // you whether the size and quality settings are right.
+                emptyBox.classList.add('hidden');
+                previewWrap.classList.remove('hidden');
+                preview.src = out.dataUri;
+                preview.width = out.w;
+                preview.height = out.h;
+
+                warnBox.classList.toggle('hidden', !capped);
+                if (capped) {
+                    warnText.innerHTML = '<strong>Over the cap.</strong> This data URI is ' + fmtBytes(uriLen) +
+                        ', past the ' + fmtBytes(limit) + ' limit, so the output below is held back. ' +
+                        'Shrink the image, drop the quality, or lift the cap.';
+                    uriOut.value = '';
+                    uriOut.placeholder = 'Held back — ' + fmtBytes(uriLen) + ' exceeds the ' + fmtBytes(limit) + ' cap.';
+                    downloadBtn.disabled = true;
+                } else {
+                    uriOut.value = out.dataUri;
+                    uriOut.placeholder = 'data:image/png;base64,…';
+                    downloadBtn.disabled = false;
+                }
+
+                renderCompare(source);
+                renderStrip();
+                renderBlocks();
+                renderNotes();
+            }
+
+            function scheduleRecompute(delay) {
+                clearTimeout(recomputeTimer);
+                recomputeTimer = setTimeout(recompute, delay || 0);
+            }
+
+            // ---- Shrink to fit ------------------------------------------------------
+            // For a lossy format, quality is the cheaper lever: 512px at 55% usually beats
+            // 300px at 85%. Only when even the quality floor is too big do the pixels go.
+            function shrinkToFit() {
+                const source = sources[selected];
+                if (!source) return;
+                const limit = currentLimit();
+                if (!isFinite(limit)) return;
+                if (out && out.urlEncoded) {
+                    window.showToast('Vector output does not shrink with the box — switch format or raise the cap', true);
+                    return;
+                }
+                const { w, h } = targetSizeFor(source, currentBox());
+                const mime = rasterMime(source, formatSel.value);
+                const ratio = h / w;
+
+                if (LOSSY_MIMES.includes(mime)) {
+                    const lenAtQ = q => encodeCanvas(source, w, h, mime, q / 100).dataUri.length;
+                    if (lenAtQ(QUALITY_FLOOR) <= limit) {
+                        let lo = QUALITY_FLOOR;
+                        let hi = Math.max(lo + 1, clamp(parseInt(qualityIn.value, 10) || 85, 10, 100));
+                        while (hi - lo > 1) {
+                            const mid = Math.floor((lo + hi) / 2);
+                            if (lenAtQ(mid) <= limit) lo = mid; else hi = mid;
+                        }
+                        qualityIn.value = lo;
+                        qualityVal.textContent = lo + '%';
+                        if (formatSel.value === 'auto') formatSel.value = mime;
+                        invalidateCache();
+                        recompute();
+                        window.showToast('Quality lowered to ' + lo + '% to fit the cap');
+                        return;
+                    }
+                    // Even the floor is too big, so take the floor and shrink the pixels too.
+                    qualityIn.value = QUALITY_FLOOR;
+                    qualityVal.textContent = QUALITY_FLOOR + '%';
+                    if (formatSel.value === 'auto') formatSel.value = mime;
+                }
+
+                const quality = currentQuality();
+                const lengthAt = side => {
+                    const tw = Math.max(1, Math.round(side));
+                    const th = Math.max(1, Math.round(side * ratio));
+                    return encodeCanvas(source, tw, th, mime, quality).dataUri.length;
+                };
+                let lo = 8;
+                if (lengthAt(lo) > limit) {
+                    window.showToast('Even 8px wide does not fit the cap — raise it', true);
+                    return;
+                }
+                // The button only appears when the current size is already too big, so the
+                // answer is never larger than that — searching above it would just be slower.
+                let hi = Math.max(lo + 1, w);
+                if (lengthAt(hi) <= limit) lo = hi;
+                else {
+                    while (hi - lo > 2) {
+                        const mid = Math.floor((lo + hi) / 2);
+                        if (lengthAt(mid) <= limit) lo = mid; else hi = mid;
+                    }
+                }
+                maxDimSel.value = 'custom';
+                maxWIn.value = Math.max(1, Math.round(lo));
+                maxHIn.value = Math.max(1, Math.round(lo * ratio));
+                invalidateCache();
+                recompute();
+                window.showToast('Resized to ' + maxWIn.value + ' × ' + maxHIn.value + ' to fit the cap');
+            }
+
+            // ---- Loading sources ----------------------------------------------------
+            function loadImage(uri) {
+                return new Promise((resolve, reject) => {
+                    const img = new Image();
+                    img.onload = () => {
+                        let w = img.naturalWidth, h = img.naturalHeight, sizeUnknown = false;
+                        if (!w || !h) {
+                            // An SVG with only a viewBox reports no intrinsic size in some browsers.
+                            sizeUnknown = true; w = 512; h = 512;
+                        }
+                        resolve({ img, w, h, sizeUnknown });
+                    };
+                    img.onerror = () => reject(new Error('decode failed'));
+                    img.src = uri;
+                });
+            }
+
+            async function makeSource(file) {
+                const bytes = new Uint8Array(await file.arrayBuffer());
+                const mime = file.type || sniffMime(bytes);
+                if (!mime || !/^image\//.test(mime)) throw new Error('not an image');
+                const dataUri = 'data:' + mime + ';base64,' + bytesToBase64(bytes);
+                const { img, w, h, sizeUnknown } = await loadImage(dataUri);
+                return {
+                    name: file.name || 'pasted-image.' + extFor(mime),
+                    mime, size: bytes.length, bytes, dataUri, img, w, h, sizeUnknown,
+                    meta: sniffMetadata(bytes, mime),
+                };
+            }
+
+            async function addFiles(files) {
+                const list = [...files].filter(f => f && (f.type.startsWith('image/') || !f.type));
+                if (!list.length) {
+                    window.showToast('That file is not an image', true);
+                    return;
+                }
+                let failed = 0;
+                for (const file of list) {
+                    try {
+                        sources.push(await makeSource(file));
+                    } catch (e) { failed++; }
+                }
+                if (failed) window.showToast(failed + ' file(s) could not be read as an image', true);
+                if (!sources.length) return;
+                selected = sources.length - 1;
+                invalidateCache();
+                recompute();
+            }
+
+            function removeSource(index) {
+                sources.splice(index, 1);
+                if (selected >= sources.length) selected = Math.max(0, sources.length - 1);
+                invalidateCache();
+                recompute();
+            }
+
+            // ---- Decode -------------------------------------------------------------
+            function decodeFail(message) {
+                decoded = null;
+                decodeError.textContent = message;
+                decodeError.classList.remove('hidden');
+                decodeEmpty.classList.remove('hidden');
+                decodePreviewWrap.classList.add('hidden');
+                decodeDownload.disabled = true;
+                decodeToEncode.disabled = true;
+            }
+            function decodeReset() {
+                decoded = null;
+                decodeError.classList.add('hidden');
+                decodeNotes.innerHTML = '';
+                decodeEmpty.classList.remove('hidden');
+                decodePreviewWrap.classList.add('hidden');
+                decodeDownload.disabled = true;
+                decodeToEncode.disabled = true;
+                dStatInput.textContent = dStatType.textContent = dStatDim.textContent = dStatSize.textContent = '—';
+            }
+
+            function runDecode() {
+                const text = decodeIn.value.trim();
+                decodeReset();
+                if (!text) return;
+
+                let uri, bytes, mime, kind;
+                const notes = [];
+                if (/^data:/i.test(text)) {
+                    const comma = text.indexOf(',');
+                    if (comma < 0) return decodeFail('That data URI has no comma, so there is no payload to read.');
+                    const header = text.slice(0, comma);
+                    const isB64 = /;base64/i.test(header);
+                    mime = (header.slice(5).split(';')[0] || '').toLowerCase();
+                    const payload = isB64 ? text.slice(comma + 1).replace(/\s+/g, '') : text.slice(comma + 1);
+                    uri = header + ',' + payload;
+                    kind = isB64 ? 'data: URI, Base64' : 'data: URI, percent-encoded';
+                    if (isB64) {
+                        try { bytes = base64ToBytes(payload); }
+                        catch (e) { return decodeFail('The Base64 payload is not valid Base64.'); }
+                    } else {
+                        try { bytes = new TextEncoder().encode(decodeURIComponent(payload)); }
+                        catch (e) { bytes = new TextEncoder().encode(payload); }
+                        notes.push('Percent-encoded rather than Base64 — normal for inline SVG.');
+                    }
+                    if (!mime) {
+                        mime = sniffMime(bytes);
+                        notes.push('The URI declares no media type; ' + (mime ? mimeLabel(mime) + ' was read from the bytes.' : 'the bytes did not identify one either.'));
+                    }
+                } else {
+                    const payload = text.replace(/\s+/g, '');
+                    if (!/^[A-Za-z0-9+/_-]+={0,2}$/.test(payload)) {
+                        return decodeFail('That is neither a data: URI nor Base64.');
+                    }
+                    try { bytes = base64ToBytes(payload); }
+                    catch (e) { return decodeFail('That is not valid Base64.'); }
+                    mime = sniffMime(bytes);
+                    if (!mime) return decodeFail('The Base64 decoded fine, but the bytes are not a recognizable image.');
+                    uri = 'data:' + mime + ';base64,' + bytesToBase64(bytes);
+                    kind = 'bare Base64';
+                    notes.push('No data: prefix, so ' + mimeLabel(mime) + ' was identified from the leading bytes.');
+                }
+
+                if (!/^image\//.test(mime || '')) {
+                    return decodeFail('That payload is ' + (mime || 'of an unknown type') + ', not an image.');
+                }
+
+                loadImage(uri).then(({ w, h, sizeUnknown }) => {
+                    decoded = { uri, mime, bytes, w, h };
+                    decodeError.classList.add('hidden');
+                    decodeEmpty.classList.add('hidden');
+                    decodePreviewWrap.classList.remove('hidden');
+                    decodePreview.src = uri;
+                    dStatInput.textContent = fmtNum(text.length) + ' chars · ' + kind;
+                    dStatType.textContent = mimeLabel(mime) + ' · ' + mime;
+                    dStatDim.textContent = sizeUnknown ? 'no intrinsic size' : w + ' × ' + h + ' px';
+                    dStatSize.textContent = fmtBytes(bytes.length);
+                    decodeDownload.disabled = false;
+                    decodeToEncode.disabled = false;
+                    decodeNotes.innerHTML = notes.map(t => '<div class="ib-note">' + esc(t) + '</div>').join('');
+                }).catch(() => decodeFail('The payload decoded, but the browser could not render an image from it.'));
+            }
+
+            // ---- Wiring: mode ---------------------------------------------------------
+            modeTabs.addEventListener('click', e => {
+                const btn = e.target.closest('button[data-mode]');
+                if (!btn) return;
+                modeTabs.querySelectorAll('button').forEach(b => b.classList.toggle('active', b === btn));
+                const encode = btn.dataset.mode === 'encode';
+                encodeView.classList.toggle('hidden', !encode);
+                decodeView.classList.toggle('hidden', encode);
+            });
+            function inDecodeMode() { return !decodeView.classList.contains('hidden'); }
+
+            // ---- Wiring: file input / drag / paste ------------------------------------
+            dropZone.addEventListener('click', () => fileInput.click());
+            fileInput.addEventListener('change', e => { addFiles(e.target.files); e.target.value = ''; });
+            dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
+            dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+            dropZone.addEventListener('drop', e => {
+                e.preventDefault();
+                dropZone.classList.remove('dragover');
+                addFiles(e.dataTransfer.files);
+            });
+            document.addEventListener('paste', e => {
+                if (inDecodeMode()) return;   // let a pasted data URI land in the textarea
+                const items = e.clipboardData && e.clipboardData.items;
+                if (!items) return;
+                const files = [];
+                for (let i = 0; i < items.length; i++) {
+                    if (items[i].kind === 'file' && items[i].type.startsWith('image/')) files.push(items[i].getAsFile());
+                }
+                if (files.length) {
+                    addFiles(files);
+                    e.preventDefault();
+                }
+            });
+            previewWrap.addEventListener('dragover', e => e.preventDefault());
+            previewWrap.addEventListener('drop', e => {
+                e.preventDefault();
+                addFiles(e.dataTransfer.files);
+            });
+
+            strip.addEventListener('click', e => {
+                const del = e.target.closest('[data-del]');
+                if (del) {
+                    e.stopPropagation();
+                    removeSource(parseInt(del.dataset.del, 10));
+                    return;
+                }
+                const item = e.target.closest('[data-idx]');
+                if (!item) return;
+                selected = parseInt(item.dataset.idx, 10);
+                recompute();
+            });
+
+            // ---- Wiring: options -------------------------------------------------------
+            maxDimSel.addEventListener('change', () => {
+                if (maxDimSel.value === 'custom' && sources[selected]) {
+                    // Seed the custom box from whatever preset was showing.
+                    const t = targetSizeFor(sources[selected], currentBox());
+                    maxWIn.value = t.w; maxHIn.value = t.h;
+                }
+                recompute();
+            });
+            [maxWIn, maxHIn].forEach(el => el.addEventListener('input', () => scheduleRecompute(200)));
+            formatSel.addEventListener('change', recompute);
+            qualityIn.addEventListener('input', () => {
+                qualityVal.textContent = qualityIn.value + '%';
+                scheduleRecompute(120);
+            });
+            bgInput.addEventListener('input', () => scheduleRecompute(120));
+            limitSel.addEventListener('change', recompute);
+            stripMeta.addEventListener('change', recompute);
+            shrinkBtn.addEventListener('click', shrinkToFit);
+            uncapBtn.addEventListener('click', () => { limitSel.value = '0'; recompute(); });
+            compareBox.addEventListener('click', e => {
+                const btn = e.target.closest('button[data-format]');
+                if (!btn) return;
+                formatSel.value = btn.dataset.format;
+                recompute();
+            });
+
+            // ---- Wiring: output --------------------------------------------------------
+            tabs.addEventListener('click', e => {
+                const btn = e.target.closest('button[data-tab]');
+                if (btn) selectTab(btn.dataset.tab);
+            });
+            blocksBox.addEventListener('click', e => {
+                const btn = e.target.closest('button[data-copy-idx]');
+                if (!btn) return;
+                const code = blockFull[parseInt(btn.dataset.copyIdx, 10)];
+                if (!code) return;
+                navigator.clipboard.writeText(code)
+                    .then(() => window.showToast('Snippet copied to clipboard'))
+                    .catch(() => window.showToast('Copy failed', true));
+            });
+            downloadBtn.addEventListener('click', () => {
+                if (!out || capped) return;
+                const a = document.createElement('a');
+                a.href = out.dataUri;
+                a.download = baseName(sources[selected].name) + '-' + out.w + 'x' + out.h + '.' + extFor(out.mime);
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+            });
+
+            // ---- Wiring: decode --------------------------------------------------------
+            decodeIn.addEventListener('input', () => {
+                clearTimeout(decodeTimer);
+                decodeTimer = setTimeout(runDecode, 220);
+            });
+            decodeDownload.addEventListener('click', () => {
+                if (!decoded) return;
+                const a = document.createElement('a');
+                a.href = decoded.uri;
+                a.download = 'decoded.' + extFor(decoded.mime);
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+            });
+            decodeToEncode.addEventListener('click', async () => {
+                if (!decoded) return;
+                const file = new File([decoded.bytes], 'decoded.' + extFor(decoded.mime), { type: decoded.mime });
+                await addFiles([file]);
+                modeTabs.querySelector('button[data-mode="encode"]').click();
+            });
+
+            recompute();
+        });
+    </script>
+</body>
+
+</html>

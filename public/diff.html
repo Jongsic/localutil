@@ -1,0 +1,1184 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
+    <title>Text Diff / Compare Tool — LocalUtil</title>
+    <!-- social / favicon -->
+    <meta name="description" content="Compare two texts side by side and highlight the differences. Runs 100% in your browser — nothing is uploaded.">
+    <link rel="canonical" href="https://jongsic.github.io/localutil/diff.html">
+    <link rel="icon" href="favicon.ico" sizes="any">
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="LocalUtil">
+    <meta property="og:title" content="Text Diff / Compare Tool — LocalUtil">
+    <meta property="og:description" content="Compare two texts side by side and highlight the differences. Runs 100% in your browser — nothing is uploaded.">
+    <meta property="og:image" content="https://jongsic.github.io/localutil/og.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:url" content="https://jongsic.github.io/localutil/diff.html">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:image" content="https://jongsic.github.io/localutil/og.png">
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebApplication","name":"Text Diff / Compare Tool","url":"https://jongsic.github.io/localutil/diff.html","description":"Compare two texts side by side and highlight the differences. Runs 100% in your browser — nothing is uploaded.","applicationCategory":"DeveloperApplication","operatingSystem":"Any","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"isPartOf":{"@type":"WebSite","name":"LocalUtil","url":"https://jongsic.github.io/localutil/"}}</script>
+    <!-- /social -->
+    <script src="theme-init.js"></script>
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        .diff-toolbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            flex-wrap: wrap;
+            padding: 16px 18px;
+            /* The whole page scrolls, so pin the controls — otherwise ↑/↓ and
+               Compare are gone as soon as you scroll into the diff. */
+            position: sticky;
+            top: 0;
+            z-index: 5;
+        }
+        /* Too tall once it wraps on a phone — let it scroll away there. */
+        @media (max-width: 700px) {
+            .diff-toolbar { position: static; }
+        }
+        .diff-options { display: flex; gap: 18px; flex-wrap: wrap; align-items: center; }
+        .diff-options label { display: inline-flex; align-items: center; gap: 7px; margin: 0; font-weight: 500; cursor: pointer; }
+        .diff-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+
+        #tool-diff .pane textarea { min-height: 200px; }
+
+        /* Drag & drop a file onto either side */
+        #tool-diff .pane { position: relative; }
+        /* .split-pane is display:flex, which outranks the [hidden] default. */
+        #diff-split[hidden] { display: none; }
+        .diff-dropzone {
+            position: absolute;
+            inset: 0;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding: 12px;
+            border: 2px dashed var(--primary);
+            border-radius: var(--r-md);
+            background-color: var(--primary-soft);
+            color: var(--active-text);
+            font-size: 0.95rem;
+            pointer-events: none;
+            z-index: 2;
+        }
+        #tool-diff .pane.dragover .diff-dropzone { display: flex; }
+        /* What was loaded, and how it was read — the encoding matters as soon as
+           a file was not UTF-8, and the notes say what had to be changed to line
+           the two sides up. */
+        .diff-file {
+            font-family: var(--font-mono);
+            font-size: 0.76rem;
+            color: var(--text-muted);
+            margin: 0 0 8px;
+            word-break: break-all;
+        }
+        .diff-file[hidden] { display: none; }
+        .diff-file .warn { color: var(--warning); }
+
+        .diff-result {
+            margin-top: 16px;
+            border: 1px solid var(--border-color);
+            border-radius: var(--r-md);
+            overflow: hidden;
+            background: var(--bg-content);
+            box-shadow: var(--shadow-sm);
+        }
+        .diff-summary {
+            display: flex;
+            gap: 18px;
+            align-items: center;
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--border-color);
+            font-size: 0.85rem;
+            font-weight: 600;
+            flex-wrap: wrap;
+        }
+        .diff-summary .add { color: var(--success); }
+        .diff-summary .del { color: var(--danger); }
+        .diff-summary .same { color: var(--text-muted); }
+
+        .diff-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-family: var(--font-mono);
+            font-size: 0.82rem;
+            line-height: 1.55;
+        }
+        .diff-table td { padding: 1px 10px; vertical-align: top; white-space: pre-wrap; word-break: break-word; }
+        /* `td.` keeps this above `.diff-table td` — otherwise the number cell
+           inherits break-word, splits "10" into two lines and doubles every row. */
+        .diff-table td.diff-num {
+            width: 1%;
+            text-align: right;
+            color: var(--text-faint);
+            user-select: none;
+            background: var(--bg-subtle);
+            border-right: 1px solid var(--border-color);
+            padding-left: 12px;
+            padding-right: 12px;
+            white-space: nowrap;
+            word-break: normal;
+        }
+        .diff-side { width: 50%; border-right: 1px solid var(--border-color); }
+        td.diff-side:last-child { border-right: none; }
+        .row-ins .diff-side.new, .row-ins .diff-num.new { background: rgba(62, 207, 127, 0.14); }
+        .row-del .diff-side.old, .row-del .diff-num.old { background: rgba(229, 72, 77, 0.14); }
+        .row-chg .diff-side.old, .row-chg .diff-num.old { background: rgba(229, 72, 77, 0.12); }
+        .row-chg .diff-side.new, .row-chg .diff-num.new { background: rgba(62, 207, 127, 0.12); }
+        .cell-empty { background: repeating-linear-gradient(45deg, transparent, transparent 6px, var(--bg-subtle) 6px, var(--bg-subtle) 12px); }
+        /* Stage two of the diff: what changed inside a pair of changed lines.
+           A deeper tint of the row's own colour, so the row still reads as one
+           change while the eye lands on the part that moved. */
+        .diff-tok { border-radius: 2px; }
+        .row-chg .diff-side.old .diff-tok { background: rgba(229, 72, 77, 0.34); }
+        .row-chg .diff-side.new .diff-tok { background: rgba(62, 207, 127, 0.34); }
+
+        /* Past RENDER_MAX rows the table stops and says how much it left out. */
+        tr.diff-cut > td {
+            padding: 7px 12px;
+            text-align: center;
+            color: var(--text-muted);
+            background: var(--bg-subtle);
+            border-top: 1px solid var(--border-color);
+        }
+
+        /* What the panes are replaced by while they are collapsed. A textarea
+           holding a whole file costs seconds of layout on every reflow, and
+           there is nothing to hand-edit in one anyway. */
+        .diff-sources {
+            display: flex;
+            align-items: center;
+            gap: 10px 28px;
+            flex-wrap: wrap;
+            padding: 12px 16px;
+        }
+        .diff-sources[hidden] { display: none; }
+        .diff-source { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+        .diff-source-label { font-size: 0.85rem; font-weight: 600; white-space: nowrap; }
+        .diff-source-what {
+            font-family: var(--font-mono);
+            font-size: 0.76rem;
+            color: var(--text-muted);
+            word-break: break-all;
+        }
+        .diff-source-what .warn { color: var(--warning); }
+
+        .diff-empty { padding: 28px 16px; text-align: center; color: var(--text-faint); }
+        .diff-scroll { overflow: auto; }
+
+        /* Jump-to-change nav — mirrors the ruler, and works without a mouse. */
+        .diff-nav { display: flex; align-items: center; gap: 6px; margin-right: 4px; }
+        .diff-nav[hidden] { display: none; }
+        .diff-nav .btn-icon { width: 38px; height: 38px; padding: 9px; }
+        .diff-nav-count {
+            font-family: var(--font-mono);
+            font-size: 0.78rem;
+            font-variant-numeric: tabular-nums;
+            color: var(--text-muted);
+            min-width: 6ch;
+            text-align: center;
+        }
+        /* The hunk you last jumped to stays bracketed so you can see where you landed. */
+        tr.diff-focus > td:first-child { box-shadow: inset 3px 0 0 var(--primary); }
+        tr.diff-focus > td:last-child { box-shadow: inset -3px 0 0 var(--primary); }
+
+        /* Folded runs of unchanged lines */
+        tr.diff-fold > td { padding: 0; }
+        .diff-fold-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            width: 100%;
+            padding: 5px 12px;
+            border: none;
+            border-top: 1px solid var(--border-color);
+            border-bottom: 1px solid var(--border-color);
+            background: var(--bg-subtle);
+            color: var(--text-muted);
+            font: inherit;
+            cursor: pointer;
+        }
+        .diff-fold-btn:hover { background: var(--bg-hover); color: var(--text-main); }
+
+        /* Overview ruler — a fixed strip left of the real scrollbar that maps the
+           whole scroll range of .tools-container, so a mark sits exactly where the
+           scrollbar thumb has to be for that change to be on screen. */
+        .diff-ruler {
+            position: fixed;
+            width: 14px;
+            z-index: 30;
+            background: var(--bg-app);
+            border-left: 1px solid var(--border-color);
+            cursor: pointer;
+            touch-action: none;
+            user-select: none;
+        }
+        .diff-ruler[hidden] { display: none; }
+        .diff-ruler-marks { position: absolute; inset: 0; }
+        /* Left half = original side, right half = changed side — same as the table. */
+        .diff-mark { position: absolute; left: 1px; right: 1px; border-radius: 1px; }
+        .diff-mark.del { background: linear-gradient(to right, var(--danger) 0 50%, transparent 50%); }
+        .diff-mark.ins { background: linear-gradient(to right, transparent 0 50%, var(--success) 50%); }
+        .diff-mark.chg { background: linear-gradient(to right, var(--danger) 0 50%, var(--success) 50%); }
+        .diff-ruler-thumb {
+            position: absolute;
+            left: 0;
+            right: 0;
+            border-radius: 2px;
+            background: rgba(120, 135, 160, 0.26);
+            box-shadow: inset 0 0 0 1px rgba(120, 135, 160, 0.45);
+            pointer-events: none;
+        }
+        .diff-ruler:hover .diff-ruler-thumb { background: rgba(120, 135, 160, 0.4); }
+    </style>
+</head>
+
+<body>
+    <div class="app-container">
+        <aside class="sidebar" id="app-sidebar"></aside>
+
+        <main class="main-content">
+            <header class="topbar" id="app-topbar">
+                <div class="topbar-title">
+                    <h1 id="current-tool-title">Diff / Compare</h1>
+                    <p id="current-tool-desc" class="topbar-desc">Compare two texts side by side</p>
+                </div>
+            </header>
+
+            <div class="tools-container">
+                <section id="tool-diff" class="tool-section active">
+                    <div class="diff-toolbar card">
+                        <div class="diff-options">
+                            <label><input type="checkbox" id="diff-trim"> Ignore leading/trailing whitespace</label>
+                            <label><input type="checkbox" id="diff-case"> Ignore case</label>
+                            <label><input type="checkbox" id="diff-fold" checked> Collapse unchanged lines</label>
+                        </div>
+                        <div class="diff-actions">
+                            <div class="diff-nav" id="diff-nav" hidden>
+                                <button type="button" id="btn-diff-prev" class="btn btn-icon" title="Previous change (p)" aria-label="Previous change"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg></button>
+                                <button type="button" id="btn-diff-next" class="btn btn-icon" title="Next change (n)" aria-label="Next change"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></button>
+                                <span class="diff-nav-count" id="diff-nav-count" data-i18n-skip></span>
+                            </div>
+                            <button id="btn-diff-run" class="btn btn-primary">Compare</button>
+                            <button id="btn-diff-inputs" class="btn">Hide inputs</button>
+                            <button id="btn-diff-swap" class="btn">Swap</button>
+                            <button id="btn-diff-clear" class="btn">Clear</button>
+                        </div>
+                    </div>
+
+                    <div class="split-pane" id="diff-split">
+                        <div class="pane" id="diff-pane-a">
+                            <label for="diff-a">Original</label>
+                            <div class="field-hint">Paste the first version, or drop a file here.</div>
+                            <div class="diff-file" id="diff-file-a" hidden data-i18n-skip></div>
+                            <textarea id="diff-a" placeholder="Original text…"></textarea>
+                            <div class="diff-dropzone">Drop to load as Original</div>
+                        </div>
+                        <div class="pane" id="diff-pane-b">
+                            <label for="diff-b">Changed</label>
+                            <div class="field-hint">Paste the second version, or drop a file here.</div>
+                            <div class="diff-file" id="diff-file-b" hidden data-i18n-skip></div>
+                            <textarea id="diff-b" placeholder="Changed text…"></textarea>
+                            <div class="diff-dropzone">Drop to load as Changed</div>
+                        </div>
+                    </div>
+
+                    <div class="diff-sources card" id="diff-sources" hidden>
+                        <div class="diff-source">
+                            <span class="diff-source-label">Original</span>
+                            <span class="diff-source-what" id="diff-source-a" data-i18n-skip></span>
+                        </div>
+                        <div class="diff-source">
+                            <span class="diff-source-label">Changed</span>
+                            <span class="diff-source-what" id="diff-source-b" data-i18n-skip></span>
+                        </div>
+                    </div>
+
+                    <div class="diff-result" id="diff-result">
+                        <div class="diff-empty">Paste text on both sides and press <strong>Compare</strong>.</div>
+                    </div>
+
+                    <div class="diff-ruler" id="diff-ruler" hidden aria-hidden="true" title="Diff overview — click or drag to jump">
+                        <div class="diff-ruler-marks" id="diff-ruler-marks"></div>
+                        <div class="diff-ruler-thumb" id="diff-ruler-thumb"></div>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </div>
+
+    <div id="toast" class="toast">Copied to clipboard!</div>
+
+    <script src="app.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const a = document.getElementById('diff-a');
+            const b = document.getElementById('diff-b');
+            const result = document.getElementById('diff-result');
+            const optTrim = document.getElementById('diff-trim');
+            const optCase = document.getElementById('diff-case');
+            const optFold = document.getElementById('diff-fold');
+            const nav = document.getElementById('diff-nav');
+            const navCount = document.getElementById('diff-nav-count');
+            const ruler = document.getElementById('diff-ruler');
+            const rulerMarks = document.getElementById('diff-ruler-marks');
+            const thumb = document.getElementById('diff-ruler-thumb');
+            const scroller = document.querySelector('.tools-container');
+
+            // Normalize a line for *comparison* only — the original text is still displayed.
+            function norm(line) {
+                let s = line;
+                if (optTrim.checked) s = s.trim();
+                if (optCase.checked) s = s.toLowerCase();
+                return s;
+            }
+
+            // ------------------------------------------------------------
+            // Diff core
+            // ------------------------------------------------------------
+            // Myers' O(ND) algorithm: the cost follows D, the number of lines
+            // that actually differ, not the size of the two files. A line-by-line
+            // LCS table would be (n+1)*(m+1) cells, which two 20k-line files
+            // cannot afford at all.
+            const MAX_EDITS = 2000;   // per search; past this we split, see search()
+
+            // Lines are compared by identity, not by content: each distinct
+            // normalized line gets an integer, so the inner loops compare ints.
+            function intern(oldLines, newLines) {
+                const ids = new Map();
+                const map = lines => {
+                    const out = new Int32Array(lines.length);
+                    for (let i = 0; i < lines.length; i++) {
+                        const key = norm(lines[i]);
+                        let id = ids.get(key);
+                        if (id === undefined) { id = ids.size; ids.set(key, id); }
+                        out[i] = id;
+                    }
+                    return out;
+                };
+                return [map(oldLines), map(newLines)];
+            }
+
+            // Myers' greedy forward search over a[ai..aj) against b[bi..bj),
+            // keeping the V history so the path can be walked back out. Pushes
+            // matched index pairs into `out` in increasing order and returns
+            // true; when the edit distance is past MAX_EDITS it pushes nothing
+            // and returns the furthest point it did reach, for search() to split
+            // on. The V history is what bounds MAX_EDITS: it costs O(D^2).
+            function myers(a, b, ai, aj, bi, bj, out) {
+                const n = aj - ai, m = bj - bi;
+                const max = Math.min(n + m, MAX_EDITS);
+                const off = max + 1;
+                const v = new Int32Array(2 * max + 3);
+                const trace = [];
+                for (let d = 0; d <= max; d++) {
+                    // Only k of d's parity is written, so v[k±1] is always the
+                    // previous round's value and one array serves for all of them.
+                    for (let k = -d; k <= d; k += 2) {
+                        let x;
+                        if (k === -d || (k !== d && v[off + k - 1] < v[off + k + 1])) x = v[off + k + 1];
+                        else x = v[off + k - 1] + 1;
+                        let y = x - k;
+                        while (x < n && y < m && a[ai + x] === b[bi + y]) { x++; y++; }
+                        v[off + k] = x;
+                        if (x >= n && y >= m) {
+                            trace.push(v.slice(off - d, off + d + 1));
+                            walkBack(trace, n, m, ai, bi, out);
+                            return true;
+                        }
+                    }
+                    trace.push(v.slice(off - d, off + d + 1));
+                }
+                let bestX = 0, bestY = 0, best = -1;
+                for (let k = -max; k <= max; k += 2) {
+                    const x = v[off + k], y = x - k;
+                    if (x < 0 || x > n || y < 0 || y > m) continue;
+                    if (x + y > best) { best = x + y; bestX = x; bestY = y; }
+                }
+                return { x: bestX, y: bestY };
+            }
+
+            // Each trace step holds the snake that led to the next one, and the
+            // diagonal run of a snake is exactly a block of matched lines.
+            function walkBack(trace, n, m, ai, bi, out) {
+                const at = (d, k) => trace[d][k + d];
+                const pairs = [];
+                let x = n, y = m;
+                for (let d = trace.length - 1; d > 0; d--) {
+                    const k = x - y;
+                    const kPrev = (k === -d || (k !== d && at(d - 1, k - 1) < at(d - 1, k + 1))) ? k + 1 : k - 1;
+                    const xStart = at(d - 1, kPrev);
+                    const xMid = kPrev === k + 1 ? xStart : xStart + 1;
+                    for (let p = x - 1, q = y - 1; p >= xMid; p--, q--) pairs.push(p, q);
+                    x = xStart; y = xStart - kPrev;
+                }
+                for (let p = x - 1, q = y - 1; p >= 0 && q >= 0; p--, q--) pairs.push(p, q);
+                for (let i = pairs.length - 2; i >= 0; i -= 2) out.push(ai + pairs[i], bi + pairs[i + 1]);
+            }
+
+            // Myers, or — when the difference is too big to search minimally —
+            // split on the furthest point it did reach and take each half on its
+            // own. Not guaranteed minimal there, but it always finishes, and the
+            // split sits on a shortest path so the result stays sensible.
+            function search(a, b, ai, aj, bi, bj, out) {
+                while (ai < aj && bi < bj && a[ai] === b[bi]) { out.push(ai++, bi++); }
+                const tail = [];
+                while (ai < aj && bi < bj && a[aj - 1] === b[bj - 1]) { tail.push(--aj, --bj); }
+                if (ai < aj && bi < bj) {
+                    const reached = myers(a, b, ai, aj, bi, bj, out);
+                    if (reached !== true) {
+                        const x = ai + reached.x, y = bi + reached.y;
+                        search(a, b, ai, x, bi, y, out);
+                        search(a, b, x, aj, y, bj, out);
+                    }
+                }
+                for (let i = tail.length - 2; i >= 0; i -= 2) out.push(tail[i], tail[i + 1]);
+            }
+
+            // Matched pairs for the whole of both sides, in increasing order.
+            function matchPairs(a, b) {
+                const out = [];
+                let ai = 0, aj = a.length, bi = 0, bj = b.length;
+                // Two versions of one file share a head and a tail; peeling them
+                // off is free and leaves only the part that can differ.
+                while (ai < aj && bi < bj && a[ai] === b[bi]) { out.push(ai++, bi++); }
+                const tail = [];
+                while (ai < aj && bi < bj && a[aj - 1] === b[bj - 1]) { tail.push(--aj, --bj); }
+
+                if (ai < aj && bi < bj) {
+                    // A line that appears nowhere on the other side can never be
+                    // matched, so dropping it is exact — and it is what keeps the
+                    // search small, since an edited line is usually unlike
+                    // anything in the other version.
+                    const inB = new Set(), inA = new Set();
+                    for (let j = bi; j < bj; j++) inB.add(b[j]);
+                    for (let i = ai; i < aj; i++) inA.add(a[i]);
+                    const ra = [], rb = [];
+                    for (let i = ai; i < aj; i++) if (inB.has(a[i])) ra.push(i);
+                    for (let j = bi; j < bj; j++) if (inA.has(b[j])) rb.push(j);
+                    if (ra.length && rb.length) {
+                        const sa = new Int32Array(ra.length), sb = new Int32Array(rb.length);
+                        for (let i = 0; i < ra.length; i++) sa[i] = a[ra[i]];
+                        for (let j = 0; j < rb.length; j++) sb[j] = b[rb[j]];
+                        const local = [];
+                        search(sa, sb, 0, sa.length, 0, sb.length, local);
+                        for (let i = 0; i < local.length; i += 2) out.push(ra[local[i]], rb[local[i + 1]]);
+                    }
+                }
+
+                for (let i = tail.length - 2; i >= 0; i -= 2) out.push(tail[i], tail[i + 1]);
+                return out;
+            }
+
+            // eq / del / ins in document order, from the matched pairs.
+            function diffOps(oldLines, newLines) {
+                const [A, B] = intern(oldLines, newLines);
+                const pairs = matchPairs(A, B);
+                const ops = [];
+                let i = 0, j = 0;
+                for (let p = 0; p < pairs.length; p += 2) {
+                    while (i < pairs[p]) ops.push({ t: 'del', o: oldLines[i++] });
+                    while (j < pairs[p + 1]) ops.push({ t: 'ins', nw: newLines[j++] });
+                    ops.push({ t: 'eq', o: oldLines[i++], nw: newLines[j++] });
+                }
+                while (i < oldLines.length) ops.push({ t: 'del', o: oldLines[i++] });
+                while (j < newLines.length) ops.push({ t: 'ins', nw: newLines[j++] });
+                return ops;
+            }
+
+            // Pair consecutive del/ins runs into side-by-side "changed" rows.
+            function toRows(ops) {
+                const rows = [];
+                let oldNo = 0, newNo = 0, k = 0;
+                while (k < ops.length) {
+                    const op = ops[k];
+                    if (op.t === 'eq') {
+                        rows.push({ type: 'eq', oldNo: ++oldNo, newNo: ++newNo, oldLine: op.o, newLine: op.nw });
+                        k++;
+                        continue;
+                    }
+                    const dels = [], inss = [];
+                    while (k < ops.length && ops[k].t !== 'eq') {
+                        if (ops[k].t === 'del') dels.push(ops[k].o); else inss.push(ops[k].nw);
+                        k++;
+                    }
+                    const max = Math.max(dels.length, inss.length);
+                    for (let r = 0; r < max; r++) {
+                        const hasOld = r < dels.length, hasNew = r < inss.length;
+                        rows.push({
+                            type: hasOld && hasNew ? 'chg' : (hasOld ? 'del' : 'ins'),
+                            oldNo: hasOld ? ++oldNo : null,
+                            newNo: hasNew ? ++newNo : null,
+                            oldLine: hasOld ? dels[r] : null,
+                            newLine: hasNew ? inss[r] : null
+                        });
+                    }
+                }
+                return rows;
+            }
+
+            function esc(s) {
+                return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            }
+
+            // ------------------------------------------------------------
+            // Stage two: what changed inside a pair of changed lines
+            // ------------------------------------------------------------
+            // The same search, over tokens instead of lines. It only ever runs
+            // for a row that is actually being drawn, which is what makes it
+            // affordable — a 200k-line diff draws a few thousand of them. Words
+            // and numbers stay whole: marks inside an identifier read as noise.
+            const TOKEN_RE = /[A-Za-z0-9_]+|\s+|[\s\S]/gu;
+            const WS_RE = /^\s+$/;
+            const MAX_INLINE = 4000;   // chars a side; a minified line is not worth marking
+
+            function inlineDiff(oldLine, newLine) {
+                if (oldLine.length > MAX_INLINE || newLine.length > MAX_INLINE) return null;
+                const oldToks = oldLine.match(TOKEN_RE) || [];
+                const newToks = newLine.match(TOKEN_RE) || [];
+                const ids = new Map();
+                const toIds = toks => {
+                    const out = new Int32Array(toks.length);
+                    for (let i = 0; i < toks.length; i++) {
+                        let id = ids.get(toks[i]);
+                        if (id === undefined) { id = ids.size; ids.set(toks[i], id); }
+                        out[i] = id;
+                    }
+                    return out;
+                };
+                const A = toIds(oldToks), B = toIds(newToks);
+                const pairs = [];
+                search(A, B, 0, A.length, 0, B.length, pairs);
+                // Whitespace matches between any two lines, so "something in
+                // common" has to mean a real token. Otherwise the line was
+                // replaced outright: the row tint says that already, and marking
+                // every word on both sides only adds noise.
+                let common = false;
+                for (let p = 0; p < pairs.length && !common; p += 2) common = !WS_RE.test(oldToks[pairs[p]]);
+                if (!common) return null;
+                return [markToks(oldToks, pairs, 0), markToks(newToks, pairs, 1)];
+            }
+
+            // Join the tokens back up, wrapping each run that has no counterpart.
+            function markToks(toks, pairs, side) {
+                const kept = new Uint8Array(toks.length);
+                for (let p = side; p < pairs.length; p += 2) kept[pairs[p]] = 1;
+                let html = '', run = '';
+                for (let i = 0; i < toks.length; i++) {
+                    if (!kept[i]) { run += toks[i]; continue; }
+                    if (run) { html += '<span class="diff-tok">' + esc(run) + '</span>'; run = ''; }
+                    html += esc(toks[i]);
+                }
+                return run ? html + '<span class="diff-tok">' + esc(run) + '</span>' : html;
+            }
+
+            // ------------------------------------------------------------
+            // Rendering
+            // ------------------------------------------------------------
+            const FOLD_MIN = 8;      // a run of unchanged lines shorter than this never folds
+            const FOLD_CONTEXT = 3;  // unchanged lines kept visible next to a change
+            // Rows drawn before the table cuts itself off. The diff scales well
+            // past this; one <tr> per line of a 500k-line file does not.
+            const RENDER_MAX = 50000;
+
+            const EMPTY = '<div class="diff-empty">Paste text on both sides and press <strong>Compare</strong>.</div>';
+
+            let rows = [];   // last diff, kept so folds can be expanded on demand
+            let focused = -1;// hunk the last ↑/↓ jumped to
+            let hunks = [];  // change blocks: { trs, top, bottom } in scroll-content px
+            let marks = [];  // same-type runs for the ruler: { type, top, bottom }
+
+            function rowHtml(row) {
+                const marked = row.type === 'chg' ? inlineDiff(row.oldLine, row.newLine) : null;
+                const oldCell = row.oldLine === null
+                    ? '<td class="diff-num old"></td><td class="diff-side old cell-empty"></td>'
+                    : '<td class="diff-num old">' + row.oldNo + '</td><td class="diff-side old">' +
+                      (marked ? marked[0] : esc(row.oldLine)) + '</td>';
+                const newCell = row.newLine === null
+                    ? '<td class="diff-num new"></td><td class="diff-side new cell-empty"></td>'
+                    : '<td class="diff-num new">' + row.newNo + '</td><td class="diff-side new">' +
+                      (marked ? marked[1] : esc(row.newLine)) + '</td>';
+                return '<tr class="row-' + row.type + '" data-type="' + row.type + '">' + oldCell + newCell + '</tr>';
+            }
+
+            function foldHtml(from, to) {
+                return '<tr class="diff-fold" data-from="' + from + '" data-to="' + to + '">' +
+                    '<td colspan="4"><button type="button" class="diff-fold-btn">' +
+                    '⋯ ' + (to - from + 1) + ' ' + t('unchanged lines hidden') +
+                    '</button></td></tr>';
+            }
+
+            function cutHtml(n) {
+                return '<tr class="diff-cut"><td colspan="4">' +
+                    n.toLocaleString() + ' ' + t('more rows not shown') + '</td></tr>';
+            }
+
+            // Only the middle of a long unchanged run collapses — FOLD_CONTEXT lines
+            // stay on each side so every change keeps its surroundings.
+            // Building this HTML is the most expensive part of a big diff, so rows
+            // past RENDER_MAX are counted instead of built.
+            function bodyHtml() {
+                const parts = [];
+                let shown = 0, cut = 0;
+                const emit = row => { if (shown < RENDER_MAX) { parts.push(rowHtml(row)); shown++; } else cut++; };
+                const emitFold = (from, to) => { if (shown < RENDER_MAX) { parts.push(foldHtml(from, to)); shown++; } else cut++; };
+
+                if (!optFold.checked) {
+                    rows.forEach(emit);
+                } else {
+                    let i = 0;
+                    while (i < rows.length) {
+                        if (rows[i].type !== 'eq') { emit(rows[i]); i++; continue; }
+                        let j = i;
+                        while (j < rows.length && rows[j].type === 'eq') j++;
+                        const lead = i === 0 ? 0 : FOLD_CONTEXT;             // nothing above to give context to
+                        const tail = j === rows.length ? 0 : FOLD_CONTEXT;
+                        // lead and tail are both 0 only when the whole diff is unchanged —
+                        // folding then would hide the entire document.
+                        if (lead + tail > 0 && j - i > Math.max(FOLD_MIN, lead + tail)) {
+                            for (let k = i; k < i + lead; k++) emit(rows[k]);
+                            emitFold(i + lead, j - tail - 1);
+                            for (let k = j - tail; k < j; k++) emit(rows[k]);
+                        } else {
+                            for (let k = i; k < j; k++) emit(rows[k]);
+                        }
+                        i = j;
+                    }
+                }
+                if (cut) parts.push(cutHtml(cut));
+                return parts.join('');
+            }
+
+            function run() {
+                if (!a.value && !b.value) { reset(); return; }
+                rows = toRows(diffOps(a.value.split('\n'), b.value.split('\n')));
+                render();
+            }
+
+            // Draws whatever is already in `rows` — folding is a view of the same
+            // diff, so toggling it must not pay for the LCS again.
+            function render() {
+                let added = 0, removed = 0, same = 0;
+                rows.forEach(row => {
+                    if (row.type === 'eq') same++;
+                    else if (row.type === 'del') removed++;
+                    else if (row.type === 'ins') added++;
+                    else { added++; removed++; }
+                });
+
+                const identical = added === 0 && removed === 0;
+                result.innerHTML =
+                    '<div class="diff-summary">' +
+                    (identical ? '<span class="same">Files are identical</span>' :
+                        '<span class="add">+' + added + ' added</span>' +
+                        '<span class="del">−' + removed + ' removed</span>' +
+                        '<span class="same">' + same + ' unchanged</span>') +
+                    '</div>' +
+                    // User text — the i18n runtime must never rewrite a line that
+                    // happens to equal a dictionary key.
+                    '<div class="diff-scroll" data-i18n-skip><table class="diff-table"><tbody>' +
+                    bodyHtml() + '</tbody></table></div>';
+                // Before index(): revealing the nav can rewrap the toolbar, and the
+                // row positions it measures have to include that.
+                nav.hidden = !rows.some(row => row.type !== 'eq');
+                index();
+            }
+
+            function reset() {
+                rows = [];
+                result.innerHTML = EMPTY;
+                nav.hidden = true;
+                index();
+            }
+
+            // ------------------------------------------------------------
+            // Overview ruler + change navigation
+            // ------------------------------------------------------------
+            // Measure the rendered rows once: change blocks (for ↑/↓) and same-type
+            // runs (for the ruler marks), both in scroll-content coordinates.
+            function index() {
+                hunks = []; marks = [];
+                if (!result.querySelector('tr.diff-focus')) focused = -1;
+                const base = scroller.getBoundingClientRect().top - scroller.scrollTop;
+                let hunk = null, mark = null;
+                result.querySelectorAll('.diff-table tr').forEach(tr => {
+                    const type = tr.dataset.type;
+                    if (!type || type === 'eq') { hunk = null; mark = null; return; }
+                    const r = tr.getBoundingClientRect();
+                    const top = r.top - base, bottom = r.bottom - base;
+                    if (hunk) { hunk.trs.push(tr); hunk.bottom = bottom; }
+                    else { hunk = { trs: [tr], top: top, bottom: bottom }; hunks.push(hunk); }
+                    if (mark && mark.type === type) mark.bottom = bottom;
+                    else { mark = { type: type, top: top, bottom: bottom }; marks.push(mark); }
+                });
+                layoutRuler();
+            }
+
+            function layoutRuler() {
+                const box = scroller.getBoundingClientRect();
+                const view = scroller.clientHeight, total = scroller.scrollHeight;
+                ruler.hidden = !hunks.length || total <= view + 4;
+                if (ruler.hidden) { sync(); return; }
+                // Sit just left of the real scrollbar, spanning the scroll viewport.
+                ruler.style.top = box.top + 'px';
+                ruler.style.height = view + 'px';
+                // Overlay scrollbars take no layout width, so leave a lane for them.
+                const bar = Math.max(10, scroller.offsetWidth - scroller.clientWidth);
+                ruler.style.right = Math.max(0, window.innerWidth - box.right + bar) + 'px';
+                rulerMarks.innerHTML = marks.map(m => {
+                    const top = m.top / total * view;
+                    const h = Math.max(3, (m.bottom - m.top) / total * view);
+                    return '<div class="diff-mark ' + m.type + '" style="top:' + top.toFixed(1) +
+                        'px;height:' + h.toFixed(1) + 'px"></div>';
+                }).join('');
+                sync();
+            }
+
+            // Cheap per-scroll work: move the viewport thumb, refresh the counter.
+            function sync() {
+                if (hunks.length) {
+                    const cur = current();
+                    navCount.textContent = ((cur === -1 ? nearest() : cur) + 1) + ' / ' + hunks.length;
+                }
+                if (ruler.hidden) return;
+                const view = scroller.clientHeight, total = scroller.scrollHeight;
+                const h = Math.max(20, view / total * view);
+                thumb.style.height = h + 'px';
+                thumb.style.top = Math.min(view - h, scroller.scrollTop / total * view) + 'px';
+            }
+
+            let queued = false;
+            function syncSoon() {
+                if (queued) return;
+                queued = true;
+                requestAnimationFrame(() => { queued = false; sync(); });
+            }
+
+            function middle() { return scroller.scrollTop + scroller.clientHeight / 2; }
+
+            function onScreen(h) {
+                return h.bottom > scroller.scrollTop && h.top < scroller.scrollTop + scroller.clientHeight;
+            }
+
+            // Where ↑/↓ counts from: the hunk you jumped to while it is still on
+            // screen, otherwise -1 so we fall back to what the viewport shows.
+            function current() {
+                return focused >= 0 && focused < hunks.length && onScreen(hunks[focused]) ? focused : -1;
+            }
+
+            function nearest() {
+                const c = middle();
+                let best = 0, bestDist = Infinity;
+                hunks.forEach((h, i) => {
+                    const d = Math.abs((h.top + h.bottom) / 2 - c);
+                    if (d < bestDist) { bestDist = d; best = i; }
+                });
+                return best;
+            }
+
+            function mark(i) {
+                result.querySelectorAll('tr.diff-focus').forEach(tr => tr.classList.remove('diff-focus'));
+                focused = i;
+                if (hunks[i]) hunks[i].trs.forEach(tr => tr.classList.add('diff-focus'));
+            }
+
+            function goTo(i) {
+                const h = hunks[i];
+                if (!h) return;
+                mark(i);
+                scroller.scrollTo({
+                    top: Math.max(0, (h.top + h.bottom) / 2 - scroller.clientHeight / 2),
+                    behavior: 'smooth'
+                });
+            }
+
+            // Stepping from the current hunk keeps ↑/↓ a clean cycle even at the ends,
+            // where the scroller cannot centre the target; after a manual scroll we
+            // step from whatever is on screen instead. Both ends wrap around.
+            function nextChange() {
+                if (!hunks.length) return;
+                const cur = current();
+                if (cur !== -1) { goTo((cur + 1) % hunks.length); return; }
+                const c = middle();
+                const i = hunks.findIndex(h => h.top > c + 2);
+                goTo(i === -1 ? 0 : i);
+            }
+
+            function prevChange() {
+                if (!hunks.length) return;
+                const cur = current();
+                if (cur !== -1) { goTo((cur - 1 + hunks.length) % hunks.length); return; }
+                const c = middle();
+                let i = -1;
+                hunks.forEach((h, k) => { if (h.bottom < c - 2) i = k; });
+                goTo(i === -1 ? hunks.length - 1 : i);
+            }
+
+            function jumpToRuler(clientY) {
+                const box = ruler.getBoundingClientRect();
+                const ratio = Math.min(1, Math.max(0, (clientY - box.top) / box.height));
+                scroller.scrollTop = ratio * scroller.scrollHeight - scroller.clientHeight / 2;
+            }
+
+            // ------------------------------------------------------------
+            // Loading a side from a dropped file
+            // ------------------------------------------------------------
+            // The file is read and decoded in the page, exactly like pasting its
+            // text in by hand — nothing is uploaded.
+            // Not the diff's limit — it handles far more — but a file this size
+            // is already seconds of layout for the textarea that holds it.
+            const MAX_BYTES = 16 * 1024 * 1024;
+            // Non-text bytes a file may carry and still be shown as text. Logs,
+            // old exports and truncated files often hold a few stray control
+            // bytes and read perfectly well; a real binary is far past this.
+            const MAX_NONTEXT = 0.1;
+            // C0 controls that carry no meaning in text (tab/LF/CR excluded), plus DEL.
+            const NONTEXT_RE = /[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g;
+
+            function strictDecode(label, bytes) {
+                // Throws on the first byte the encoding cannot represent — and on
+                // construction if the browser has no such decoder.
+                try { return new TextDecoder(label, { fatal: true }).decode(bytes); }
+                catch (e) { return null; }
+            }
+
+            // BOM-less UTF-16 is half NUL bytes, all on the same parity. Spotting
+            // it here is what keeps its padding from failing the binary check.
+            function utf16Parity(bytes) {
+                const len = Math.min(bytes.length, 4096) & ~1;
+                if (len < 16) return null;
+                let even = 0, odd = 0;
+                for (let i = 0; i < len; i += 2) {
+                    if (!bytes[i]) even++;
+                    if (!bytes[i + 1]) odd++;
+                }
+                const pairs = len / 2;
+                if (even > pairs * 0.9 && odd < pairs * 0.1) return 'be';   // 00 41 00 42
+                if (odd > pairs * 0.9 && even < pairs * 0.1) return 'le';   // 41 00 42 00
+                return null;
+            }
+
+            // How to read the dropped bytes: { text, encoding } — or null when they
+            // are binary. Ordered by how far each signal can be trusted: an explicit
+            // BOM, then BOM-less UTF-16, then strict UTF-8, then the legacy
+            // encodings that still turn up in old files.
+            function decodeBytes(bytes) {
+                let b = bytes, text;
+                if (b.length >= 2 && b[0] === 0xFF && b[1] === 0xFE) {
+                    text = strictDecode('utf-16le', b.subarray(2));
+                    if (text !== null) return { text: text, encoding: 'UTF-16LE BOM' };
+                } else if (b.length >= 2 && b[0] === 0xFE && b[1] === 0xFF) {
+                    text = strictDecode('utf-16be', b.subarray(2));
+                    if (text !== null) return { text: text, encoding: 'UTF-16BE BOM' };
+                } else if (b.length >= 3 && b[0] === 0xEF && b[1] === 0xBB && b[2] === 0xBF) {
+                    text = strictDecode('utf-8', b.subarray(3));
+                    if (text !== null) return { text: text, encoding: 'UTF-8 BOM' };
+                    b = b.subarray(3);
+                }
+                const wide = utf16Parity(b);
+                if (wide) {
+                    text = strictDecode(wide === 'le' ? 'utf-16le' : 'utf-16be', b);
+                    if (text !== null) return { text: text, encoding: 'UTF-16' + wide.toUpperCase() };
+                }
+
+                let nontext = 0;
+                for (let i = 0; i < b.length; i++) {
+                    const c = b[i];
+                    if (c < 0x20 ? (c !== 9 && c !== 10 && c !== 13) : c === 0x7F) nontext++;
+                }
+                if (b.length && nontext / b.length > MAX_NONTEXT) return null;
+
+                text = strictDecode('utf-8', b);
+                if (text !== null) return { text: text, encoding: 'UTF-8', nontext: nontext };
+                text = strictDecode('euc-kr', b);
+                if (text !== null) return { text: text, encoding: 'EUC-KR', nontext: nontext };
+                // Nothing decoded cleanly, but the file is mostly text — windows-1252
+                // maps almost every byte, so it still shows. Flagged: it is a guess.
+                return {
+                    text: new TextDecoder('windows-1252').decode(b),
+                    encoding: 'Windows-1252',
+                    nontext: nontext,
+                    guessed: true
+                };
+            }
+
+            // Make the decoded text diffable: matching line endings, and control
+            // bytes visible instead of invisibly shifting the line they sit on.
+            function prepare(read) {
+                let text = read.text;
+                const notes = [];
+                if (read.guessed) notes.push('encoding guessed');
+                if (text.indexOf('\r\n') !== -1) {
+                    text = text.replace(/\r\n/g, '\n');
+                    notes.push('CRLF → LF');
+                }
+                // The byte scan already knows when there is nothing to find, and
+                // skipping the scan saves a pass over the whole file. The UTF-16
+                // paths never counted, so those still look.
+                const controls = read.nontext === 0 ? 0 : (text.match(NONTEXT_RE) || []).length;
+                if (controls) {
+                    // U+2400.. is the Control Pictures block: NUL shows as ␀,
+                    // ESC as ␛, so a stray byte is a character you can see and
+                    // that lines up against the other side.
+                    text = text.replace(NONTEXT_RE, c =>
+                        c === '\x7f' ? '␡' : String.fromCharCode(0x2400 + c.charCodeAt(0)));
+                    notes.push(controls + (controls === 1 ? ' control byte' : ' control bytes') + ' shown as ␀');
+                }
+                return { text: text, encoding: read.encoding, notes: notes };
+            }
+
+            const sides = {
+                a: { pane: document.getElementById('diff-pane-a'), ta: a, note: document.getElementById('diff-file-a'), file: null },
+                b: { pane: document.getElementById('diff-pane-b'), ta: b, note: document.getElementById('diff-file-b'), file: null }
+            };
+
+            function toast(msg, isError) {
+                if (window.showToast) window.showToast(msg, isError);
+            }
+
+            function fmtBytes(n) {
+                if (n < 1024) return n + ' B';
+                if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB';
+                return (n / 1024 / 1024).toFixed(1) + ' MB';
+            }
+
+            function fileLabel(info) {
+                return esc(info.name) + ' · ' + fmtBytes(info.size) + ' · ' + esc(info.encoding) +
+                    (info.notes.length ? ' <span class="warn">· ' + esc(info.notes.join(' · ')) + '</span>' : '');
+            }
+
+            // The one-line "what is in this side" note under the label.
+            function showFile(side, info) {
+                const s = sides[side];
+                s.file = info || null;
+                s.note.hidden = !info;
+                s.note.innerHTML = info ? fileLabel(info) : '';
+                if (collapsed) describeSources();
+            }
+
+            // Returns the file name on success, so the caller can report one load
+            // or two in a single toast.
+            async function loadFile(side, file) {
+                if (!file) return null;
+                if (file.size > MAX_BYTES) {
+                    toast(file.name + ' — too large, ' + fmtBytes(MAX_BYTES) + ' is the limit', true);
+                    return null;
+                }
+                let bytes;
+                try { bytes = new Uint8Array(await file.arrayBuffer()); }
+                catch (e) { toast('Could not read ' + file.name, true); return null; }
+                const read = decodeBytes(bytes);
+                if (!read) {
+                    toast(file.name + ' — binary data, not text', true);
+                    return null;
+                }
+                const out = prepare(read);
+                sides[side].ta.value = out.text;
+                showFile(side, { name: file.name, size: file.size, encoding: out.encoding, notes: out.notes });
+                return file.name;
+            }
+
+            // Dragged text keeps the browser's own drop behaviour — only a file
+            // drag is intercepted.
+            function hasFiles(dt) {
+                return !!dt && Array.prototype.indexOf.call(dt.types || [], 'Files') !== -1;
+            }
+
+            Object.keys(sides).forEach(side => {
+                const pane = sides[side].pane;
+                let depth = 0;   // dragenter/dragleave also fire for every child
+                pane.addEventListener('dragenter', e => {
+                    if (!hasFiles(e.dataTransfer)) return;
+                    e.preventDefault();
+                    depth++;
+                    pane.classList.add('dragover');
+                });
+                pane.addEventListener('dragover', e => {
+                    if (!hasFiles(e.dataTransfer)) return;
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = 'copy';
+                });
+                // No file check here: depth only ever rises for a file drag, so a
+                // text drag leaving cannot clear an overlay it never raised — and
+                // the overlay cannot get stuck if a browser reports no types.
+                pane.addEventListener('dragleave', () => {
+                    if (--depth <= 0) { depth = 0; pane.classList.remove('dragover'); }
+                });
+                pane.addEventListener('drop', async e => {
+                    if (!hasFiles(e.dataTransfer)) return;
+                    e.preventDefault();
+                    depth = 0;
+                    pane.classList.remove('dragover');
+                    const files = Array.from(e.dataTransfer.files);
+                    // Two files at once fill both sides: the pane you dropped on
+                    // takes the first, the other side takes the second.
+                    const loaded = [await loadFile(side, files[0])];
+                    if (files[1]) loaded.push(await loadFile(side === 'a' ? 'b' : 'a', files[1]));
+                    const ok = loaded.filter(name => name);
+                    if (!ok.length) return;
+                    toast('Loaded ' + ok.join(' and ') +
+                        (files.length > 2 ? ' — the rest were ignored, a diff takes two' : ''));
+                    // Before run(), not after: the diff measures row positions,
+                    // and that forced layout is exactly what a textarea holding
+                    // a whole file makes expensive. Collapsed first, it never
+                    // lays the file out at all.
+                    setCollapsed(true);
+                    run();
+                });
+            });
+
+            // ------------------------------------------------------------
+            // Collapsing the inputs
+            // ------------------------------------------------------------
+            // A textarea holding a whole file is re-laid-out on every reflow,
+            // which costs seconds for a 10 MB file and dwarfs the diff itself —
+            // 2.4s of layout against 125ms of comparing. Collapsed, it is
+            // display:none and costs nothing, and a file is not something you
+            // were going to hand-edit in a textarea anyway.
+            const split = document.getElementById('diff-split');
+            const sources = document.getElementById('diff-sources');
+            const inputsBtn = document.getElementById('btn-diff-inputs');
+            const sourceNote = { a: document.getElementById('diff-source-a'), b: document.getElementById('diff-source-b') };
+            let collapsed = false;
+
+            // Counted rather than split: splitting 10 MB to count its lines
+            // allocates every one of them for a number in a label.
+            function countLines(text) {
+                let n = 1;
+                for (let i = text.indexOf('\n'); i !== -1; i = text.indexOf('\n', i + 1)) n++;
+                return n;
+            }
+
+            function describeSources() {
+                Object.keys(sides).forEach(side => {
+                    const s = sides[side], text = s.ta.value;
+                    sourceNote[side].innerHTML = !text
+                        ? t('empty')
+                        : (s.file ? fileLabel(s.file) : t('pasted text')) +
+                          ' · ' + countLines(text).toLocaleString() + ' ' + t('lines');
+                });
+            }
+
+            function setCollapsed(on) {
+                collapsed = on;
+                split.hidden = on;
+                sources.hidden = !on;
+                // Plain English: the i18n runtime translates this label like any
+                // other, and it is not inside a skipped subtree.
+                inputsBtn.textContent = on ? 'Show inputs' : 'Hide inputs';
+                if (on) describeSources();
+                index();
+            }
+
+            inputsBtn.addEventListener('click', () => setCollapsed(!collapsed));
+
+            // A file that lands next to a pane rather than on it would otherwise
+            // make the browser navigate to the file, taking both sides with it.
+            document.addEventListener('dragover', e => { if (hasFiles(e.dataTransfer)) e.preventDefault(); });
+            document.addEventListener('drop', e => { if (hasFiles(e.dataTransfer)) e.preventDefault(); });
+
+            // Hand-editing a loaded side makes the file note a lie — drop it.
+            a.addEventListener('input', () => { if (sides.a.file) showFile('a', null); });
+            b.addEventListener('input', () => { if (sides.b.file) showFile('b', null); });
+
+            // ------------------------------------------------------------
+            // Wiring
+            // ------------------------------------------------------------
+            scroller.addEventListener('scroll', syncSoon, { passive: true });
+            window.addEventListener('resize', layoutRuler);
+            // Row positions also move when the sidebar collapses or a textarea is
+            // dragged taller, neither of which fires a scroll or resize event.
+            if (window.ResizeObserver) {
+                let pending = false;
+                const ro = new ResizeObserver(() => {
+                    if (pending) return;
+                    pending = true;
+                    requestAnimationFrame(() => { pending = false; index(); });
+                });
+                ro.observe(scroller);
+                ro.observe(document.getElementById('tool-diff'));
+            }
+
+            ruler.addEventListener('pointerdown', e => {
+                ruler.setPointerCapture(e.pointerId);
+                jumpToRuler(e.clientY);
+            });
+            ruler.addEventListener('pointermove', e => {
+                if (ruler.hasPointerCapture(e.pointerId)) jumpToRuler(e.clientY);
+            });
+
+            document.getElementById('btn-diff-prev').addEventListener('click', prevChange);
+            document.getElementById('btn-diff-next').addEventListener('click', nextChange);
+
+            document.addEventListener('keydown', e => {
+                if (e.metaKey || e.ctrlKey || e.altKey || !hunks.length) return;
+                const el = document.activeElement;
+                if (el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName))) return;
+                if (e.key === 'n') { e.preventDefault(); nextChange(); }
+                else if (e.key === 'p') { e.preventDefault(); prevChange(); }
+            });
+
+            // Expanding a fold above the viewport would shove the content down —
+            // keep whatever the reader is looking at exactly where it was.
+            result.addEventListener('click', e => {
+                const btn = e.target.closest('.diff-fold-btn');
+                if (!btn) return;
+                const tr = btn.closest('tr');
+                const above = tr.getBoundingClientRect().top < scroller.getBoundingClientRect().top;
+                const before = scroller.scrollHeight;
+                let html = '';
+                for (let k = +tr.dataset.from; k <= +tr.dataset.to; k++) html += rowHtml(rows[k]);
+                tr.insertAdjacentHTML('beforebegin', html);
+                tr.remove();
+                if (above) scroller.scrollTop += scroller.scrollHeight - before;
+                index();
+            });
+
+            document.getElementById('btn-diff-run').addEventListener('click', run);
+            document.getElementById('btn-diff-clear').addEventListener('click', () => {
+                a.value = ''; b.value = '';
+                showFile('a', null); showFile('b', null);
+                setCollapsed(false);
+                reset();
+                a.focus();
+            });
+            document.getElementById('btn-diff-swap').addEventListener('click', () => {
+                const tmp = a.value; a.value = b.value; b.value = tmp;
+                const held = sides.a.file;
+                showFile('a', sides.b.file); showFile('b', held);
+                if (collapsed) describeSources();
+                run();
+            });
+            optTrim.addEventListener('change', run);
+            optCase.addEventListener('change', run);
+
+            // Collapsing or expanding everything at once moves thousands of pixels of
+            // content — pin the change the reader is looking at to the same spot on
+            // screen instead of dumping them somewhere else in the diff.
+            optFold.addEventListener('change', () => {
+                if (!rows.length) return;
+                const held = focused;
+                const anchor = hunks.length ? (current() === -1 ? nearest() : current()) : -1;
+                const offset = anchor === -1 ? 0 : hunks[anchor].top - scroller.scrollTop;
+                render();
+                if (anchor !== -1 && hunks[anchor]) {
+                    scroller.scrollTop = Math.max(0, hunks[anchor].top - offset);
+                }
+                if (held >= 0) mark(held);
+                sync();
+            });
+        });
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
+    <title>AWS IAM Policy Normalizer — LocalUtil</title>
+    <!-- social / favicon -->
+    <meta name="description" content="Merge duplicate and overlapping statements in an AWS IAM policy into one canonical document — sorted, deduplicated, and measured against the policy size limit. Runs 100% in your browser — nothing is uploaded.">
+    <link rel="canonical" href="https://jongsic.github.io/localutil/iam-normalize.html">
+    <link rel="icon" href="favicon.ico" sizes="any">
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="LocalUtil">
+    <meta property="og:title" content="AWS IAM Policy Normalizer — LocalUtil">
+    <meta property="og:description" content="Merge duplicate and overlapping statements in an AWS IAM policy into one canonical document — sorted, deduplicated, and measured against the policy size limit. Runs 100% in your browser — nothing is uploaded.">
+    <meta property="og:image" content="https://jongsic.github.io/localutil/og.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:url" content="https://jongsic.github.io/localutil/iam-normalize.html">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:image" content="https://jongsic.github.io/localutil/og.png">
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebApplication","name":"AWS IAM Policy Normalizer","url":"https://jongsic.github.io/localutil/iam-normalize.html","description":"Merge duplicate and overlapping statements in an AWS IAM policy into one canonical document — sorted, deduplicated, and measured against the policy size limit. Runs 100% in your browser — nothing is uploaded.","applicationCategory":"DeveloperApplication","operatingSystem":"Any","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"isPartOf":{"@type":"WebSite","name":"LocalUtil","url":"https://jongsic.github.io/localutil/"}}</script>
+    <!-- /social -->
+    <script src="theme-init.js"></script>
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        .iamn-toolbar { display: flex; flex-direction: column; gap: 12px; padding: 16px 18px; }
+        .iamn-main {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            flex-wrap: wrap;
+        }
+        .iamn-options { display: flex; gap: 18px; flex-wrap: wrap; align-items: center; }
+        .iamn-options label { display: inline-flex; align-items: center; gap: 7px; margin: 0; font-weight: 500; cursor: pointer; }
+        .iamn-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+
+        #iamn-in { min-height: 260px; font-size: 0.82rem; }
+        #iamn-pane { position: relative; }
+        .iamn-dropzone {
+            position: absolute;
+            inset: 0;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding: 12px;
+            border: 2px dashed var(--primary);
+            border-radius: var(--r-md);
+            background-color: var(--primary-soft);
+            color: var(--active-text);
+            font-size: 0.95rem;
+            pointer-events: none;
+            z-index: 2;
+        }
+        #iamn-pane.dragover .iamn-dropzone { display: flex; }
+        .iamn-file {
+            font-family: var(--font-mono);
+            font-size: 0.76rem;
+            color: var(--text-muted);
+            margin: 0;
+            word-break: break-all;
+        }
+        .iamn-file[hidden] { display: none; }
+
+        .iamn-stats { display: flex; flex-direction: column; gap: 14px; }
+        .iamn-stats[hidden] { display: none; }
+        .iamn-chips { display: flex; flex-wrap: wrap; gap: 8px 10px; }
+        .iamn-chip {
+            font-size: 0.78rem;
+            color: var(--text-muted);
+            background: var(--bg-subtle);
+            border: 1px solid var(--border-color);
+            border-radius: var(--r-pill);
+            padding: 4px 11px;
+        }
+        .iamn-chip b { color: var(--text-main); font-variant-numeric: tabular-nums; }
+        .iamn-chip.good b { color: var(--success); }
+        .iamn-chip.bad b { color: var(--danger); }
+
+        .iamn-notes { display: flex; flex-direction: column; gap: 6px; margin: 0; padding: 0; list-style: none; }
+        .iamn-notes:empty { display: none; }
+        .iamn-notes li {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            padding-left: 20px;
+            position: relative;
+        }
+        .iamn-notes li::before {
+            content: "!";
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 14px;
+            height: 14px;
+            margin-top: 3px;
+            border-radius: 50%;
+            background: rgba(240, 180, 41, 0.2);
+            color: var(--warning);
+            font-size: 0.62rem;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .iamn-out-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+        .iamn-error { color: var(--danger); font-size: 0.85rem; white-space: pre-wrap; margin-bottom: 10px; }
+        .iamn-error[hidden] { display: none; }
+        #iamn-out { font-size: 0.8rem; max-height: 60vh; min-height: 120px; }
+
+        .iamn-doc-section {
+            font-size: 0.72rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: var(--text-faint);
+            margin: 20px 0 9px;
+        }
+        .iamn-doc-section:first-of-type { margin-top: 0; }
+        .iamn-doc {
+            display: grid;
+            grid-template-columns: minmax(130px, 210px) 1fr;
+            gap: 7px 22px;
+            margin: 0;
+            font-size: 0.85rem;
+            line-height: 1.6;
+        }
+        .iamn-doc dt { font-weight: 600; color: var(--text-main); }
+        .iamn-doc dd { margin: 0; color: var(--text-muted); }
+        @media (max-width: 640px) {
+            .iamn-doc { grid-template-columns: 1fr; gap: 2px; }
+            .iamn-doc dd { margin-bottom: 11px; }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="app-container">
+        <aside class="sidebar" id="app-sidebar"></aside>
+
+        <main class="main-content">
+            <header class="topbar" id="app-topbar">
+                <div class="topbar-title">
+                    <h1 id="current-tool-title">IAM Normalize</h1>
+                    <p id="current-tool-desc" class="topbar-desc">Merge the duplicate and overlapping statements in an AWS IAM policy into one canonical document</p>
+                </div>
+            </header>
+
+            <div class="tools-container">
+                <section id="tool-iam-norm" class="tool-section active">
+                    <div class="iamn-toolbar card">
+                        <div class="iamn-main">
+                            <div class="iamn-options">
+                                <label><input type="checkbox" id="iamn-opt-account"> Normalize account IDs</label>
+                                <label><input type="checkbox" id="iamn-opt-region"> Normalize regions</label>
+                            </div>
+                            <div class="iamn-actions">
+                                <button id="btn-iamn-run" class="btn btn-primary">Normalize</button>
+                                <button id="btn-iamn-example" class="btn">Example</button>
+                                <button id="btn-iamn-clear" class="btn">Clear</button>
+                            </div>
+                        </div>
+                        <div class="field-hint">Both options are off by default because they make the result a comparison aid rather than a policy you can deploy.</div>
+                    </div>
+
+                    <div class="pane" id="iamn-pane">
+                        <label for="iamn-in">Policy</label>
+                        <div class="field-hint">One or more policy documents, a bare Statement array, or raw output from the aws iam read commands. Drop a file here too.</div>
+                        <div class="iamn-file" id="iamn-file" hidden data-i18n-skip></div>
+                        <textarea id="iamn-in" spellcheck="false" placeholder='{"Version":"2012-10-17","Statement":[…]}'></textarea>
+                        <div class="iamn-dropzone">Drop to load</div>
+                    </div>
+
+                    <div class="card iamn-stats" id="iamn-stats" hidden>
+                        <div class="iamn-chips" id="iamn-chips"></div>
+                        <ul class="iamn-notes" id="iamn-notes"></ul>
+                    </div>
+
+                    <div class="card">
+                        <div class="iamn-out-head">
+                            <div class="card-title">Normalized policy</div>
+                            <button class="btn btn-small" id="btn-iamn-copy">Copy</button>
+                        </div>
+                        <div class="iamn-error" id="iamn-error" hidden data-i18n-skip></div>
+                        <pre class="code-view" id="iamn-out" data-i18n-skip></pre>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-title">Reference</div>
+                        <div class="card-subtitle">What is merged, and what is left exactly as it was.</div>
+
+                        <div class="iamn-doc-section">What it does</div>
+                        <dl class="iamn-doc">
+                            <dt>Unit</dt>
+                            <dd>One block: a set of actions on a set of resources under one Effect, principal and condition.</dd>
+                            <dt>Merging</dt>
+                            <dd>Blocks start as the statements were written, then merge until nothing more can: same scope and different actions become one block with the actions unioned; same actions and different scope become one block with the resources unioned.</dd>
+                            <dt>Sorting</dt>
+                            <dd>Every list is sorted and deduplicated, and object keys are written in a fixed order, so the same policy always comes out the same way.</dd>
+                            <dt>Sid</dt>
+                            <dd>Dropped. A name is not a permission, and merged blocks have no single name to carry.</dd>
+                            <dt>Single values</dt>
+                            <dd>A bare value becomes a one-element array, wherever IAM accepts a list. The two mean the same thing.</dd>
+                        </dl>
+
+                        <div class="iamn-doc-section">What it does not do</div>
+                        <dl class="iamn-doc">
+                            <dt>Wildcards</dt>
+                            <dd>Left as written. s3:* is not expanded, and an action it covers is not removed — the two are different text and both are kept.</dd>
+                            <dt>Deny</dt>
+                            <dd>Left as written. A Deny is a block like any other and cancels nothing.</dd>
+                            <dt>NotAction, NotResource</dt>
+                            <dd>Kept on their own axis and never merged with the positive form.</dd>
+                            <dt>Conditions</dt>
+                            <dd>Sorted, never evaluated. Two blocks differing by a condition stay apart, and two ways of writing the same restriction stay different.</dd>
+                            <dt>Nothing is dropped</dt>
+                            <dd>Every action, resource, principal and condition in the input is in the output. Paste the result into IAM Policy Diff against the original to check that for yourself.</dd>
+                        </dl>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </div>
+
+    <div id="toast" class="toast">Copied to clipboard!</div>
+
+    <script src="app.js"></script>
+    <script src="iam-core.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const el = id => document.getElementById(id);
+            const input = el('iamn-in');
+            const optAccount = el('iamn-opt-account');
+            const optRegion = el('iamn-opt-region');
+            const out = el('iamn-out');
+            const errorBox = el('iamn-error');
+            const stats = el('iamn-stats');
+            const pane = el('iamn-pane');
+            const fileNote = el('iamn-file');
+
+            // Parsing, normalization and merging are the same code the comparison
+            // runs — see iam-core.js.
+            const { parseInput, statementUnits, blocksFrom, policyDocument } = window.LocalUtilIAM;
+
+            // IAM does not count whitespace towards a policy's size, so the number
+            // worth reporting is the minified one.
+            const MANAGED_LIMIT = 6144;
+
+            const EMPTY = 'Paste a policy above and press Normalize.';
+
+            function setError(msg) {
+                errorBox.textContent = msg;
+                errorBox.hidden = !msg;
+                if (msg) { out.textContent = ''; stats.hidden = true; }
+            }
+
+            function run() {
+                if (!input.value.trim()) {
+                    setError('');
+                    out.textContent = EMPTY;
+                    stats.hidden = true;
+                    return;
+                }
+                const opt = { account: optAccount.checked, region: optRegion.checked, ignoreCond: false };
+                const notes = [];
+                let docs;
+                try {
+                    docs = parseInput(input.value, 'Policy');
+                } catch (e) {
+                    setError(e.message);
+                    return;
+                }
+                setError('');
+
+                const units = statementUnits(docs, opt, notes, 'Policy');
+                const blocks = blocksFrom(units, new Set());
+                const policy = policyDocument(blocks);
+                out.textContent = JSON.stringify(policy, null, 2);
+
+                // What the merge actually bought, in the terms the limits are in.
+                const actions = new Set();
+                let permissions = 0;
+                for (const b of blocks) {
+                    const list = (b.shape.Action || []).concat(b.shape.NotAction || []);
+                    list.forEach(a => actions.add(a));
+                    const resources = (b.shape.Resource || []).concat(b.shape.NotResource || []);
+                    permissions += list.length * Math.max(1, resources.length);
+                }
+                const before = input.value.replace(/\s+/g, '').length;
+                const after = JSON.stringify(policy).replace(/\s+/g, '').length;
+
+                const chips = [
+                    ['', units.length, 'statements in'],
+                    ['', blocks.length, 'blocks out'],
+                    ['', actions.size, 'distinct actions'],
+                    ['', permissions, 'action/resource pairs'],
+                    [after <= MANAGED_LIMIT ? 'good' : 'bad', after.toLocaleString(), 'characters'],
+                ];
+                el('iamn-chips').innerHTML = chips
+                    .map(([cls, n, label]) => '<span class="iamn-chip ' + cls + '"><b>' + n + '</b> ' + label + '</span>')
+                    .join('');
+
+                if (after > MANAGED_LIMIT) {
+                    notes.push('Over the <b>' + MANAGED_LIMIT.toLocaleString() +
+                        '</b>-character limit for a managed policy. Whitespace is not counted; the number above already excludes it.');
+                }
+                if (before > after) {
+                    notes.push('<b>' + (before - after).toLocaleString() +
+                        '</b> characters shorter than the input, whitespace excluded.');
+                }
+                if (opt.account || opt.region) {
+                    notes.push('Account IDs or Regions have been replaced with tokens. The result is for reading and comparing, not for deploying.');
+                }
+                el('iamn-notes').innerHTML = notes.map(n => '<li>' + n + '</li>').join('');
+                stats.hidden = false;
+            }
+
+            // ------------------------------------------------------------
+            // Loading the policy from a dropped file
+            // ------------------------------------------------------------
+            const hasFiles = dt => !!dt && Array.prototype.indexOf.call(dt.types || [], 'Files') !== -1;
+
+            function showFile(name, size) {
+                if (!name) { fileNote.hidden = true; fileNote.textContent = ''; return; }
+                fileNote.textContent = name + ' · ' + size.toLocaleString() + ' bytes';
+                fileNote.hidden = false;
+            }
+
+            let depth = 0;   // dragenter/dragleave also fire for every child
+            pane.addEventListener('dragenter', e => {
+                if (!hasFiles(e.dataTransfer)) return;
+                e.preventDefault();
+                depth++;
+                pane.classList.add('dragover');
+            });
+            pane.addEventListener('dragover', e => {
+                if (!hasFiles(e.dataTransfer)) return;
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'copy';
+            });
+            pane.addEventListener('dragleave', () => {
+                if (--depth <= 0) { depth = 0; pane.classList.remove('dragover'); }
+            });
+            pane.addEventListener('drop', async e => {
+                if (!hasFiles(e.dataTransfer)) return;
+                e.preventDefault();
+                depth = 0;
+                pane.classList.remove('dragover');
+                const file = e.dataTransfer.files[0];
+                if (!file) return;
+                input.value = await file.text();
+                showFile(file.name, file.size);
+                showToast(t('Loaded') + ': ' + file.name);
+                run();
+            });
+            // A file that lands next to the pane rather than on it would otherwise
+            // make the browser navigate to it.
+            document.addEventListener('dragover', e => { if (hasFiles(e.dataTransfer)) e.preventDefault(); });
+            document.addEventListener('drop', e => { if (hasFiles(e.dataTransfer)) e.preventDefault(); });
+
+            // ------------------------------------------------------------
+            // Wiring
+            // ------------------------------------------------------------
+            el('btn-iamn-run').addEventListener('click', run);
+            input.addEventListener('input', () => showFile(null));
+            [optAccount, optRegion].forEach(o =>
+                o.addEventListener('change', () => { if (!stats.hidden || errorBox.hidden === false) run(); }));
+
+            input.addEventListener('keydown', e => {
+                if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); run(); }
+            });
+
+            el('btn-iamn-copy').addEventListener('click', () => {
+                navigator.clipboard.writeText(out.textContent)
+                    .then(() => showToast(t('Copied to clipboard')))
+                    .catch(() => showToast(t('Copy failed'), true));
+            });
+
+            el('btn-iamn-clear').addEventListener('click', () => {
+                input.value = '';
+                showFile(null);
+                setError('');
+                out.textContent = EMPTY;
+                stats.hidden = true;
+            });
+
+            // The example is written the way policies usually grow: the same
+            // access arrived at from three directions, with a duplicate thrown in.
+            el('btn-iamn-example').addEventListener('click', () => {
+                input.value = JSON.stringify({
+                    Version: '2012-10-17',
+                    Statement: [
+                        {
+                            Sid: 'ReadArtifacts', Effect: 'Allow', Action: 's3:GetObject',
+                            Resource: 'arn:aws:s3:::app-artifacts/*',
+                        },
+                        {
+                            Sid: 'WriteArtifacts', Effect: 'Allow', Action: ['s3:PutObject', 's3:GetObject'],
+                            Resource: ['arn:aws:s3:::app-artifacts/*'],
+                        },
+                        {
+                            Sid: 'SameAgainOnTheBackup', Effect: 'Allow',
+                            Action: ['s3:GetObject', 's3:PutObject'],
+                            Resource: 'arn:aws:s3:::app-backup/*',
+                        },
+                        {
+                            Sid: 'ListThem', Effect: 'Allow', Action: 's3:ListBucket',
+                            Resource: ['arn:aws:s3:::app-artifacts', 'arn:aws:s3:::app-backup'],
+                        },
+                        {
+                            Sid: 'ADuplicate', Effect: 'Allow', Action: 's3:ListBucket',
+                            Resource: 'arn:aws:s3:::app-backup',
+                        },
+                        {
+                            Sid: 'Params', Effect: 'Allow', Action: 'ssm:GetParameter',
+                            Resource: 'arn:aws:ssm:ap-northeast-2:111122223333:parameter/app/*',
+                            Condition: { StringEquals: { 'aws:RequestedRegion': 'ap-northeast-2' } },
+                        },
+                        { Sid: 'NeverDropTheBucket', Effect: 'Deny', Action: 's3:DeleteBucket', Resource: '*' },
+                    ],
+                }, null, 2);
+                showFile(null);
+                run();
+            });
+
+            out.textContent = EMPTY;
+        });
+    </script>
+</body>
+
+</html>

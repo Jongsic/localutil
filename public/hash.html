@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
+    <title>MD5 / SHA-256 Hash &amp; HMAC Generator — LocalUtil</title>
+    <!-- social / favicon -->
+    <meta name="description" content="Compute MD5, SHA-1, SHA-256, SHA-512 digests and HMAC signatures from text. Runs 100% in your browser — nothing is uploaded.">
+    <link rel="canonical" href="https://jongsic.github.io/localutil/hash.html">
+    <link rel="icon" href="favicon.ico" sizes="any">
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="LocalUtil">
+    <meta property="og:title" content="MD5 / SHA-256 Hash &amp; HMAC Generator — LocalUtil">
+    <meta property="og:description" content="Compute MD5, SHA-1, SHA-256, SHA-512 digests and HMAC signatures from text. Runs 100% in your browser — nothing is uploaded.">
+    <meta property="og:image" content="https://jongsic.github.io/localutil/og.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:url" content="https://jongsic.github.io/localutil/hash.html">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:image" content="https://jongsic.github.io/localutil/og.png">
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebApplication","name":"MD5 / SHA-256 Hash & HMAC Generator","url":"https://jongsic.github.io/localutil/hash.html","description":"Compute MD5, SHA-1, SHA-256, SHA-512 digests and HMAC signatures from text. Runs 100% in your browser — nothing is uploaded.","applicationCategory":"DeveloperApplication","operatingSystem":"Any","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"isPartOf":{"@type":"WebSite","name":"LocalUtil","url":"https://jongsic.github.io/localutil/"}}</script>
+    <!-- /social -->
+    <script src="theme-init.js"></script>
+    <link rel="stylesheet" href="styles.css">
+    <!-- blueimp-md5: MD5 isn't available in the Web Crypto API -->
+    <script src="vendor/md5.min.js"></script>
+    <style>
+        .hash-mode { display: inline-flex; border: 1px solid var(--border-color); border-radius: var(--r-sm); overflow: hidden; margin-bottom: 16px; }
+        .hash-mode button {
+            border: none; background: var(--bg-input); color: var(--text-muted);
+            padding: 8px 18px; font-size: 0.88rem; font-weight: 600; cursor: pointer;
+        }
+        .hash-mode button.active { background: var(--primary); color: #fff; }
+
+        #tool-hash textarea { min-height: 150px; }
+
+        .hash-hmac-fields { display: none; }
+        .hash-hmac-fields.show { display: block; }
+
+        .hash-results { display: flex; flex-direction: column; gap: 12px; margin-top: 4px; }
+        .hash-row {
+            display: grid;
+            grid-template-columns: 92px 1fr auto;
+            gap: 12px;
+            align-items: center;
+            padding: 12px 14px;
+            background: var(--bg-input);
+            border: 1px solid var(--border-color);
+            border-radius: var(--r-sm);
+        }
+        .hash-row .algo { font-weight: 700; font-size: 0.82rem; color: var(--text-muted); }
+        .hash-row .val { font-family: var(--font-mono); font-size: 0.82rem; word-break: break-all; color: var(--text-main); }
+        .hash-row .val.empty { color: var(--text-faint); }
+        @media (max-width: 560px) { .hash-row { grid-template-columns: 1fr; } }
+    </style>
+</head>
+
+<body>
+    <div class="app-container">
+        <aside class="sidebar" id="app-sidebar"></aside>
+
+        <main class="main-content">
+            <header class="topbar" id="app-topbar">
+                <div class="topbar-title">
+                    <h1 id="current-tool-title">Hash &amp; HMAC</h1>
+                    <p id="current-tool-desc" class="topbar-desc">MD5, SHA &amp; HMAC digests computed locally</p>
+                </div>
+            </header>
+
+            <div class="tools-container">
+                <section id="tool-hash" class="tool-section active">
+                    <div class="hash-mode" id="hash-mode">
+                        <button data-mode="hash" class="active">Hash</button>
+                        <button data-mode="hmac">HMAC</button>
+                    </div>
+
+                    <div class="card" style="padding:18px; margin-bottom:16px;">
+                        <label for="hash-input">Message</label>
+                        <div class="field-hint">Everything is hashed locally with the Web Crypto API — nothing leaves your browser.</div>
+                        <textarea id="hash-input" placeholder="Type or paste text to hash…"></textarea>
+
+                        <div class="hash-hmac-fields" id="hash-hmac-fields" style="margin-top:14px;">
+                            <label for="hmac-key">Secret key</label>
+                            <div class="field-hint">Used as the HMAC key. All SHA variants are computed at once below.</div>
+                            <input type="text" id="hmac-key" placeholder="Secret key…">
+                        </div>
+                    </div>
+
+                    <div class="hash-results" id="hash-results"></div>
+                </section>
+            </div>
+        </main>
+    </div>
+
+    <div id="toast" class="toast">Copied to clipboard!</div>
+
+    <script src="app.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const input = document.getElementById('hash-input');
+            const modeToggle = document.getElementById('hash-mode');
+            const hmacFields = document.getElementById('hash-hmac-fields');
+            const hmacKey = document.getElementById('hmac-key');
+            const resultsEl = document.getElementById('hash-results');
+
+            let mode = 'hash';
+            const enc = new TextEncoder();
+
+            function toHex(buffer) {
+                return Array.from(new Uint8Array(buffer))
+                    .map(b => b.toString(16).padStart(2, '0')).join('');
+            }
+
+            async function sha(algo, text) {
+                const digest = await crypto.subtle.digest(algo, enc.encode(text));
+                return toHex(digest);
+            }
+
+            async function hmac(algo, keyStr, text) {
+                const key = await crypto.subtle.importKey(
+                    'raw', enc.encode(keyStr), { name: 'HMAC', hash: algo }, false, ['sign']);
+                const sig = await crypto.subtle.sign('HMAC', key, enc.encode(text));
+                return toHex(sig);
+            }
+
+            // Build result rows shell, then fill values as each promise resolves.
+            function rowShell(list) {
+                resultsEl.innerHTML = list.map(algo =>
+                    '<div class="hash-row" data-algo="' + algo + '">' +
+                    '<span class="algo">' + algo + '</span>' +
+                    '<span class="val empty" id="val-' + algo + '">—</span>' +
+                    '<button class="btn btn-small copy-row" data-algo="' + algo + '">Copy</button>' +
+                    '</div>').join('');
+                resultsEl.querySelectorAll('.copy-row').forEach(btn => {
+                    btn.addEventListener('click', () => {
+                        const v = document.getElementById('val-' + btn.dataset.algo).textContent;
+                        if (!v || v === '—') return;
+                        navigator.clipboard.writeText(v)
+                            .then(() => window.showToast && window.showToast('Copied ' + btn.dataset.algo))
+                            .catch(() => window.showToast && window.showToast('Copy failed', true));
+                    });
+                });
+            }
+
+            function setVal(algo, value) {
+                const el = document.getElementById('val-' + algo);
+                if (!el) return;
+                el.textContent = value || '—';
+                el.classList.toggle('empty', !value);
+            }
+
+            const HASH_ALGOS = ['MD5', 'SHA-1', 'SHA-256', 'SHA-512'];
+            const HMAC_ALGOS = ['SHA-1', 'SHA-256', 'SHA-384', 'SHA-512'];
+
+            async function compute() {
+                const text = input.value;
+                if (mode === 'hash') {
+                    if (resultsEl.querySelector('[data-algo="MD5"]') === null) rowShell(HASH_ALGOS);
+                    if (!text) { HASH_ALGOS.forEach(a => setVal(a, '')); return; }
+                    setVal('MD5', (typeof md5 !== 'undefined') ? md5(text) : 'md5 lib not loaded');
+                    setVal('SHA-1', await sha('SHA-1', text));
+                    setVal('SHA-256', await sha('SHA-256', text));
+                    setVal('SHA-512', await sha('SHA-512', text));
+                } else {
+                    const labels = HMAC_ALGOS.map(a => 'HMAC-' + a);
+                    if (resultsEl.querySelector('[data-algo="HMAC-SHA-1"]') === null) rowShell(labels);
+                    if (!text || !hmacKey.value) { labels.forEach(l => setVal(l, '')); return; }
+                    await Promise.all(HMAC_ALGOS.map(async a =>
+                        setVal('HMAC-' + a, await hmac(a, hmacKey.value, text))));
+                }
+            }
+
+            function setMode(m) {
+                mode = m;
+                modeToggle.querySelectorAll('button').forEach(b => b.classList.toggle('active', b.dataset.mode === m));
+                hmacFields.classList.toggle('show', m === 'hmac');
+                resultsEl.innerHTML = '';
+                compute();
+            }
+
+            modeToggle.querySelectorAll('button').forEach(b =>
+                b.addEventListener('click', () => setMode(b.dataset.mode)));
+            input.addEventListener('input', compute);
+            hmacKey.addEventListener('input', compute);
+
+            compute();
+        });
+    </script>
+</body>
+
+</html>

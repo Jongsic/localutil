@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
+    <title>SVG to PNG / JPEG Converter — LocalUtil</title>
+    <!-- social / favicon -->
+    <meta name="description" content="Convert SVG markup or .svg files to PNG or JPEG — copy the result or download it. Runs 100% in your browser — nothing is uploaded.">
+    <link rel="canonical" href="https://jongsic.github.io/localutil/svg-to-image.html">
+    <link rel="icon" href="favicon.ico" sizes="any">
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="LocalUtil">
+    <meta property="og:title" content="SVG to PNG / JPEG Converter — LocalUtil">
+    <meta property="og:description" content="Convert SVG markup or .svg files to PNG or JPEG — copy the result or download it. Runs 100% in your browser — nothing is uploaded.">
+    <meta property="og:image" content="https://jongsic.github.io/localutil/og.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:url" content="https://jongsic.github.io/localutil/svg-to-image.html">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:image" content="https://jongsic.github.io/localutil/og.png">
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebApplication","name":"SVG to PNG / JPEG Converter","url":"https://jongsic.github.io/localutil/svg-to-image.html","description":"Convert SVG markup or .svg files to PNG or JPEG — copy the result or download it. Runs 100% in your browser — nothing is uploaded.","applicationCategory":"DeveloperApplication","operatingSystem":"Any","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"isPartOf":{"@type":"WebSite","name":"LocalUtil","url":"https://jongsic.github.io/localutil/"}}</script>
+    <!-- /social -->
+    <script src="theme-init.js"></script>
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        #si-input {
+            min-height: 220px;
+            flex: 1;
+            resize: vertical;
+            transition: border-color 0.18s, background-color 0.18s;
+        }
+        #si-input.dragover { border-color: var(--primary); background-color: var(--primary-soft); }
+
+        .si-detected {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            font-variant-numeric: tabular-nums;
+        }
+        .si-detected strong { color: var(--text-main); font-weight: 600; }
+
+        .si-scale-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+        .si-scale-row label { margin: 0; min-width: 54px; }
+        .si-scale-btn { min-width: 44px; padding: 7px 10px; }
+        .si-scale-btn.selected {
+            background-color: var(--primary);
+            border-color: var(--primary);
+            color: #fff;
+        }
+
+        .si-dim-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px 12px;
+        }
+        .si-dim-grid label { margin-bottom: 4px; }
+        .si-dim-grid input { padding: 8px 11px; }
+
+        .si-bg-row { display: flex; align-items: center; gap: 10px; }
+        .si-bg-row label { min-width: 54px; margin: 0; }
+
+        /* Preview stage */
+        .si-stage { display: flex; flex-direction: column; align-items: center; gap: 10px; width: 100%; }
+        .si-canvas-wrap {
+            border: 1px solid var(--border-strong);
+            border-radius: var(--r-sm);
+            overflow: hidden;
+            box-shadow: 0 4px 18px rgba(0, 0, 0, 0.25);
+            /* checkerboard shows through transparent areas */
+            background-color: #ffffff;
+            background-image:
+                linear-gradient(45deg, #d7dbe0 25%, transparent 25%),
+                linear-gradient(-45deg, #d7dbe0 25%, transparent 25%),
+                linear-gradient(45deg, transparent 75%, #d7dbe0 75%),
+                linear-gradient(-45deg, transparent 75%, #d7dbe0 75%);
+            background-size: 18px 18px;
+            background-position: 0 0, 0 9px, 9px -9px, -9px 0;
+            max-width: 100%;
+        }
+        #si-canvas { display: block; }
+        .si-stage-hint { font-size: 0.78rem; color: var(--text-muted); text-align: center; }
+        .si-empty {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            min-height: 260px;
+            width: 100%;
+            border: 2px dashed var(--border-strong);
+            border-radius: var(--r-md);
+            background-color: var(--bg-subtle);
+            color: var(--text-muted);
+            font-size: 0.88rem;
+            text-align: center;
+            padding: 18px;
+        }
+        .si-empty svg { color: var(--primary); opacity: 0.85; }
+
+        .si-readouts {
+            display: flex; flex-wrap: wrap; gap: 6px 18px;
+            font-size: 0.8rem; color: var(--text-muted);
+            font-variant-numeric: tabular-nums;
+            justify-content: center;
+        }
+        .si-readouts strong { color: var(--text-main); font-weight: 600; }
+
+        .hidden { display: none !important; }
+    </style>
+</head>
+
+<body>
+    <div class="app-container">
+        <aside class="sidebar" id="app-sidebar"></aside>
+
+        <main class="main-content">
+            <header class="topbar" id="app-topbar">
+                <div class="topbar-title">
+                    <h1 id="current-tool-title">SVG to Image</h1>
+                    <p id="current-tool-desc" class="topbar-desc">Rasterize SVG markup or files to PNG / JPEG — copy or download</p>
+                </div>
+            </header>
+
+            <div class="tools-container">
+                <section class="tool-section active">
+                    <div class="tool-shell">
+                        <div class="split-pane">
+                            <!-- Left: source + options -->
+                            <div class="pane">
+                                <div>
+                                    <div class="card-title" style="margin:0;">SVG source</div>
+                                    <div class="field-hint">Paste markup, drop a .svg file onto the box, or Ctrl/⌘ + V. Nothing leaves your browser.</div>
+                                </div>
+
+                                <textarea id="si-input" class="mono" spellcheck="false"
+                                    placeholder='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">…</svg>'></textarea>
+
+                                <div class="flex-row gap-1 items-center wrap">
+                                    <button id="si-file-btn" class="btn" type="button">Upload .svg</button>
+                                    <span id="si-detected" class="si-detected" style="margin-left:auto;"></span>
+                                </div>
+                                <input type="file" id="si-file-input" accept=".svg,image/svg+xml" style="display:none;">
+
+                                <div class="si-scale-row" style="margin-top:6px;">
+                                    <label>Scale</label>
+                                    <button class="btn si-scale-btn" data-scale="1" type="button">1×</button>
+                                    <button class="btn si-scale-btn" data-scale="2" type="button">2×</button>
+                                    <button class="btn si-scale-btn" data-scale="3" type="button">3×</button>
+                                    <button class="btn si-scale-btn" data-scale="4" type="button">4×</button>
+                                </div>
+
+                                <div class="si-dim-grid">
+                                    <div class="form-group">
+                                        <label for="si-w">Width (px)</label>
+                                        <input type="number" id="si-w" min="1" step="1">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="si-h">Height (px)</label>
+                                        <input type="number" id="si-h" min="1" step="1">
+                                    </div>
+                                </div>
+                                <div class="field-hint" style="margin-top:-4px;">Aspect ratio is locked to the SVG — edit one side and the other follows.</div>
+
+                                <div class="si-bg-row">
+                                    <label for="si-bg">Background</label>
+                                    <input type="color" id="si-bg" value="#ffffff"
+                                        style="width:44px;height:30px;padding:2px;border:1px solid var(--border-color);border-radius:var(--r-sm);background:var(--bg-subtle);cursor:pointer;">
+                                    <label class="flex-row gap-1 items-center" style="margin:0 0 0 auto;font-size:0.85rem;cursor:pointer;">
+                                        <input type="checkbox" id="si-transparent" checked style="margin:0;">
+                                        Transparent
+                                    </label>
+                                </div>
+
+                                <div class="flex-row gap-1 items-center wrap" style="margin-top:auto;">
+                                    <label for="si-format" style="margin:0;">Format</label>
+                                    <select id="si-format" class="select" style="width:auto;min-width:110px;">
+                                        <option value="png" selected>PNG</option>
+                                        <option value="jpeg">JPEG</option>
+                                    </select>
+                                    <button id="si-copy-btn" class="btn" style="margin-left:auto;" disabled>Copy PNG</button>
+                                    <button id="si-download-btn" class="btn btn-primary" disabled>Download</button>
+                                </div>
+                            </div>
+
+                            <!-- Right: preview -->
+                            <div class="pane">
+                                <div>
+                                    <div class="card-title" style="margin:0;">Preview</div>
+                                    <div class="field-hint">The checkerboard shows transparency — the export is exactly the output size below.</div>
+                                </div>
+                                <div class="si-stage" id="si-stage">
+                                    <div id="si-empty" class="si-empty">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24"
+                                            fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
+                                            stroke-linejoin="round">
+                                            <rect x="3" y="3" width="18" height="18" rx="2"></rect>
+                                            <path d="m8.5 9.5-2.5 2.5 2.5 2.5"></path>
+                                            <path d="m15.5 9.5 2.5 2.5-2.5 2.5"></path>
+                                            <path d="m13 8-2 8"></path>
+                                        </svg>
+                                        <div>Paste or upload an SVG to see the rendered image here</div>
+                                    </div>
+                                    <div class="si-canvas-wrap hidden" id="si-canvas-wrap">
+                                        <canvas id="si-canvas"></canvas>
+                                    </div>
+                                    <div class="si-readouts hidden" id="si-readouts">
+                                        <span>Output <strong id="si-out-dim">—</strong></span>
+                                        <span>Preview <strong id="si-view-scale">—</strong></span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </div>
+
+    <div id="toast" class="toast">Copied to clipboard</div>
+
+    <script src="app.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // Guardrails so a huge SVG × scale can't allocate a runaway canvas.
+            const MAX_SIDE = 12000;
+            const MAX_AREA = 80 * 1000 * 1000;
+
+            // ---- Elements ----
+            const input = document.getElementById('si-input');
+            const fileBtn = document.getElementById('si-file-btn');
+            const fileInput = document.getElementById('si-file-input');
+            const detectedEl = document.getElementById('si-detected');
+            const scaleBtns = Array.from(document.querySelectorAll('.si-scale-btn'));
+            const wIn = document.getElementById('si-w');
+            const hIn = document.getElementById('si-h');
+            const bgInput = document.getElementById('si-bg');
+            const transparentToggle = document.getElementById('si-transparent');
+            const formatSel = document.getElementById('si-format');
+            const copyBtn = document.getElementById('si-copy-btn');
+            const downloadBtn = document.getElementById('si-download-btn');
+
+            const stage = document.getElementById('si-stage');
+            const emptyEl = document.getElementById('si-empty');
+            const canvasWrap = document.getElementById('si-canvas-wrap');
+            const canvas = document.getElementById('si-canvas');
+            const pctx = canvas.getContext('2d');
+            const readouts = document.getElementById('si-readouts');
+            const outDimEl = document.getElementById('si-out-dim');
+            const viewScaleEl = document.getElementById('si-view-scale');
+
+            const DPR = Math.min(window.devicePixelRatio || 1, 2);
+
+            // ---- State ----
+            let svgText = '';              // last successfully parsed source
+            let intrinsic = null;          // { w, h, source: 'width/height' | 'viewBox' | 'default' }
+            let img = null;                // rasterized <img> at the current output size
+            let imgUrl = null;             // blob URL backing `img`, revoked on replace
+            let OUT_W = 0, OUT_H = 0;
+            let loadSeq = 0;               // ignore stale async loads
+
+            function toast(msg, isError) { window.showToast && window.showToast(msg, isError); }
+
+            // ---- SVG parsing ----
+            const UNIT_PX = { px: 1, pt: 96 / 72, pc: 16, cm: 96 / 2.54, mm: 96 / 25.4, in: 96, '': 1 };
+            function parseLength(raw) {
+                if (!raw) return null;
+                const m = /^\s*([+-]?[\d.]+(?:[eE][+-]?\d+)?)\s*([a-z%]*)\s*$/.exec(raw);
+                if (!m) return null;
+                const k = UNIT_PX[m[2]];
+                if (k === undefined) return null;   // %, em, … — not resolvable here
+                const v = parseFloat(m[1]) * k;
+                return isFinite(v) && v > 0 ? v : null;
+            }
+
+            function analyzeSvg(text) {
+                const doc = new DOMParser().parseFromString(text, 'image/svg+xml');
+                if (doc.querySelector('parsererror')) return { error: 'Invalid SVG markup' };
+                const svg = doc.documentElement;
+                if (svg.nodeName.toLowerCase() !== 'svg') return { error: 'Not an SVG document' };
+
+                let w = parseLength(svg.getAttribute('width'));
+                let h = parseLength(svg.getAttribute('height'));
+                let vb = null;
+                const vbAttr = (svg.getAttribute('viewBox') || '').trim().split(/[\s,]+/).map(Number);
+                if (vbAttr.length === 4 && vbAttr.every(isFinite) && vbAttr[2] > 0 && vbAttr[3] > 0) vb = vbAttr;
+
+                let source;
+                if (w && h) source = 'width/height';
+                else if (vb) { w = vb[2]; h = vb[3]; source = 'viewBox'; }
+                else { w = 512; h = 512; source = 'default'; }
+
+                return { svg, w, h, vb, source };
+            }
+
+            // Serialize the SVG pinned to an exact pixel size so the browser
+            // rasterizes it sharply at the output resolution.
+            function svgAtSize(info, outW, outH) {
+                const el = info.svg.cloneNode(true);
+                if (!el.getAttribute('xmlns')) el.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+                // Without a viewBox, width/height wouldn't scale the content — pin one.
+                if (!info.vb) el.setAttribute('viewBox', '0 0 ' + info.w + ' ' + info.h);
+                el.setAttribute('width', outW);
+                el.setAttribute('height', outH);
+                return new XMLSerializer().serializeToString(el);
+            }
+
+            // ---- Output size ----
+            function selectedScale() {
+                const btn = scaleBtns.find(b => b.classList.contains('selected'));
+                return btn ? parseFloat(btn.dataset.scale) : null;
+            }
+            function setScaleSelection(scale) {
+                scaleBtns.forEach(b => b.classList.toggle('selected', parseFloat(b.dataset.scale) === scale));
+            }
+
+            function clampSize(w, h) {
+                let clamped = false;
+                if (w > MAX_SIDE) { h = Math.max(1, Math.round(h * MAX_SIDE / w)); w = MAX_SIDE; clamped = true; }
+                if (h > MAX_SIDE) { w = Math.max(1, Math.round(w * MAX_SIDE / h)); h = MAX_SIDE; clamped = true; }
+                if (w * h > MAX_AREA) {
+                    const k = Math.sqrt(MAX_AREA / (w * h));
+                    w = Math.max(1, Math.floor(w * k));
+                    h = Math.max(1, Math.floor(h * k));
+                    clamped = true;
+                }
+                return { w, h, clamped };
+            }
+
+            function applySize(w, h) {
+                const c = clampSize(Math.max(1, Math.round(w)), Math.max(1, Math.round(h)));
+                OUT_W = c.w; OUT_H = c.h;
+                wIn.value = OUT_W;
+                hIn.value = OUT_H;
+                if (c.clamped) toast('Output clamped to a safe maximum size', true);
+            }
+
+            // ---- Rasterize & preview ----
+            function rebuildImage() {
+                if (!intrinsic || !OUT_W || !OUT_H) return;
+                const seq = ++loadSeq;
+                const markup = svgAtSize(intrinsic, OUT_W, OUT_H);
+                const url = URL.createObjectURL(new Blob([markup], { type: 'image/svg+xml;charset=utf-8' }));
+                const image = new Image();
+                image.onload = () => {
+                    if (seq !== loadSeq) { URL.revokeObjectURL(url); return; }
+                    if (imgUrl) URL.revokeObjectURL(imgUrl);
+                    img = image;
+                    imgUrl = url;
+                    setControlsEnabled(true);
+                    layoutCanvas();
+                    renderPreview();
+                };
+                image.onerror = () => {
+                    URL.revokeObjectURL(url);
+                    if (seq !== loadSeq) return;
+                    toast('Could not render this SVG', true);
+                };
+                image.src = url;
+            }
+
+            function layoutCanvas() {
+                const availW = Math.max(120, stage.clientWidth - 4);
+                const availH = Math.max(220, window.innerHeight - 300);
+                let s = Math.min(availW / OUT_W, availH / OUT_H);
+                if (!isFinite(s) || s <= 0) s = 1;
+                s = Math.min(s, 4);
+                const dispW = Math.max(1, Math.round(OUT_W * s));
+                const dispH = Math.max(1, Math.round(OUT_H * s));
+                canvas.style.width = dispW + 'px';
+                canvas.style.height = dispH + 'px';
+                canvas.width = Math.max(1, Math.round(dispW * DPR));
+                canvas.height = Math.max(1, Math.round(dispH * DPR));
+                viewScaleEl.textContent = Math.round(s * 100) + '%';
+            }
+
+            function paintScene(ctx, w, h, forceOpaque) {
+                if (transparentToggle.checked && !forceOpaque) {
+                    ctx.clearRect(0, 0, w, h);
+                } else {
+                    ctx.fillStyle = transparentToggle.checked ? '#ffffff' : bgInput.value;
+                    ctx.fillRect(0, 0, w, h);
+                }
+                if (img) {
+                    ctx.imageSmoothingEnabled = true;
+                    ctx.imageSmoothingQuality = 'high';
+                    ctx.drawImage(img, 0, 0, w, h);
+                }
+            }
+
+            function renderPreview() {
+                if (!img) return;
+                emptyEl.classList.add('hidden');
+                canvasWrap.classList.remove('hidden');
+                readouts.classList.remove('hidden');
+                pctx.setTransform(1, 0, 0, 1, 0, 0);
+                paintScene(pctx, canvas.width, canvas.height, false);
+                outDimEl.textContent = OUT_W + ' × ' + OUT_H + ' px';
+            }
+
+            function setControlsEnabled(on) {
+                [copyBtn, downloadBtn].forEach(el => el.disabled = !on);
+            }
+
+            function clearOutput() {
+                loadSeq++;
+                img = null;
+                if (imgUrl) { URL.revokeObjectURL(imgUrl); imgUrl = null; }
+                intrinsic = null;
+                setControlsEnabled(false);
+                detectedEl.textContent = '';
+                emptyEl.classList.remove('hidden');
+                canvasWrap.classList.add('hidden');
+                readouts.classList.add('hidden');
+            }
+
+            // ---- Source intake ----
+            function loadSvgText(text, fromFile) {
+                const trimmed = (text || '').trim();
+                if (!trimmed) { clearOutput(); return; }
+                const info = analyzeSvg(trimmed);
+                if (info.error) {
+                    clearOutput();
+                    detectedEl.textContent = info.error;
+                    return;
+                }
+                svgText = trimmed;
+                intrinsic = info;
+                const label = info.source === 'default' ? 'no size info — assuming' : info.source;
+                detectedEl.innerHTML = 'Detected: <strong>' + Math.round(info.w) + ' × ' + Math.round(info.h) +
+                    '</strong> (' + label + ')';
+                if (info.source === 'default') toast('SVG has no width/height or viewBox — assuming 512 × 512', true);
+
+                const scale = selectedScale() || 1;
+                if (!selectedScale()) setScaleSelection(1);
+                applySize(info.w * scale, info.h * scale);
+                rebuildImage();
+                if (fromFile) input.value = trimmed;
+            }
+
+            let debounceTimer = null;
+            input.addEventListener('input', () => {
+                clearTimeout(debounceTimer);
+                debounceTimer = setTimeout(() => loadSvgText(input.value), 300);
+            });
+
+            function handleFile(file) {
+                if (!file) return;
+                const looksSvg = file.type === 'image/svg+xml' || /\.svg$/i.test(file.name);
+                if (!looksSvg) { toast('Not an SVG file', true); return; }
+                const reader = new FileReader();
+                reader.onload = e => loadSvgText(e.target.result, true);
+                reader.readAsText(file);
+            }
+
+            fileBtn.addEventListener('click', () => fileInput.click());
+            fileInput.addEventListener('change', e => { handleFile(e.target.files[0]); fileInput.value = ''; });
+
+            input.addEventListener('dragover', e => { e.preventDefault(); input.classList.add('dragover'); });
+            input.addEventListener('dragleave', () => input.classList.remove('dragover'));
+            input.addEventListener('drop', e => {
+                e.preventDefault();
+                input.classList.remove('dragover');
+                if (e.dataTransfer.files && e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+            });
+
+            document.addEventListener('paste', e => {
+                const items = e.clipboardData && e.clipboardData.items;
+                if (items) {
+                    for (let i = 0; i < items.length; i++) {
+                        if (items[i].kind === 'file' && items[i].type === 'image/svg+xml') {
+                            handleFile(items[i].getAsFile());
+                            e.preventDefault();
+                            return;
+                        }
+                    }
+                }
+                // Text pasted outside the textarea still loads if it looks like SVG.
+                if (e.target !== input) {
+                    const text = e.clipboardData && e.clipboardData.getData('text');
+                    if (text && text.includes('<svg')) {
+                        input.value = text.trim();
+                        loadSvgText(text);
+                        e.preventDefault();
+                    }
+                }
+            });
+
+            // ---- Option wiring ----
+            scaleBtns.forEach(btn => btn.addEventListener('click', () => {
+                setScaleSelection(parseFloat(btn.dataset.scale));
+                if (!intrinsic) return;
+                applySize(intrinsic.w * parseFloat(btn.dataset.scale), intrinsic.h * parseFloat(btn.dataset.scale));
+                rebuildImage();
+            }));
+
+            function onDimEdit(changed) {
+                if (!intrinsic) return;
+                const v = parseFloat(changed.value);
+                if (!isFinite(v) || v < 1) return;
+                const ratio = intrinsic.w / intrinsic.h;
+                let w, h;
+                if (changed === wIn) { w = v; h = v / ratio; } else { h = v; w = v * ratio; }
+                setScaleSelection(null);   // custom size — no preset selected
+                applySize(w, h);
+                rebuildImage();
+            }
+            wIn.addEventListener('change', () => onDimEdit(wIn));
+            hIn.addEventListener('change', () => onDimEdit(hIn));
+
+            bgInput.addEventListener('input', () => {
+                if (transparentToggle.checked) transparentToggle.checked = false;
+                renderPreview();
+            });
+            transparentToggle.addEventListener('change', renderPreview);
+            formatSel.addEventListener('change', () => {
+                // JPEG has no alpha — transparency isn't available.
+                const jpeg = formatSel.value === 'jpeg';
+                transparentToggle.disabled = jpeg;
+                if (jpeg && transparentToggle.checked) {
+                    transparentToggle.checked = false;
+                    renderPreview();
+                }
+            });
+
+            // ---- Export ----
+            function exportCanvas(forceOpaque) {
+                const out = document.createElement('canvas');
+                out.width = OUT_W;
+                out.height = OUT_H;
+                paintScene(out.getContext('2d'), OUT_W, OUT_H, forceOpaque);
+                return out;
+            }
+
+            copyBtn.addEventListener('click', () => {
+                if (!img) return;
+                if (!navigator.clipboard || !window.ClipboardItem) {
+                    toast('Clipboard images are not supported in this browser', true);
+                    return;
+                }
+                const out = exportCanvas(false);
+                // The blob promise form keeps Safari's user-gesture requirement happy.
+                const blobPromise = new Promise((resolve, reject) =>
+                    out.toBlob(b => b ? resolve(b) : reject(new Error('export failed')), 'image/png'));
+                navigator.clipboard.write([new ClipboardItem({ 'image/png': blobPromise })])
+                    .then(() => toast('Copied ' + OUT_W + '×' + OUT_H + ' PNG to clipboard'))
+                    .catch(() => toast('Copy failed', true));
+            });
+
+            downloadBtn.addEventListener('click', () => {
+                if (!img) return;
+                const fmt = formatSel.value;
+                const out = exportCanvas(fmt === 'jpeg');
+                const mime = fmt === 'jpeg' ? 'image/jpeg' : 'image/png';
+                out.toBlob(blob => {
+                    if (!blob) { toast('Export failed', true); return; }
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = 'svg-' + OUT_W + 'x' + OUT_H + (fmt === 'jpeg' ? '.jpg' : '.png');
+                    a.click();
+                    setTimeout(() => URL.revokeObjectURL(url), 5000);
+                    toast('Saved ' + OUT_W + '×' + OUT_H + ' ' + fmt.toUpperCase());
+                }, mime, fmt === 'jpeg' ? 0.92 : undefined);
+            });
+
+            window.addEventListener('resize', () => {
+                if (!img) return;
+                layoutCanvas();
+                renderPreview();
+            });
+        });
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,620 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
+    <title>GIF Maker / Frame Inspector — LocalUtil</title>
+    <!-- social / favicon -->
+    <meta name="description" content="Create an animated GIF from images, and inspect the frames of an existing GIF. Runs 100% in your browser — images are never uploaded.">
+    <link rel="canonical" href="https://jongsic.github.io/localutil/gif.html">
+    <link rel="icon" href="favicon.ico" sizes="any">
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="LocalUtil">
+    <meta property="og:title" content="GIF Maker / Frame Inspector — LocalUtil">
+    <meta property="og:description" content="Create an animated GIF from images, and inspect the frames of an existing GIF. Runs 100% in your browser — images are never uploaded.">
+    <meta property="og:image" content="https://jongsic.github.io/localutil/og.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:url" content="https://jongsic.github.io/localutil/gif.html">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:image" content="https://jongsic.github.io/localutil/og.png">
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebApplication","name":"GIF Maker / Frame Inspector","url":"https://jongsic.github.io/localutil/gif.html","description":"Create an animated GIF from images, and inspect the frames of an existing GIF. Runs 100% in your browser — images are never uploaded.","applicationCategory":"DeveloperApplication","operatingSystem":"Any","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"isPartOf":{"@type":"WebSite","name":"LocalUtil","url":"https://jongsic.github.io/localutil/"}}</script>
+    <!-- /social -->
+    <script src="theme-init.js"></script>
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        .checker {
+            background-image:
+                linear-gradient(45deg, rgba(128,128,128,0.22) 25%, transparent 25%, transparent 75%, rgba(128,128,128,0.22) 75%),
+                linear-gradient(45deg, rgba(128,128,128,0.22) 25%, transparent 25%, transparent 75%, rgba(128,128,128,0.22) 75%);
+            background-size: 16px 16px;
+            background-position: 0 0, 8px 8px;
+        }
+
+        .gif-drop-zone {
+            width: 100%;
+            min-height: 150px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 18px;
+            border: 2px dashed var(--border-strong);
+            border-radius: var(--r-md);
+            background-color: var(--bg-subtle);
+            cursor: pointer;
+            text-align: center;
+            transition: border-color 0.18s, background-color 0.18s;
+        }
+        .gif-drop-zone:hover { border-color: var(--primary); background-color: var(--bg-hover); }
+        .gif-drop-zone.dragover { border-color: var(--primary); background-color: var(--primary-soft); }
+        .gif-drop-icon { color: var(--primary); opacity: 0.85; margin-bottom: 10px; }
+        .gif-drop-main { font-size: 0.92rem; font-weight: 600; color: var(--text-main); }
+        .gif-drop-sub { font-size: 0.8rem; color: var(--text-muted); margin-top: 4px; }
+
+        /* Source image list (Create) */
+        .gif-src-list { display: flex; flex-direction: column; gap: 8px; max-height: 260px; overflow-y: auto; }
+        .gif-src-item {
+            display: flex; align-items: center; gap: 10px;
+            padding: 7px 9px;
+            border: 1px solid var(--border-color);
+            border-radius: var(--r-sm);
+            background: var(--bg-subtle);
+        }
+        .gif-src-thumb {
+            width: 44px; height: 44px; flex-shrink: 0;
+            border-radius: 5px; border: 1px solid var(--border-color);
+            object-fit: contain;
+        }
+        .gif-src-name { flex: 1; min-width: 0; font-size: 0.82rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .gif-src-idx { font-size: 0.72rem; color: var(--text-muted); font-weight: 700; width: 20px; text-align: center; flex-shrink: 0; }
+        .gif-src-btns { display: flex; gap: 3px; flex-shrink: 0; }
+        .gif-mini-btn {
+            border: 1px solid var(--border-color); background: var(--bg-content);
+            color: var(--text-muted); border-radius: 5px; cursor: pointer;
+            width: 26px; height: 26px; display: inline-flex; align-items: center; justify-content: center;
+            font-size: 0.9rem; line-height: 1;
+        }
+        .gif-mini-btn:hover { color: var(--text-main); border-color: var(--border-strong); }
+        .gif-mini-btn:disabled { opacity: 0.35; cursor: default; }
+
+        .gif-opt-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+        .gif-opt-row label { margin: 0; }
+        .gif-num { width: 92px; }
+        .gif-inline { display: inline-flex; align-items: center; gap: 7px; font-size: 0.85rem; cursor: pointer; user-select: none; }
+
+        /* Preview (Create) */
+        .gif-preview-box {
+            flex: 1; min-height: 220px;
+            display: flex; align-items: center; justify-content: center;
+            border: 1px solid var(--border-color); border-radius: var(--r-md);
+            overflow: hidden; padding: 12px;
+        }
+        .gif-preview-box img { max-width: 100%; max-height: 340px; border-radius: 4px; }
+
+        /* Inspect frame grid */
+        .gif-summary { font-size: 0.88rem; color: var(--text-muted); }
+        .gif-summary strong { color: var(--text-main); }
+        .gif-frame-grid { display: flex; flex-wrap: wrap; gap: 12px; }
+        .gif-frame {
+            width: 132px;
+            border: 1px solid var(--border-color); border-radius: var(--r-sm);
+            background: var(--bg-subtle); overflow: hidden; cursor: zoom-in;
+        }
+        .gif-frame-canvas-wrap {
+            width: 100%; height: 110px;
+            display: flex; align-items: center; justify-content: center; overflow: hidden;
+        }
+        .gif-frame-canvas-wrap canvas { max-width: 100%; max-height: 100%; image-rendering: pixelated; }
+        .gif-frame-meta { padding: 7px 9px; border-top: 1px solid var(--border-color); }
+        .gif-frame-meta .fm-main { font-size: 0.8rem; font-weight: 650; }
+        .gif-frame-meta .fm-sub { font-size: 0.72rem; color: var(--text-muted); margin-top: 2px; line-height: 1.5; }
+
+        /* Lightbox */
+        .gif-lightbox {
+            position: fixed; inset: 0; z-index: 1000;
+            background: rgba(0,0,0,0.82);
+            display: none; flex-direction: column;
+        }
+        .gif-lightbox.show { display: flex; }
+        .gif-lb-bar {
+            display: flex; align-items: center; gap: 8px;
+            padding: 10px 14px; color: #fff; flex-shrink: 0;
+            background: rgba(0,0,0,0.35);
+        }
+        .gif-lb-title { font-size: 0.85rem; font-weight: 600; margin-right: auto; }
+        .gif-lb-btn {
+            border: 1px solid rgba(255,255,255,0.3); background: rgba(255,255,255,0.08);
+            color: #fff; border-radius: 6px; padding: 5px 11px; cursor: pointer; font-size: 0.85rem; font-weight: 600;
+        }
+        .gif-lb-btn:hover { background: rgba(255,255,255,0.18); }
+        .gif-lb-scroll { flex: 1; overflow: auto; display: flex; align-items: center; justify-content: center; padding: 16px; }
+        .gif-lb-scroll canvas { image-rendering: pixelated; border-radius: 4px; }
+
+        .hidden { display: none !important; }
+    </style>
+</head>
+
+<body>
+    <div class="app-container">
+        <aside class="sidebar" id="app-sidebar"></aside>
+
+        <main class="main-content">
+            <header class="topbar" id="app-topbar">
+                <div class="topbar-title">
+                    <h1 id="current-tool-title">GIF Studio</h1>
+                    <p id="current-tool-desc" class="topbar-desc">Create animated GIFs from images and inspect GIF frames</p>
+                </div>
+            </header>
+
+            <div class="tools-container">
+                <section class="tool-section active">
+                    <div class="tool-shell">
+                        <div class="segmented" style="align-self:flex-start;" role="tablist">
+                            <button id="mode-create-btn" class="active" type="button">Create GIF</button>
+                            <button id="mode-inspect-btn" type="button">Inspect GIF</button>
+                        </div>
+
+                        <!-- ============ CREATE MODE ============ -->
+                        <div id="mode-create">
+                            <div class="split-pane">
+                                <!-- Left: sources + options -->
+                                <div class="pane">
+                                    <div>
+                                        <div class="card-title" style="margin:0;">Frames</div>
+                                        <div class="field-hint">Add images in the order they should play.</div>
+                                    </div>
+
+                                    <div id="gif-add-zone" class="gif-drop-zone">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="38" height="38" viewBox="0 0 24 24"
+                                            fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
+                                            stroke-linejoin="round" class="gif-drop-icon">
+                                            <rect x="3" y="3" width="18" height="18" rx="2"></rect>
+                                            <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                                            <path d="m21 15-5-5L5 21"></path>
+                                        </svg>
+                                        <p class="gif-drop-main">Drop images, or click to add</p>
+                                        <p class="gif-drop-sub">Multiple files · paste also works</p>
+                                    </div>
+                                    <input type="file" id="gif-add-input" accept="image/*" multiple style="display:none;">
+
+                                    <div id="gif-src-list" class="gif-src-list"></div>
+                                    <div class="flex-row gap-1" id="gif-src-actions" style="display:none;">
+                                        <span id="gif-src-count" class="field-hint" style="align-self:center;"></span>
+                                        <button id="gif-clear-btn" class="btn btn-ghost btn-small" style="margin-left:auto;">Clear all</button>
+                                    </div>
+
+                                    <hr>
+
+                                    <div class="field-group">
+                                        <label>Options</label>
+                                        <div class="gif-opt-row">
+                                            <label for="gif-delay" class="field-hint" style="margin:0;">Frame delay</label>
+                                            <input type="number" id="gif-delay" class="gif-num" value="100" min="10" step="10">
+                                            <span class="field-hint">ms</span>
+                                            <span class="field-hint" id="gif-fps-hint"></span>
+                                        </div>
+                                        <div class="gif-opt-row">
+                                            <label class="gif-inline"><input type="checkbox" id="gif-loop" checked> Loop forever</label>
+                                            <label class="gif-inline"><input type="checkbox" id="gif-transparent"> Transparent background</label>
+                                            <label class="gif-inline" id="gif-bg-wrap">
+                                                Background <input type="color" id="gif-bg" value="#ffffff" style="width:34px;height:26px;padding:0;border-radius:5px;">
+                                            </label>
+                                        </div>
+                                        <div class="gif-opt-row">
+                                            <label class="field-hint" style="margin:0;">Canvas size</label>
+                                            <select id="gif-size-mode" class="select-small">
+                                                <option value="auto">Auto (first image)</option>
+                                                <option value="custom">Custom</option>
+                                            </select>
+                                            <span id="gif-custom-size" class="gif-opt-row hidden">
+                                                <input type="number" id="gif-w" class="gif-num" placeholder="W" min="1">
+                                                <span class="field-hint">×</span>
+                                                <input type="number" id="gif-h" class="gif-num" placeholder="H" min="1">
+                                            </span>
+                                        </div>
+                                    </div>
+
+                                    <div class="flex-row gap-1 items-center" style="margin-top:auto;">
+                                        <span id="gif-out-info" class="field-hint"></span>
+                                        <button id="gif-download-btn" class="btn btn-primary" style="margin-left:auto;" disabled>Download .gif</button>
+                                    </div>
+                                </div>
+
+                                <!-- Right: preview -->
+                                <div class="pane">
+                                    <div>
+                                        <div class="card-title" style="margin:0;">Preview</div>
+                                        <div class="field-hint">Live-rendered animated GIF.</div>
+                                    </div>
+                                    <div id="gif-preview-box" class="gif-preview-box checker">
+                                        <span id="gif-preview-empty" class="field-hint">Add at least one image to preview.</span>
+                                        <img id="gif-preview-img" class="hidden" alt="preview">
+                                    </div>
+                                    <div class="field-group" style="margin-top:4px;">
+                                        <label for="gif-filename">File name</label>
+                                        <input type="text" id="gif-filename" value="animation" spellcheck="false">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- ============ INSPECT MODE ============ -->
+                        <div id="mode-inspect" class="hidden">
+                            <div class="split-pane">
+                                <div class="pane" style="flex:0 0 320px;">
+                                    <div>
+                                        <div class="card-title" style="margin:0;">GIF file</div>
+                                        <div class="field-hint">Drop, click, or paste a <code>.gif</code> file.</div>
+                                    </div>
+                                    <div id="gif-read-zone" class="gif-drop-zone" style="flex:1;">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="42" height="42" viewBox="0 0 24 24"
+                                            fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
+                                            stroke-linejoin="round" class="gif-drop-icon">
+                                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                                            <polyline points="14 2 14 8 20 8"></polyline>
+                                        </svg>
+                                        <p class="gif-drop-main">Drop a .gif, or click to open</p>
+                                        <p class="gif-drop-sub">Parsed locally in your browser</p>
+                                    </div>
+                                    <input type="file" id="gif-read-input" accept=".gif,image/gif" style="display:none;">
+                                    <div id="gif-read-error" class="field-hint hidden" style="color:var(--danger);"></div>
+                                </div>
+
+                                <div class="pane">
+                                    <div>
+                                        <div class="card-title" style="margin:0;">Frames</div>
+                                        <div id="gif-read-summary" class="gif-summary">No file loaded yet.</div>
+                                        <div class="field-hint" id="gif-read-hint" style="margin-top:2px;"></div>
+                                    </div>
+                                    <div id="gif-frame-grid" class="gif-frame-grid"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </div>
+
+    <!-- Lightbox for inspecting a frame at full/zoomed size -->
+    <div id="gif-lightbox" class="gif-lightbox">
+        <div class="gif-lb-bar">
+            <span id="gif-lb-title" class="gif-lb-title"></span>
+            <button class="gif-lb-btn" id="gif-lb-out">−</button>
+            <button class="gif-lb-btn" id="gif-lb-in">+</button>
+            <button class="gif-lb-btn" id="gif-lb-actual">1:1</button>
+            <button class="gif-lb-btn" id="gif-lb-fit">Fit</button>
+            <button class="gif-lb-btn" id="gif-lb-close">✕ Close</button>
+        </div>
+        <div class="gif-lb-scroll checker" id="gif-lb-scroll">
+            <canvas id="gif-lb-canvas"></canvas>
+        </div>
+    </div>
+
+    <div id="toast" class="toast">Copied to clipboard</div>
+
+    <!-- Both dependency-free globals: omggif → window.GifReader (decode), gifenc → window.gifenc (encode).
+         Loaded as classic scripts so the page works over file:// and any static host. -->
+    <script src="vendor/omggif.js"></script>
+    <script src="vendor/gifenc.global.js"></script>
+    <script src="app.js"></script>
+    <script>
+        const { GIFEncoder, quantize, applyPalette } = window.gifenc;
+
+        const $ = id => document.getElementById(id);
+        const humanSize = b => b < 1024 ? b + ' B' : b < 1048576 ? (b / 1024).toFixed(1) + ' KB' : (b / 1048576).toFixed(2) + ' MB';
+
+        // ---------- Mode switching ----------
+        const createBtn = $('mode-create-btn'), inspectBtn = $('mode-inspect-btn');
+        const createPane = $('mode-create'), inspectPane = $('mode-inspect');
+        function setMode(create) {
+            createBtn.classList.toggle('active', create);
+            inspectBtn.classList.toggle('active', !create);
+            createPane.classList.toggle('hidden', !create);
+            inspectPane.classList.toggle('hidden', create);
+        }
+        createBtn.addEventListener('click', () => setMode(true));
+        inspectBtn.addEventListener('click', () => setMode(false));
+
+        // ================= CREATE =================
+        const addZone = $('gif-add-zone'), addInput = $('gif-add-input');
+        const srcList = $('gif-src-list'), srcActions = $('gif-src-actions'), srcCount = $('gif-src-count');
+        const delayInput = $('gif-delay'), loopChk = $('gif-loop'), transpChk = $('gif-transparent');
+        const bgWrap = $('gif-bg-wrap'), bgInput = $('gif-bg');
+        const sizeMode = $('gif-size-mode'), customSize = $('gif-custom-size'), wInput = $('gif-w'), hInput = $('gif-h');
+        const previewImg = $('gif-preview-img'), previewEmpty = $('gif-preview-empty');
+        const outInfo = $('gif-out-info'), downloadBtn = $('gif-download-btn'), filenameInput = $('gif-filename');
+        const fpsHint = $('gif-fps-hint');
+
+        let sources = [];          // { name, img }
+        let currentBlob = null, currentUrl = null;
+
+        function renderList() {
+            srcList.innerHTML = '';
+            sources.forEach((s, i) => {
+                const item = document.createElement('div');
+                item.className = 'gif-src-item';
+                item.innerHTML =
+                    '<span class="gif-src-idx">' + (i + 1) + '</span>' +
+                    '<img class="gif-src-thumb checker" src="' + s.img.src + '">' +
+                    '<span class="gif-src-name" title="' + s.name + '">' + s.name + '</span>' +
+                    '<span class="gif-src-btns">' +
+                    '<button class="gif-mini-btn" data-act="up" ' + (i === 0 ? 'disabled' : '') + ' title="Move up">↑</button>' +
+                    '<button class="gif-mini-btn" data-act="down" ' + (i === sources.length - 1 ? 'disabled' : '') + ' title="Move down">↓</button>' +
+                    '<button class="gif-mini-btn" data-act="del" title="Remove">✕</button>' +
+                    '</span>';
+                item.querySelector('[data-act=up]').addEventListener('click', () => { if (i > 0) { [sources[i - 1], sources[i]] = [sources[i], sources[i - 1]]; changed(); } });
+                item.querySelector('[data-act=down]').addEventListener('click', () => { if (i < sources.length - 1) { [sources[i + 1], sources[i]] = [sources[i], sources[i + 1]]; changed(); } });
+                item.querySelector('[data-act=del]').addEventListener('click', () => { sources.splice(i, 1); changed(); });
+                srcList.appendChild(item);
+            });
+            srcActions.style.display = sources.length ? 'flex' : 'none';
+            srcCount.textContent = sources.length + ' image' + (sources.length === 1 ? '' : 's');
+        }
+
+        function addFiles(fileList) {
+            const files = Array.from(fileList).filter(f => f.type.startsWith('image/'));
+            let pending = files.length;
+            if (!pending) return;
+            files.forEach(file => {
+                const reader = new FileReader();
+                reader.onload = e => {
+                    const img = new Image();
+                    img.onload = () => { sources.push({ name: file.name, img }); if (--pending === 0) changed(); };
+                    img.onerror = () => { if (--pending === 0) changed(); };
+                    img.src = e.target.result;
+                };
+                reader.readAsDataURL(file);
+            });
+        }
+
+        function targetSize() {
+            if (sizeMode.value === 'custom') {
+                const w = parseInt(wInput.value, 10), h = parseInt(hInput.value, 10);
+                if (w > 0 && h > 0) return { w, h };
+            }
+            if (sources.length) return { w: sources[0].img.naturalWidth, h: sources[0].img.naturalHeight };
+            return null;
+        }
+
+        // Draw one source into a W×H canvas, contain-fit + letterbox.
+        function drawFrame(img, W, H, transparent, bg) {
+            const c = document.createElement('canvas');
+            c.width = W; c.height = H;
+            const ctx = c.getContext('2d');
+            if (!transparent) { ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H); }
+            const scale = Math.min(W / img.naturalWidth, H / img.naturalHeight);
+            const dw = img.naturalWidth * scale, dh = img.naturalHeight * scale;
+            ctx.imageSmoothingQuality = 'high';
+            ctx.drawImage(img, (W - dw) / 2, (H - dh) / 2, dw, dh);
+            return ctx.getImageData(0, 0, W, H).data;
+        }
+
+        let buildToken = 0;
+        async function build() {
+            const token = ++buildToken;
+            if (currentUrl) { URL.revokeObjectURL(currentUrl); currentUrl = null; }
+            currentBlob = null;
+            downloadBtn.disabled = true;
+
+            const delay = Math.max(10, parseInt(delayInput.value, 10) || 100);
+            fpsHint.textContent = '≈ ' + (1000 / delay).toFixed(1) + ' fps';
+
+            if (!sources.length) {
+                previewImg.classList.add('hidden');
+                previewEmpty.classList.remove('hidden');
+                previewEmpty.textContent = 'Add at least one image to preview.';
+                outInfo.textContent = '';
+                return;
+            }
+            const size = targetSize();
+            if (!size) return;
+            const { w: W, h: H } = size;
+
+            previewEmpty.classList.remove('hidden');
+            previewEmpty.textContent = 'Generating…';
+
+            const transparent = transpChk.checked;
+            const bg = bgInput.value;
+            const format = transparent ? 'rgba4444' : 'rgb565';
+            const gif = GIFEncoder();
+
+            for (let i = 0; i < sources.length; i++) {
+                const data = drawFrame(sources[i].img, W, H, transparent, bg);
+                const palette = quantize(data, 256, { format, oneBitAlpha: transparent });
+                const index = applyPalette(data, palette, format);
+                const opts = { palette, delay };
+                if (i === 0) opts.repeat = loopChk.checked ? 0 : -1;
+                if (transparent) opts.transparent = true;
+                gif.writeFrame(index, W, H, opts);
+                // Yield so the UI stays responsive and a newer build can cancel this one.
+                await new Promise(r => setTimeout(r));
+                if (token !== buildToken) return;
+            }
+            gif.finish();
+
+            currentBlob = new Blob([gif.bytes()], { type: 'image/gif' });
+            currentUrl = URL.createObjectURL(currentBlob);
+            previewImg.src = currentUrl;
+            previewImg.classList.remove('hidden');
+            previewEmpty.classList.add('hidden');
+            downloadBtn.disabled = false;
+            outInfo.textContent = sources.length + ' frames · ' + W + '×' + H + ' · ' + humanSize(currentBlob.size);
+        }
+
+        let debounce;
+        function changed() {
+            renderList();
+            clearTimeout(debounce);
+            debounce = setTimeout(build, 250);
+        }
+
+        addZone.addEventListener('click', () => addInput.click());
+        addInput.addEventListener('change', e => { addFiles(e.target.files); addInput.value = ''; });
+        addZone.addEventListener('dragover', e => { e.preventDefault(); addZone.classList.add('dragover'); });
+        addZone.addEventListener('dragleave', () => addZone.classList.remove('dragover'));
+        addZone.addEventListener('drop', e => { e.preventDefault(); addZone.classList.remove('dragover'); addFiles(e.dataTransfer.files); });
+        $('gif-clear-btn').addEventListener('click', () => { sources = []; changed(); });
+
+        [delayInput, loopChk, transpChk, bgInput, sizeMode, wInput, hInput].forEach(el =>
+            el.addEventListener('input', () => {
+                bgWrap.style.display = transpChk.checked ? 'none' : '';
+                customSize.classList.toggle('hidden', sizeMode.value !== 'custom');
+                changed();
+            }));
+
+        downloadBtn.addEventListener('click', () => {
+            if (!currentUrl) return;
+            const a = document.createElement('a');
+            let name = (filenameInput.value || 'animation').trim().replace(/\.gif$/i, '') || 'animation';
+            a.href = currentUrl; a.download = name + '.gif'; a.click();
+        });
+
+        // ================= INSPECT =================
+        const readZone = $('gif-read-zone'), readInput = $('gif-read-input');
+        const readSummary = $('gif-read-summary'), readHint = $('gif-read-hint');
+        const frameGrid = $('gif-frame-grid'), readError = $('gif-read-error');
+
+        const DISPOSAL = { 0: 'unspecified', 1: 'keep', 2: 'restore bg', 3: 'restore prev' };
+
+        function inspectGif(buf) {
+            readError.classList.add('hidden');
+            frameGrid.innerHTML = '';
+            let reader;
+            try {
+                reader = new window.GifReader(new Uint8Array(buf));
+            } catch (err) {
+                readSummary.textContent = 'No file loaded yet.';
+                readError.textContent = 'Could not parse GIF: ' + err.message;
+                readError.classList.remove('hidden');
+                return;
+            }
+
+            const W = reader.width, H = reader.height, n = reader.numFrames();
+            const loop = typeof reader.loopCount === 'function' ? reader.loopCount() : null;
+            const loopText = loop === 0 ? 'loops forever' : (loop > 0 ? loop + ' loops' : 'no loop');
+
+            // Composite frames respecting disposal, snapshot each.
+            const buffer = new Uint8ClampedArray(W * H * 4);
+            let totalMs = 0;
+            const frames = [];
+            for (let i = 0; i < n; i++) {
+                const info = reader.frameInfo(i);
+                const preSnapshot = info.disposal === 3 ? buffer.slice() : null;
+                reader.decodeAndBlitFrameRGBA(i, buffer);
+                frames.push({ info, pixels: buffer.slice() });
+                totalMs += info.delay * 10;
+                if (info.disposal === 2) {
+                    for (let y = 0; y < info.height; y++)
+                        for (let x = 0; x < info.width; x++) {
+                            const p = ((info.y + y) * W + (info.x + x)) * 4;
+                            buffer[p] = buffer[p + 1] = buffer[p + 2] = buffer[p + 3] = 0;
+                        }
+                } else if (preSnapshot) {
+                    buffer.set(preSnapshot);
+                }
+            }
+
+            readSummary.innerHTML = '<strong>' + W + ' × ' + H + '</strong> · ' +
+                '<strong>' + n + '</strong> frame' + (n === 1 ? '' : 's') + ' · ' +
+                (totalMs / 1000).toFixed(2) + 's · ' + loopText;
+            readHint.textContent = 'Click any frame to view it full-size and zoom.';
+
+            frames.forEach((f, i) => {
+                const c = document.createElement('canvas');
+                c.width = W; c.height = H;
+                c.getContext('2d').putImageData(new ImageData(f.pixels, W, H), 0, 0);
+
+                const cell = document.createElement('div');
+                cell.className = 'gif-frame';
+                const wrap = document.createElement('div');
+                wrap.className = 'gif-frame-canvas-wrap checker';
+                wrap.appendChild(c);
+                const meta = document.createElement('div');
+                meta.className = 'gif-frame-meta';
+                meta.innerHTML =
+                    '<div class="fm-main">Frame ' + (i + 1) + '</div>' +
+                    '<div class="fm-sub">' +
+                    (f.info.delay * 10) + ' ms · ' + f.info.width + '×' + f.info.height + '<br>' +
+                    'dispose: ' + (DISPOSAL[f.info.disposal] || f.info.disposal) +
+                    (f.info.transparent_index >= 0 ? ' · alpha' : '') +
+                    (f.info.x || f.info.y ? '<br>offset ' + f.info.x + ',' + f.info.y : '') +
+                    '</div>';
+                cell.appendChild(wrap);
+                cell.appendChild(meta);
+                cell.addEventListener('click', () => openLightbox(f.pixels, W, H, 'Frame ' + (i + 1) + ' — ' + W + '×' + H));
+                frameGrid.appendChild(cell);
+            });
+        }
+
+        function handleGifFile(file) {
+            if (!file) return;
+            const r = new FileReader();
+            r.onload = e => inspectGif(e.target.result);
+            r.readAsArrayBuffer(file);
+        }
+        readZone.addEventListener('click', () => readInput.click());
+        readInput.addEventListener('change', e => handleGifFile(e.target.files[0]));
+        readZone.addEventListener('dragover', e => { e.preventDefault(); readZone.classList.add('dragover'); });
+        readZone.addEventListener('dragleave', () => readZone.classList.remove('dragover'));
+        readZone.addEventListener('drop', e => { e.preventDefault(); readZone.classList.remove('dragover'); handleGifFile(e.dataTransfer.files[0]); });
+
+        // ---------- Lightbox with zoom ----------
+        const lb = $('gif-lightbox'), lbCanvas = $('gif-lb-canvas'), lbScroll = $('gif-lb-scroll'), lbTitle = $('gif-lb-title');
+        let lbW = 0, lbH = 0, lbScale = 1;
+        function applyScale() {
+            lbCanvas.style.width = Math.round(lbW * lbScale) + 'px';
+            lbCanvas.style.height = Math.round(lbH * lbScale) + 'px';
+        }
+        function fitScale() {
+            const availW = lbScroll.clientWidth - 40, availH = lbScroll.clientHeight - 40;
+            lbScale = Math.min(availW / lbW, availH / lbH, 1);
+            applyScale();
+        }
+        function openLightbox(pixels, W, H, title) {
+            lbW = W; lbH = H;
+            lbCanvas.width = W; lbCanvas.height = H;
+            lbCanvas.getContext('2d').putImageData(new ImageData(pixels, W, H), 0, 0);
+            lbTitle.textContent = title;
+            lb.classList.add('show');
+            lbScale = 1; applyScale();          // open at natural (1:1) size…
+            if (W > lbScroll.clientWidth || H > lbScroll.clientHeight) fitScale(); // …unless it overflows
+        }
+        function closeLightbox() { lb.classList.remove('show'); }
+        function zoom(factor) { lbScale = Math.min(32, Math.max(0.05, lbScale * factor)); applyScale(); }
+
+        $('gif-lb-close').addEventListener('click', closeLightbox);
+        $('gif-lb-in').addEventListener('click', () => zoom(1.25));
+        $('gif-lb-out').addEventListener('click', () => zoom(0.8));
+        $('gif-lb-actual').addEventListener('click', () => { lbScale = 1; applyScale(); });
+        $('gif-lb-fit').addEventListener('click', fitScale);
+        lb.addEventListener('click', e => { if (e.target === lb || e.target === lbScroll) closeLightbox(); });
+        lbScroll.addEventListener('wheel', e => { e.preventDefault(); zoom(e.deltaY < 0 ? 1.12 : 0.89); }, { passive: false });
+        document.addEventListener('keydown', e => { if (e.key === 'Escape' && lb.classList.contains('show')) closeLightbox(); });
+
+        // ---------- Paste routes to active mode ----------
+        document.addEventListener('paste', e => {
+            const items = e.clipboardData && e.clipboardData.items;
+            if (!items) return;
+            const inspecting = !inspectPane.classList.contains('hidden');
+            const imgs = [];
+            for (const it of items) if (it.kind === 'file') {
+                const f = it.getAsFile();
+                if (inspecting) { if (f && f.type === 'image/gif') { handleGifFile(f); e.preventDefault(); return; } }
+                else if (it.type.startsWith('image/')) imgs.push(f);
+            }
+            if (imgs.length) { addFiles(imgs); e.preventDefault(); }
+        });
+
+        // initial
+        renderList();
+        fpsHint.textContent = '≈ 10.0 fps';
+    </script>
+</body>
+
+</html>

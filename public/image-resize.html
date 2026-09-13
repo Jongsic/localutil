@@ -1,0 +1,712 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
+    <title>Image Resizer (cm / inch / px + DPI) — LocalUtil</title>
+    <!-- social / favicon -->
+    <meta name="description" content="Place an image on a custom-size canvas in cm, inches, or pixels at a chosen DPI, and export it. Runs 100% in your browser — images are never uploaded.">
+    <link rel="canonical" href="https://jongsic.github.io/localutil/image-resize.html">
+    <link rel="icon" href="favicon.ico" sizes="any">
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="LocalUtil">
+    <meta property="og:title" content="Image Resizer (cm / inch / px + DPI) — LocalUtil">
+    <meta property="og:description" content="Place an image on a custom-size canvas in cm, inches, or pixels at a chosen DPI, and export it. Runs 100% in your browser — images are never uploaded.">
+    <meta property="og:image" content="https://jongsic.github.io/localutil/og.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:url" content="https://jongsic.github.io/localutil/image-resize.html">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:image" content="https://jongsic.github.io/localutil/og.png">
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebApplication","name":"Image Resizer (cm / inch / px + DPI)","url":"https://jongsic.github.io/localutil/image-resize.html","description":"Place an image on a custom-size canvas in cm, inches, or pixels at a chosen DPI, and export it. Runs 100% in your browser — images are never uploaded.","applicationCategory":"DeveloperApplication","operatingSystem":"Any","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"isPartOf":{"@type":"WebSite","name":"LocalUtil","url":"https://jongsic.github.io/localutil/"}}</script>
+    <!-- /social -->
+    <script src="theme-init.js"></script>
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        .ir-drop-zone {
+            width: 100%;
+            min-height: 130px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 18px;
+            border: 2px dashed var(--border-strong);
+            border-radius: var(--r-md);
+            background-color: var(--bg-subtle);
+            cursor: pointer;
+            text-align: center;
+            transition: border-color 0.18s, background-color 0.18s;
+        }
+        .ir-drop-zone:hover { border-color: var(--primary); background-color: var(--bg-hover); }
+        .ir-drop-zone.dragover { border-color: var(--primary); background-color: var(--primary-soft); }
+        .ir-drop-icon { color: var(--primary); opacity: 0.85; margin-bottom: 10px; }
+        .ir-drop-main { font-size: 0.92rem; font-weight: 600; color: var(--text-main); margin-bottom: 5px; }
+        .ir-drop-sub { font-size: 0.8rem; color: var(--text-muted); }
+
+        .ir-source-row { display: flex; align-items: center; gap: 12px; }
+        .ir-source-thumb {
+            width: 56px; height: 56px; flex-shrink: 0;
+            border-radius: var(--r-sm);
+            border: 1px solid var(--border-color);
+            object-fit: cover;
+            background: var(--bg-subtle);
+        }
+
+        /* Dimension inputs */
+        .ir-dim-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px 12px;
+        }
+        .ir-dim-grid .ir-dim-wide { grid-column: 1 / -1; }
+        .ir-dim-grid label { margin-bottom: 4px; }
+        .ir-dim-grid input, .ir-dim-grid select { padding: 8px 11px; }
+
+        /* Slider rows */
+        .ir-ctrl-row { display: flex; align-items: center; gap: 10px; }
+        .ir-ctrl-row label { min-width: 54px; margin: 0; }
+        .ir-ctrl-row input[type="range"] { flex: 1; min-width: 0; }
+        .ir-ctrl-val {
+            min-width: 56px; text-align: right;
+            font-size: 0.82rem; color: var(--text-muted);
+            font-variant-numeric: tabular-nums;
+        }
+
+        /* Editor stage */
+        .ir-stage { display: flex; flex-direction: column; align-items: center; gap: 10px; width: 100%; }
+        .ir-canvas-wrap {
+            border: 1px solid var(--border-strong);
+            border-radius: var(--r-sm);
+            overflow: hidden;
+            box-shadow: 0 4px 18px rgba(0, 0, 0, 0.25);
+            /* checkerboard shows through transparent areas */
+            background-color: #ffffff;
+            background-image:
+                linear-gradient(45deg, #d7dbe0 25%, transparent 25%),
+                linear-gradient(-45deg, #d7dbe0 25%, transparent 25%),
+                linear-gradient(45deg, transparent 75%, #d7dbe0 75%),
+                linear-gradient(-45deg, transparent 75%, #d7dbe0 75%);
+            background-size: 18px 18px;
+            background-position: 0 0, 0 9px, 9px -9px, -9px 0;
+            max-width: 100%;
+        }
+        #ir-canvas {
+            display: block;
+            touch-action: none;
+            cursor: grab;
+        }
+        #ir-canvas.dragging { cursor: grabbing; }
+        .ir-stage-hint { font-size: 0.78rem; color: var(--text-muted); text-align: center; }
+
+        .ir-readouts {
+            display: flex; flex-wrap: wrap; gap: 6px 18px;
+            font-size: 0.8rem; color: var(--text-muted);
+            font-variant-numeric: tabular-nums;
+            justify-content: center;
+        }
+        .ir-readouts strong { color: var(--text-main); font-weight: 600; }
+
+        .hidden { display: none !important; }
+    </style>
+</head>
+
+<body>
+    <div class="app-container">
+        <aside class="sidebar" id="app-sidebar"></aside>
+
+        <main class="main-content">
+            <header class="topbar" id="app-topbar">
+                <div class="topbar-title">
+                    <h1 id="current-tool-title">Image Resizer</h1>
+                    <p id="current-tool-desc" class="topbar-desc">Place an image on a custom-sized canvas (cm/inch/px + dpi) and export it</p>
+                </div>
+            </header>
+
+            <div class="tools-container">
+                <section class="tool-section active">
+                    <div class="tool-shell">
+                        <div class="split-pane">
+                            <!-- Left: canvas size + source + controls -->
+                            <div class="pane">
+                                <div>
+                                    <div class="card-title" style="margin:0;">Canvas size</div>
+                                    <div class="field-hint">Set the output dimensions. Physical units use the dpi to compute pixels.</div>
+                                </div>
+
+                                <div class="ir-dim-grid">
+                                    <div class="form-group">
+                                        <label for="ir-w">Width</label>
+                                        <input type="number" id="ir-w" min="0.01" step="any" value="10">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="ir-h">Height</label>
+                                        <input type="number" id="ir-h" min="0.01" step="any" value="15">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="ir-unit">Unit</label>
+                                        <select id="ir-unit">
+                                            <option value="px">pixels (px)</option>
+                                            <option value="cm" selected>centimeters (cm)</option>
+                                            <option value="mm">millimeters (mm)</option>
+                                            <option value="in">inches (in)</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="ir-dpi">DPI</label>
+                                        <input type="number" id="ir-dpi" min="1" step="1" value="300">
+                                    </div>
+                                    <div class="ir-dim-wide field-hint" id="ir-outpx" style="text-align:right;"></div>
+                                </div>
+
+                                <div style="margin-top:2px;">
+                                    <div class="card-title" style="margin:0;">Image</div>
+                                    <div class="field-hint">Drop, click, or paste an image. Nothing leaves your browser.</div>
+                                </div>
+
+                                <div id="ir-drop-zone" class="ir-drop-zone">
+                                    <div id="ir-drop-empty">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24"
+                                            fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
+                                            stroke-linejoin="round" class="ir-drop-icon">
+                                            <rect x="3" y="3" width="18" height="18" rx="2"></rect>
+                                            <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                                            <path d="m21 15-5-5L5 21"></path>
+                                        </svg>
+                                        <p class="ir-drop-main">Drop an image, or click to upload</p>
+                                        <p class="ir-drop-sub">Paste works too · Ctrl/⌘ + V</p>
+                                    </div>
+                                    <div id="ir-source-row" class="ir-source-row hidden">
+                                        <img id="ir-source-thumb" class="ir-source-thumb" alt="source">
+                                        <div style="text-align:left;min-width:0;">
+                                            <div id="ir-source-name" style="font-weight:600;font-size:0.88rem;word-break:break-all;"></div>
+                                            <div id="ir-source-dim" class="field-hint" style="margin:2px 0 0;"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <input type="file" id="ir-file-input" accept="image/*" style="display:none;">
+
+                                <div class="ir-ctrl-row" style="margin-top:4px;">
+                                    <label for="ir-zoom">Zoom</label>
+                                    <input type="range" id="ir-zoom" min="0" max="200" step="0.5" value="100" disabled>
+                                    <span id="ir-zoom-val" class="ir-ctrl-val">—</span>
+                                </div>
+
+                                <div class="ir-ctrl-row">
+                                    <label for="ir-rotate">Rotate</label>
+                                    <input type="range" id="ir-rotate" min="-180" max="180" step="0.1" value="0" disabled>
+                                    <span id="ir-rotate-val" class="ir-ctrl-val">0.0°</span>
+                                </div>
+
+                                <div class="flex-row gap-1 wrap items-center">
+                                    <button id="ir-fit-btn" class="btn" type="button" disabled>Fit</button>
+                                    <button id="ir-fill-btn" class="btn" type="button" disabled>Fill</button>
+                                    <button id="ir-rot90-btn" class="btn" type="button" disabled>Rotate 90°</button>
+                                    <button id="ir-reset-btn" class="btn" type="button" disabled>Reset</button>
+                                </div>
+
+                                <div class="ir-ctrl-row">
+                                    <label for="ir-bg">Background</label>
+                                    <input type="color" id="ir-bg" value="#ffffff"
+                                        style="width:44px;height:30px;padding:2px;border:1px solid var(--border-color);border-radius:var(--r-sm);background:var(--bg-subtle);cursor:pointer;">
+                                    <label class="flex-row gap-1 items-center" style="margin:0 0 0 auto;font-size:0.85rem;cursor:pointer;">
+                                        <input type="checkbox" id="ir-transparent" style="margin:0;">
+                                        Transparent
+                                    </label>
+                                </div>
+
+                                <div class="flex-row gap-1 items-center wrap" style="margin-top:auto;">
+                                    <label for="ir-format" style="margin:0;">Format</label>
+                                    <select id="ir-format" class="select" style="width:auto;min-width:120px;">
+                                        <option value="png" selected>PNG</option>
+                                        <option value="jpeg">JPEG</option>
+                                    </select>
+                                    <button id="ir-download-btn" class="btn btn-primary" style="margin-left:auto;" disabled>Download</button>
+                                </div>
+                            </div>
+
+                            <!-- Right: editor -->
+                            <div class="pane">
+                                <div>
+                                    <div class="card-title" style="margin:0;">Editor</div>
+                                    <div class="field-hint">Drag to move · scroll / pinch to zoom · arrow keys to nudge (Shift = ×10).</div>
+                                </div>
+                                <div class="ir-stage" id="ir-stage">
+                                    <div class="ir-canvas-wrap" id="ir-canvas-wrap">
+                                        <canvas id="ir-canvas"></canvas>
+                                    </div>
+                                    <div class="ir-readouts" id="ir-readouts">
+                                        <span>Canvas view <strong id="ir-view-scale">—</strong></span>
+                                        <span>Image scale <strong id="ir-img-scale">—</strong></span>
+                                        <span>Output <strong id="ir-out-dim">—</strong></span>
+                                    </div>
+                                    <div class="ir-stage-hint">Preview is scaled to fit the screen — the download is exactly the output size above.</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </div>
+
+    <div id="toast" class="toast">Copied to clipboard</div>
+
+    <script src="app.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // Guardrails so a huge physical size × dpi can't allocate a runaway canvas.
+            const MAX_SIDE = 12000;
+            const MAX_AREA = 80 * 1000 * 1000;
+
+            // ---- Elements ----
+            const wIn = document.getElementById('ir-w');
+            const hIn = document.getElementById('ir-h');
+            const unitSel = document.getElementById('ir-unit');
+            const dpiIn = document.getElementById('ir-dpi');
+            const outPxLabel = document.getElementById('ir-outpx');
+
+            const dropZone = document.getElementById('ir-drop-zone');
+            const fileInput = document.getElementById('ir-file-input');
+            const dropEmpty = document.getElementById('ir-drop-empty');
+            const sourceRow = document.getElementById('ir-source-row');
+            const sourceThumb = document.getElementById('ir-source-thumb');
+            const sourceName = document.getElementById('ir-source-name');
+            const sourceDim = document.getElementById('ir-source-dim');
+
+            const zoomSlider = document.getElementById('ir-zoom');
+            const zoomVal = document.getElementById('ir-zoom-val');
+            const rotSlider = document.getElementById('ir-rotate');
+            const rotVal = document.getElementById('ir-rotate-val');
+            const fitBtn = document.getElementById('ir-fit-btn');
+            const fillBtn = document.getElementById('ir-fill-btn');
+            const rot90Btn = document.getElementById('ir-rot90-btn');
+            const resetBtn = document.getElementById('ir-reset-btn');
+            const bgInput = document.getElementById('ir-bg');
+            const transparentToggle = document.getElementById('ir-transparent');
+            const formatSel = document.getElementById('ir-format');
+            const downloadBtn = document.getElementById('ir-download-btn');
+
+            const stage = document.getElementById('ir-stage');
+            const canvasWrap = document.getElementById('ir-canvas-wrap');
+            const canvas = document.getElementById('ir-canvas');
+            const ectx = canvas.getContext('2d');
+
+            const viewScaleEl = document.getElementById('ir-view-scale');
+            const imgScaleEl = document.getElementById('ir-img-scale');
+            const outDimEl = document.getElementById('ir-out-dim');
+
+            // ---- Output geometry (device pixels) ----
+            let OUT_W = 100, OUT_H = 100, DPI = 300;
+            let CX = 50, CY = 50;
+            let previewScale = 1;          // on-screen scale of the canvas (auto-fit)
+            const DPR = Math.min(window.devicePixelRatio || 1, 2);
+
+            // ---- Image transform state (all in output-pixel space) ----
+            let img = null;
+            let iw = 0, ih = 0;
+            let scale = 1;                 // absolute scale (output px per source px)
+            let fitScale = 1;              // "contain" scale — whole image visible
+            let ox = 0, oy = 0;            // image-center offset from canvas center
+            let rotBase = 0;               // 90° steps
+            function rotation() { return rotBase + parseFloat(rotSlider.value); }
+
+            function unitToPx(value, unit, dpi) {
+                switch (unit) {
+                    case 'px': return value;
+                    case 'cm': return value / 2.54 * dpi;
+                    case 'mm': return value / 25.4 * dpi;
+                    case 'in': return value * dpi;
+                    default: return value;
+                }
+            }
+
+            // ---- Recompute output geometry from the dimension inputs ----
+            function readDimensions() {
+                const unit = unitSel.value;
+                let dpi = Math.round(parseFloat(dpiIn.value));
+                if (!isFinite(dpi) || dpi < 1) dpi = 72;
+                let wv = parseFloat(wIn.value);
+                let hv = parseFloat(hIn.value);
+                if (!isFinite(wv) || wv <= 0) wv = 1;
+                if (!isFinite(hv) || hv <= 0) hv = 1;
+
+                let w = Math.max(1, Math.round(unitToPx(wv, unit, dpi)));
+                let h = Math.max(1, Math.round(unitToPx(hv, unit, dpi)));
+
+                let clamped = false;
+                if (w > MAX_SIDE) { w = MAX_SIDE; clamped = true; }
+                if (h > MAX_SIDE) { h = MAX_SIDE; clamped = true; }
+                if (w * h > MAX_AREA) {
+                    const k = Math.sqrt(MAX_AREA / (w * h));
+                    w = Math.max(1, Math.floor(w * k));
+                    h = Math.max(1, Math.floor(h * k));
+                    clamped = true;
+                }
+
+                DPI = dpi;
+                OUT_W = w; OUT_H = h;
+                CX = OUT_W / 2; CY = OUT_H / 2;
+
+                outPxLabel.textContent = '→ ' + OUT_W + ' × ' + OUT_H + ' px' + (clamped ? ' (clamped)' : '');
+                if (clamped) window.showToast && window.showToast('Output clamped to a safe maximum size', true);
+            }
+
+            // ---- Auto-fit the preview canvas to the available screen space ----
+            function layoutCanvas() {
+                const availW = Math.max(120, stage.clientWidth - 4);  // leave room for the 1px wrap border
+                const availH = Math.max(220, window.innerHeight - 300);
+                let s = Math.min(availW / OUT_W, availH / OUT_H);
+                if (!isFinite(s) || s <= 0) s = 1;
+                s = Math.min(s, 4);       // don't blow tiny canvases up absurdly
+                previewScale = s;
+
+                const dispW = Math.max(1, Math.round(OUT_W * previewScale));
+                const dispH = Math.max(1, Math.round(OUT_H * previewScale));
+                canvas.style.width = dispW + 'px';
+                canvas.style.height = dispH + 'px';
+                canvas.width = Math.max(1, Math.round(OUT_W * previewScale * DPR));
+                canvas.height = Math.max(1, Math.round(OUT_H * previewScale * DPR));
+            }
+
+            // ---- Rendering ----
+            function paintScene(ctx, sx, sy) {
+                // sx, sy: extra scale from output space into the target backing store.
+                ctx.setTransform(sx, 0, 0, sy, 0, 0);
+                if (transparentToggle.checked) {
+                    ctx.clearRect(0, 0, OUT_W, OUT_H);
+                } else {
+                    ctx.fillStyle = bgInput.value;
+                    ctx.fillRect(0, 0, OUT_W, OUT_H);
+                }
+                if (img) {
+                    ctx.save();
+                    ctx.translate(CX + ox, CY + oy);
+                    ctx.rotate(rotation() * Math.PI / 180);
+                    ctx.scale(scale, scale);
+                    ctx.imageSmoothingEnabled = true;
+                    ctx.imageSmoothingQuality = 'high';
+                    ctx.drawImage(img, -iw / 2, -ih / 2);
+                    ctx.restore();
+                }
+            }
+
+            function render() {
+                const k = previewScale * DPR;
+                paintScene(ectx, k, k);
+                updateReadouts();
+            }
+
+            function updateReadouts() {
+                viewScaleEl.textContent = Math.round(previewScale * 100) + '%';
+                imgScaleEl.textContent = img ? Math.round(scale * 100) + '%' : '—';
+                outDimEl.textContent = OUT_W + ' × ' + OUT_H + ' px';
+                zoomVal.textContent = img ? Math.round((scale / fitScale) * 100) + '%' : '—';
+                rotVal.textContent = rotation().toFixed(1) + '°';
+            }
+
+            // ---- Zoom helpers (slider is relative to the contain-fit scale) ----
+            function sliderToScale(v) { return fitScale * Math.pow(2, (v - 100) / 50); }
+            function syncZoomSlider() {
+                const v = 100 + 50 * Math.log2(scale / fitScale);
+                zoomSlider.value = Math.max(0, Math.min(200, v));
+            }
+            function clampScale(s) { return Math.max(fitScale * 0.05, Math.min(fitScale * 40, s)); }
+
+            // Rescale while keeping output-space point (px,py) fixed on screen.
+            function zoomAt(newScale, px, py) {
+                newScale = clampScale(newScale);
+                const kk = newScale / scale;
+                ox = (px - CX) - kk * ((px - CX) - ox);
+                oy = (py - CY) - kk * ((py - CY) - oy);
+                scale = newScale;
+                syncZoomSlider();
+                render();
+            }
+
+            function containScale() { return Math.min(OUT_W / iw, OUT_H / ih); }
+            function coverScale() { return Math.max(OUT_W / iw, OUT_H / ih); }
+
+            // ---- Fit / fill / reset ----
+            function fitImage() {
+                if (!img) return;
+                fitScale = containScale();
+                scale = fitScale;
+                ox = 0; oy = 0;
+                syncZoomSlider();
+                render();
+            }
+            function fillImage() {
+                if (!img) return;
+                fitScale = containScale();
+                scale = coverScale();
+                ox = 0; oy = 0;
+                syncZoomSlider();
+                render();
+            }
+            function resetView() {
+                if (!img) return;
+                rotBase = 0;
+                rotSlider.value = 0;
+                fitImage();
+            }
+
+            function setControlsEnabled(on) {
+                [zoomSlider, rotSlider, fitBtn, fillBtn, rot90Btn, resetBtn, downloadBtn].forEach(el => el.disabled = !on);
+            }
+
+            function loadSource(src, name) {
+                const image = new Image();
+                image.onload = () => {
+                    img = image;
+                    iw = image.naturalWidth;
+                    ih = image.naturalHeight;
+                    dropEmpty.classList.add('hidden');
+                    sourceRow.classList.remove('hidden');
+                    sourceThumb.src = image.src;
+                    sourceName.textContent = name || 'pasted image';
+                    sourceDim.textContent = iw + ' × ' + ih + ' px';
+                    setControlsEnabled(true);
+                    fitScale = containScale();
+                    resetView();   // starts pre-fit so nothing overflows the canvas
+                };
+                image.onerror = () => { window.showToast && window.showToast('Could not load image', true); };
+                image.src = src;
+            }
+
+            function handleImageFile(file) {
+                if (!file || !file.type.startsWith('image/')) return;
+                const reader = new FileReader();
+                reader.onload = e => loadSource(e.target.result, file.name);
+                reader.readAsDataURL(file);
+            }
+
+            // ---- Dimension input wiring ----
+            function applyDimensions() {
+                readDimensions();
+                layoutCanvas();
+                if (img) {
+                    // Re-fit so the composition stays sensible when the target size changes.
+                    fitScale = containScale();
+                    scale = fitScale;
+                    ox = 0; oy = 0;
+                    syncZoomSlider();
+                }
+                render();
+            }
+            [wIn, hIn, dpiIn].forEach(el => el.addEventListener('input', applyDimensions));
+            unitSel.addEventListener('change', applyDimensions);
+
+            // ---- File input / drag / paste ----
+            dropZone.addEventListener('click', () => fileInput.click());
+            fileInput.addEventListener('change', e => handleImageFile(e.target.files[0]));
+            dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
+            dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+            dropZone.addEventListener('drop', e => {
+                e.preventDefault();
+                dropZone.classList.remove('dragover');
+                handleImageFile(e.dataTransfer.files[0]);
+            });
+            document.addEventListener('paste', e => {
+                const items = e.clipboardData && e.clipboardData.items;
+                if (!items) return;
+                for (let i = 0; i < items.length; i++) {
+                    if (items[i].kind === 'file' && items[i].type.startsWith('image/')) {
+                        handleImageFile(items[i].getAsFile());
+                        e.preventDefault();
+                        return;
+                    }
+                }
+            });
+            canvas.addEventListener('dragover', e => e.preventDefault());
+            canvas.addEventListener('drop', e => {
+                e.preventDefault();
+                handleImageFile(e.dataTransfer.files[0]);
+            });
+
+            // ---- Controls ----
+            zoomSlider.addEventListener('input', () => {
+                if (!img) return;
+                zoomAt(sliderToScale(parseFloat(zoomSlider.value)), CX, CY);
+            });
+            rotSlider.addEventListener('input', render);
+            fitBtn.addEventListener('click', fitImage);
+            fillBtn.addEventListener('click', fillImage);
+            rot90Btn.addEventListener('click', () => { rotBase = (rotBase + 90) % 360; render(); });
+            resetBtn.addEventListener('click', resetView);
+            bgInput.addEventListener('input', render);
+            transparentToggle.addEventListener('change', render);
+
+            // ---- Pointer interaction: drag to pan, pinch to zoom ----
+            const pointers = new Map();
+            function toOutputCoords(e) {
+                const r = canvas.getBoundingClientRect();
+                return {
+                    x: (e.clientX - r.left) * OUT_W / r.width,
+                    y: (e.clientY - r.top) * OUT_H / r.height
+                };
+            }
+            canvas.addEventListener('pointerdown', e => {
+                if (!img) return;
+                canvas.setPointerCapture(e.pointerId);
+                pointers.set(e.pointerId, toOutputCoords(e));
+                canvas.classList.add('dragging');
+                e.preventDefault();
+            });
+            canvas.addEventListener('pointermove', e => {
+                if (!pointers.has(e.pointerId)) return;
+                const p = toOutputCoords(e);
+                if (pointers.size === 1) {
+                    const prev = pointers.get(e.pointerId);
+                    ox += p.x - prev.x;
+                    oy += p.y - prev.y;
+                    pointers.set(e.pointerId, p);
+                    render();
+                } else if (pointers.size === 2) {
+                    const ids = Array.from(pointers.keys());
+                    const a0 = pointers.get(ids[0]), b0 = pointers.get(ids[1]);
+                    const a1 = ids[0] === e.pointerId ? p : a0;
+                    const b1 = ids[1] === e.pointerId ? p : b0;
+                    const d0 = Math.hypot(b0.x - a0.x, b0.y - a0.y);
+                    const d1 = Math.hypot(b1.x - a1.x, b1.y - a1.y);
+                    const c0 = { x: (a0.x + b0.x) / 2, y: (a0.y + b0.y) / 2 };
+                    const c1 = { x: (a1.x + b1.x) / 2, y: (a1.y + b1.y) / 2 };
+                    if (d0 > 0) zoomAt(scale * (d1 / d0), c0.x, c0.y);
+                    ox += c1.x - c0.x;
+                    oy += c1.y - c0.y;
+                    pointers.set(e.pointerId, p);
+                    render();
+                }
+                e.preventDefault();
+            });
+            function endPointer(e) {
+                pointers.delete(e.pointerId);
+                if (!pointers.size) canvas.classList.remove('dragging');
+            }
+            canvas.addEventListener('pointerup', endPointer);
+            canvas.addEventListener('pointercancel', endPointer);
+            canvas.addEventListener('wheel', e => {
+                if (!img) return;
+                e.preventDefault();
+                const p = toOutputCoords(e);
+                zoomAt(scale * Math.exp(-e.deltaY * 0.0016), p.x, p.y);
+            }, { passive: false });
+
+            // Arrow keys nudge the image (Shift = ×10).
+            document.addEventListener('keydown', e => {
+                if (!img) return;
+                const t = e.target;
+                if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
+                const step = e.shiftKey ? 10 : 1;
+                let handled = true;
+                if (e.key === 'ArrowLeft') ox -= step;
+                else if (e.key === 'ArrowRight') ox += step;
+                else if (e.key === 'ArrowUp') oy -= step;
+                else if (e.key === 'ArrowDown') oy += step;
+                else handled = false;
+                if (handled) { e.preventDefault(); render(); }
+            });
+
+            // Re-fit the preview when the viewport changes size.
+            window.addEventListener('resize', () => { layoutCanvas(); render(); });
+
+            // ---- PNG dpi (pHYs) ----
+            const CRC_TABLE = (() => {
+                const tt = new Uint32Array(256);
+                for (let n = 0; n < 256; n++) {
+                    let c = n;
+                    for (let k = 0; k < 8; k++) c = (c & 1) ? (0xedb88320 ^ (c >>> 1)) : (c >>> 1);
+                    tt[n] = c >>> 0;
+                }
+                return tt;
+            })();
+            function crc32(bytes) {
+                let c = 0xffffffff;
+                for (let i = 0; i < bytes.length; i++) c = CRC_TABLE[(c ^ bytes[i]) & 0xff] ^ (c >>> 8);
+                return (c ^ 0xffffffff) >>> 0;
+            }
+            function withPngDpi(buf, dpi) {
+                const src = new Uint8Array(buf);
+                const dv = new DataView(buf);
+                const ihdrLen = dv.getUint32(8);
+                const insertAt = 8 + 12 + ihdrLen;
+                const ppm = Math.round(dpi / 0.0254);
+                const chunk = new Uint8Array(21);
+                const cdv = new DataView(chunk.buffer);
+                cdv.setUint32(0, 9);
+                chunk.set([0x70, 0x48, 0x59, 0x73], 4);   // "pHYs"
+                cdv.setUint32(8, ppm);
+                cdv.setUint32(12, ppm);
+                chunk[16] = 1;                             // unit: metre
+                cdv.setUint32(17, crc32(chunk.subarray(4, 17)));
+                const out = new Uint8Array(src.length + chunk.length);
+                out.set(src.subarray(0, insertAt), 0);
+                out.set(chunk, insertAt);
+                out.set(src.subarray(insertAt), insertAt + chunk.length);
+                return out;
+            }
+            // Patch the JFIF APP0 density fields so JPEGs carry real dpi too.
+            function withJpegDpi(buf, dpi) {
+                const b = new Uint8Array(buf);
+                let i = 2;
+                while (i + 4 < b.length && b[i] === 0xFF) {
+                    const marker = b[i + 1];
+                    const len = (b[i + 2] << 8) | b[i + 3];
+                    if (marker === 0xE0 &&
+                        b[i + 4] === 0x4A && b[i + 5] === 0x46 && b[i + 6] === 0x49 &&
+                        b[i + 7] === 0x46 && b[i + 8] === 0x00) {
+                        const base = i + 4;              // 'J' of JFIF
+                        b[base + 7] = 1;                 // units: dpi
+                        b[base + 8] = (dpi >> 8) & 0xff; // Xdensity
+                        b[base + 9] = dpi & 0xff;
+                        b[base + 10] = (dpi >> 8) & 0xff; // Ydensity
+                        b[base + 11] = dpi & 0xff;
+                        return b;
+                    }
+                    i += 2 + len;
+                }
+                return b;
+            }
+
+            downloadBtn.addEventListener('click', () => {
+                const fmt = formatSel.value;
+                const out = document.createElement('canvas');
+                out.width = OUT_W;
+                out.height = OUT_H;
+                const octx = out.getContext('2d');
+                // JPEG has no alpha — fall back to white when transparent is requested.
+                if (fmt === 'jpeg' && transparentToggle.checked) {
+                    octx.fillStyle = '#ffffff';
+                    octx.fillRect(0, 0, OUT_W, OUT_H);
+                }
+                paintScene(octx, 1, 1);
+
+                const mime = fmt === 'jpeg' ? 'image/jpeg' : 'image/png';
+                out.toBlob(blob => {
+                    if (!blob) { window.showToast && window.showToast('Export failed', true); return; }
+                    blob.arrayBuffer().then(buf => {
+                        const bytes = fmt === 'jpeg' ? withJpegDpi(buf, DPI) : withPngDpi(buf, DPI);
+                        const url = URL.createObjectURL(new Blob([bytes], { type: mime }));
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = 'image-' + OUT_W + 'x' + OUT_H + (fmt === 'jpeg' ? '.jpg' : '.png');
+                        a.click();
+                        setTimeout(() => URL.revokeObjectURL(url), 5000);
+                        window.showToast && window.showToast('Saved ' + OUT_W + '×' + OUT_H + ' ' + fmt.toUpperCase() + ' @ ' + DPI + 'dpi');
+                    });
+                }, mime, fmt === 'jpeg' ? 0.92 : undefined);
+            });
+
+            // ---- Init ----
+            readDimensions();
+            layoutCanvas();
+            render();
+        });
+    </script>
+</body>
+
+</html>
