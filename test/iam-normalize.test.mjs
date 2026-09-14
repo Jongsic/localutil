@@ -156,6 +156,39 @@ test('NotAction stays on its own axis', async () => {
     assert.ok(st.some(s => s.NotAction));
 });
 
+test('merging is a minimization, not a canonical form', async () => {
+    // Worth pinning, because it is easy to assume otherwise. These two policies
+    // grant exactly the same three permissions — a on X and Y, b on X — written
+    // two ways. Neither can merge any further, and they minimize to different
+    // texts. Sorting does not help: what differs is how the blocks are cut, not
+    // the order they come in.
+    //
+    // A form that does not depend on how the input was written exists — group
+    // every action by the exact set of resources it reaches — and the tool uses
+    // it where it matters: the permission expansion behind the losslessness
+    // check and behind Effective permissions. It is not what is emitted here,
+    // because it tears apart the groups a policy was written in.
+    const asWritten = doc(
+        { Effect: 'Allow', Action: 'svc:a', Resource: ['arn:X', 'arn:Y'] },
+        { Effect: 'Allow', Action: 'svc:b', Resource: 'arn:X' });
+    const sameThingOtherwise = doc(
+        { Effect: 'Allow', Action: ['svc:a', 'svc:b'], Resource: 'arn:X' },
+        { Effect: 'Allow', Action: 'svc:a', Resource: 'arn:Y' });
+
+    await normalize(asWritten);
+    const first = await statements();
+    await normalize(sameThingOtherwise);
+    const second = await statements();
+    assert.notDeepEqual(first, second, 'if these ever agree, the merge became canonical — say so');
+
+    // Both are still lossless, which is the property that is actually promised.
+    const counts = await comparePermissions(
+        [JSON.parse(asWritten), JSON.parse(sameThingOtherwise)],
+        [JSON.stringify({ Version: '2012-10-17', Statement: first }),
+         JSON.stringify({ Version: '2012-10-17', Statement: second })]);
+    assert.deepEqual(counts.map((c, i) => lossReport('form #' + i, c)).filter(Boolean), []);
+});
+
 test('a negated axis is deduplicated, never unioned', async () => {
     // NOT a OR NOT b is not NOT (a OR b). One statement allowing everything but
     // iam:DeleteUser and another allowing everything but s3:DeleteBucket allow

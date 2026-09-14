@@ -1854,6 +1854,8 @@ window.LOCALUTIL_I18N = Object.assign(window.LOCALUTIL_I18N || {}, {
         "Account IDs or Regions have been replaced with tokens. The result is for reading and comparing, not for deploying.": "계정 ID나 리전이 토큰으로 치환되었습니다. 읽고 비교하기 위한 결과이며 배포용이 아닙니다.",
         "Paste a policy above and press Normalize.": "위에 정책을 붙여넣고 정리를 누르세요.",
         "Copying": "복사",
-        "A selection takes the side it started in. Copying gives that side's lines alone — no line numbers, no counterpart column, no block labels — so the result is the document, ready to paste.": "선택은 시작한 쪽에 머뭅니다. 복사하면 그쪽 줄만 들어옵니다 — 줄번호도, 반대쪽 열도, 블록 라벨도 없습니다. 그대로 붙여넣을 수 있는 문서가 됩니다."
+        "A selection takes the side it started in. Copying gives that side's lines alone — no line numbers, no counterpart column, no block labels — so the result is the document, ready to paste.": "선택은 시작한 쪽에 머뭅니다. 복사하면 그쪽 줄만 들어옵니다 — 줄번호도, 반대쪽 열도, 블록 라벨도 없습니다. 그대로 붙여넣을 수 있는 문서가 됩니다.",
+        "Not a canonical form": "정규형은 아님",
+        "This is a minimization, not a canonical form: two policies granting exactly the same access, written differently, can still minimize to different text. Finding the smallest set of blocks for a relation is NP-hard and the smallest is not unique, so no cheap rule gets there. The form that does not depend on how a policy was written is the permission expansion — every action against the exact set of resources it reaches — which is what the check below and the Effective permissions comparison use. To ask whether two policies are the same, compare them; do not compare their normalized text.": "이것은 최소화이지 정규형이 아닙니다. 똑같은 권한을 주는 두 정책이라도 적힌 방식이 다르면 최소화 결과 텍스트가 다를 수 있습니다. 어떤 관계에 대한 최소 블록 집합을 찾는 것은 NP-hard이고 최소해가 유일하지도 않아서, 가벼운 규칙으로는 도달할 수 없습니다. 적힌 방식에 좌우되지 않는 형태는 권한 전개 — 각 action이 정확히 어떤 resource 집합에 닿는지 — 이고, 아래 검사와 실질 권한 비교가 그것을 씁니다. 두 정책이 같은지 묻고 싶다면 normalize한 텍스트를 비교하지 말고 정책끼리 비교하세요."
     },
 });

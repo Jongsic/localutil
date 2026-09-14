@@ -256,6 +256,8 @@
                             <dd>Kept on their own axis and never merged with the positive form.</dd>
                             <dt>Conditions</dt>
                             <dd>Sorted, never evaluated. Two blocks differing by a condition stay apart, and two ways of writing the same restriction stay different.</dd>
+                            <dt>Not a canonical form</dt>
+                            <dd>This is a minimization, not a canonical form: two policies granting exactly the same access, written differently, can still minimize to different text. Finding the smallest set of blocks for a relation is NP-hard and the smallest is not unique, so no cheap rule gets there. The form that does not depend on how a policy was written is the permission expansion — every action against the exact set of resources it reaches — which is what the check below and the Effective permissions comparison use. To ask whether two policies are the same, compare them; do not compare their normalized text.</dd>
                             <dt>Nothing is dropped</dt>
                             <dd>Checked on every run, not just promised. Merging statements and expanding them into permissions are two different pieces of code; the second is run over the input and over the result, and the two sets have to be identical. The page says so either way and refuses to vouch for an output that fails — it does not try to patch one, because a policy assembled by code that has just been caught getting this wrong is not a policy to hand anyone. Both sides normalize values with the same helpers, so a defect in those would be invisible here; what this catches is a permission dropped, gained, or re-attached to the wrong scope.</dd>
                         </dl>
