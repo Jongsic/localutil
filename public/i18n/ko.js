@@ -1827,7 +1827,6 @@ window.LOCALUTIL_I18N = Object.assign(window.LOCALUTIL_I18N || {}, {
         "IAM Normalize": "IAM 정책 정리",
         "Merge the duplicate and overlapping statements in an AWS IAM policy into one canonical document": "AWS IAM 정책에서 중복되고 겹치는 statement를 하나의 정규 문서로 합칩니다",
         "Normalize": "정리",
-        "Both options are off by default because they make the result a comparison aid rather than a policy you can deploy.": "두 옵션은 기본으로 꺼져 있습니다. 켜면 결과가 배포 가능한 정책이 아니라 비교용 자료가 되기 때문입니다.",
         "Policy": "정책",
         "One or more policy documents, a bare Statement array, or raw output from the aws iam read commands. Drop a file here too.": "policy document 하나 이상, Statement 배열 그 자체, 또는 aws iam 조회 명령의 출력 그대로. 파일을 끌어다 놓아도 됩니다.",
         "Drop to load": "여기에 놓으면 불러옵니다",
@@ -1855,7 +1854,14 @@ window.LOCALUTIL_I18N = Object.assign(window.LOCALUTIL_I18N || {}, {
         "Paste a policy above and press Normalize.": "위에 정책을 붙여넣고 정리를 누르세요.",
         "Copying": "복사",
         "A selection takes the side it started in. Copying gives that side's lines alone — no line numbers, no counterpart column, no block labels — so the result is the document, ready to paste.": "선택은 시작한 쪽에 머뭅니다. 복사하면 그쪽 줄만 들어옵니다 — 줄번호도, 반대쪽 열도, 블록 라벨도 없습니다. 그대로 붙여넣을 수 있는 문서가 됩니다.",
-        "Not a canonical form": "정규형은 아님",
-        "This is a minimization, not a canonical form: two policies granting exactly the same access, written differently, can still minimize to different text. Finding the smallest set of blocks for a relation is NP-hard and the smallest is not unique, so no cheap rule gets there. The form that does not depend on how a policy was written is the permission expansion — every action against the exact set of resources it reaches — which is what the check below and the Effective permissions comparison use. To ask whether two policies are the same, compare them; do not compare their normalized text.": "이것은 최소화이지 정규형이 아닙니다. 똑같은 권한을 주는 두 정책이라도 적힌 방식이 다르면 최소화 결과 텍스트가 다를 수 있습니다. 어떤 관계에 대한 최소 블록 집합을 찾는 것은 NP-hard이고 최소해가 유일하지도 않아서, 가벼운 규칙으로는 도달할 수 없습니다. 적힌 방식에 좌우되지 않는 형태는 권한 전개 — 각 action이 정확히 어떤 resource 집합에 닿는지 — 이고, 아래 검사와 실질 권한 비교가 그것을 씁니다. 두 정책이 같은지 묻고 싶다면 normalize한 텍스트를 비교하지 말고 정책끼리 비교하세요."
+        "Minimized": "최소화",
+        "Canonical": "정규형",
+        "Fewest statements that keep every permission. Depends on how the input was written: the same access split two ways can minimize to two different texts.": "모든 권한을 유지하면서 statement 수를 가장 줄인 형태입니다. 입력이 어떻게 적혔는지에 좌우됩니다 — 같은 권한을 다르게 쪼개 적으면 최소화 결과도 다를 수 있습니다.",
+        "Every action grouped by the exact set of resources it reaches. Two policies granting the same access come out identical, whatever they looked like going in — so two of these can be compared as text.": "각 action을 정확히 닿는 resource 집합별로 묶습니다. 같은 권한을 주는 두 정책은 어떻게 적혀 있었든 동일하게 나오므로, 이 결과끼리는 텍스트로 비교할 수 있습니다.",
+        "The two normalize options are off by default because they make the result a comparison aid rather than a policy you can deploy.": "두 정규화 옵션은 기본으로 꺼져 있습니다. 켜면 결과가 배포 가능한 정책이 아니라 비교용 자료가 되기 때문입니다.",
+        "The fewest statements that keep every permission. It reads like a policy someone wrote, and it depends on how the input was written: the same access split by action or split by resource stops at different text. Finding the genuinely smallest set of blocks is NP-hard and the smallest is not unique, so this is a good minimization rather than the best one.": "모든 권한을 유지하면서 statement 수를 가장 줄인 형태입니다. 사람이 쓴 정책처럼 읽히지만 입력이 어떻게 적혔는지에 좌우됩니다 — 같은 권한을 action으로 쪼갠 것과 resource로 쪼갠 것은 서로 다른 텍스트에서 멈춥니다. 진짜 최소 블록 집합을 찾는 것은 NP-hard이고 최소해가 유일하지도 않으므로, 이것은 최선이 아니라 충분히 좋은 최소화입니다.",
+        "Every action grouped by the exact set of resources it reaches, taken from the relation rather than from the statements. Two policies granting the same access come out identical whatever they looked like going in, so two of these can be compared as text. It costs readability: the groups a policy was written in are pulled apart.": "statement이 아니라 관계에서 가져와, 각 action을 정확히 닿는 resource 집합별로 묶습니다. 같은 권한을 주는 두 정책은 어떻게 적혀 있었든 동일하게 나오므로 이 결과끼리는 텍스트로 비교할 수 있습니다. 대가는 가독성입니다 — 정책이 원래 묶여 있던 그룹이 흩어집니다.",
+        "Statements using Not": "Not을 쓰는 statement",
+        "Carried through as written in both forms, deduplicated but never regrouped. NotAction expands to one permission per excluded value, so the relation cannot tell one statement excluding two actions from two statements excluding one each — and those are not the same policy. Rebuilding them would have to guess.": "두 형태 모두에서 적힌 그대로 가져갑니다. 중복만 제거하고 다시 묶지는 않습니다. NotAction은 제외값 하나당 권한 하나로 펼쳐지므로, action 두 개를 제외한 statement 하나와 하나씩 제외한 statement 두 개를 관계만으로는 구분할 수 없습니다. 그리고 그 둘은 같은 정책이 아닙니다. 다시 조립하려면 추측해야 합니다."
     },
 });

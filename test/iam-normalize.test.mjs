@@ -10,6 +10,7 @@ const doc = (...statements) => JSON.stringify({ Version: '2012-10-17', Statement
 
 async function normalize(policy, opts = {}) {
     await env.goto('iam-normalize.html');
+    if (opts.form) await env.page.click(`#iamn-form button[data-form="${opts.form}"]`);
     for (const [key, sel] of Object.entries({ account: '#iamn-opt-account', region: '#iamn-opt-region' })) {
         if (opts[key] === undefined) continue;
         if (await env.page.isChecked(sel) !== opts[key]) await env.page.click(sel);
@@ -187,6 +188,86 @@ test('merging is a minimization, not a canonical form', async () => {
         [JSON.stringify({ Version: '2012-10-17', Statement: first }),
          JSON.stringify({ Version: '2012-10-17', Statement: second })]);
     assert.deepEqual(counts.map((c, i) => lossReport('form #' + i, c)).filter(Boolean), []);
+});
+
+const canonical = { form: 'canonical' };
+
+test('the canonical form does not depend on how the input was written', async () => {
+    // The pair the minimized form cannot reconcile: the same three permissions,
+    // split by action one way and by resource the other.
+    const splitByResource = doc(
+        { Effect: 'Allow', Action: 'svc:a', Resource: ['arn:X', 'arn:Y'] },
+        { Effect: 'Allow', Action: 'svc:b', Resource: 'arn:X' });
+    const splitByAction = doc(
+        { Effect: 'Allow', Action: ['svc:a', 'svc:b'], Resource: 'arn:X' },
+        { Effect: 'Allow', Action: 'svc:a', Resource: 'arn:Y' });
+
+    await normalize(splitByResource, canonical);
+    const first = await output();
+    await normalize(splitByAction, canonical);
+    assert.equal(await output(), first, 'same access in, same text out');
+
+    assert.deepEqual(JSON.parse(first).Statement, [
+        { Effect: 'Allow', Action: ['svc:a'], Resource: ['arn:X', 'arn:Y'] },
+        { Effect: 'Allow', Action: ['svc:b'], Resource: ['arn:X'] },
+    ]);
+});
+
+test('the canonical form separates actions that reach different resources', async () => {
+    // The readability cost, stated plainly: a group written together is pulled
+    // apart when its actions do not reach the same set.
+    await normalize(doc(
+        { Sid: 'Backup', Effect: 'Allow', Action: ['s3:GetObject', 's3:PutObject'], Resource: 'arn:backup/*' },
+        { Sid: 'Web', Effect: 'Allow', Action: 's3:PutObject', Resource: 'arn:site/*' },
+    ), canonical);
+    assert.deepEqual(await statements(), [
+        { Effect: 'Allow', Action: ['s3:PutObject'], Resource: ['arn:backup/*', 'arn:site/*'] },
+        { Effect: 'Allow', Action: ['s3:GetObject'], Resource: ['arn:backup/*'] },
+    ], 's3:PutObject reaches both, s3:GetObject only one, so they part company');
+
+    // Minimized keeps the group the policy was written in.
+    await normalize(doc(
+        { Sid: 'Backup', Effect: 'Allow', Action: ['s3:GetObject', 's3:PutObject'], Resource: 'arn:backup/*' },
+        { Sid: 'Web', Effect: 'Allow', Action: 's3:PutObject', Resource: 'arn:site/*' },
+    ));
+    assert.deepEqual(await statements(), [
+        { Effect: 'Allow', Action: ['s3:GetObject', 's3:PutObject'], Resource: ['arn:backup/*'] },
+        { Effect: 'Allow', Action: ['s3:PutObject'], Resource: ['arn:site/*'] },
+    ]);
+});
+
+test('the canonical form leaves Not statements as written', async () => {
+    // Regrouping them from the relation would have to guess: one statement
+    // excluding two actions and two excluding one each expand the same way and
+    // are not the same policy.
+    await normalize(doc(
+        { Effect: 'Allow', NotAction: 'iam:DeleteUser', Resource: '*' },
+        { Effect: 'Allow', NotAction: 's3:DeleteBucket', Resource: '*' },
+    ), canonical);
+    assert.deepEqual(await statements(), [
+        { Effect: 'Allow', NotAction: ['iam:DeleteUser'], Resource: ['*'] },
+        { Effect: 'Allow', NotAction: ['s3:DeleteBucket'], Resource: ['*'] },
+    ]);
+});
+
+test('the canonical form is idempotent and loses nothing either', async () => {
+    const policies = Object.values(SHAPES);
+    await env.goto('iam-normalize.html');
+    await env.page.click('#iamn-form button[data-form="canonical"]');
+    const normalized = [];
+    for (const policy of policies) {
+        await env.page.fill('#iamn-in', JSON.stringify(policy));
+        await env.page.click('#btn-iamn-run');
+        const first = await env.page.textContent('#iamn-out');
+        // Feeding it back must change nothing — that is what canonical means.
+        await env.page.fill('#iamn-in', first);
+        await env.page.click('#btn-iamn-run');
+        assert.equal(await env.page.textContent('#iamn-out'), first,
+            'canonical form is not a fixed point for ' + JSON.stringify(policy).slice(0, 80));
+        normalized.push(first);
+    }
+    const counts = await comparePermissions(policies, normalized);
+    assert.deepEqual(Object.keys(SHAPES).map((n, i) => lossReport(n, counts[i])).filter(Boolean), []);
 });
 
 test('a negated axis is deduplicated, never unioned', async () => {

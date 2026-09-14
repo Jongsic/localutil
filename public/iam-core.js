@@ -332,6 +332,10 @@
                 if (blocks.length === before) break;
             }
 
+            return finishBlocks(blocks);
+        }
+
+        function finishBlocks(blocks) {
             for (const g of blocks) {
                 const tokens = [...g.res];
                 g.res = {
@@ -466,6 +470,78 @@
         }
 
     // ------------------------------------------------------------
+    // The canonical form
+    // ------------------------------------------------------------
+    // Merging is a minimization and depends on how the input was written: the
+    // same access split by action or split by resource stops at different text.
+    // This does not. Forget the statements, take the relation — which actions
+    // reach which resources — and group every action by the exact set of
+    // resources it reaches. Two policies granting the same thing come out
+    // identical, whatever they looked like going in.
+    //
+    // The price is that it pulls apart the groups a policy was written in, which
+    // is why it is not what the merge emits.
+    //
+    // Negated statements are the exception and are carried through as written,
+    // deduplicated but never regrouped. NotAction expands to one permission per
+    // excluded value, so the relation cannot tell `NotAction: [a, b]` from two
+    // statements excluding a and b separately — and those two are not the same
+    // policy. Rebuilding them from the relation would have to guess.
+    function canonicalBlocks(units) {
+        const contexts = new Map();
+        const negated = new Map();
+
+        for (const u of units) {
+            const negAction = u.act.neg.length > 0;
+            const negResource = u.resTokens.some(t => t.slice(0, 3) === '!R:');
+            const base = {
+                ctx: u.ctx, ctxKey: u.ctxKey, effect: u.effect,
+                principal: u.principal, notPrincipal: u.notPrincipal, cond: u.cond,
+                solo: '', axis: '', negAction, negResource,
+            };
+
+            if (negAction || negResource) {
+                const block = Object.assign({}, base, {
+                    actions: new Set(u.act.pos), notActions: new Set(u.act.neg),
+                    res: new Set(u.resTokens), sids: u.sid ? [u.sid] : [],
+                });
+                const key = u.ctxKey + ' ' + setKey(block.actions) + ' ' +
+                    setKey(block.notActions) + ' ' + setKey(block.res);
+                const seen = negated.get(key);
+                if (seen) { u.sid && seen.sids.indexOf(u.sid) === -1 && seen.sids.push(u.sid); continue; }
+                negated.set(key, block);
+                continue;
+            }
+
+            let c = contexts.get(u.ctxKey);
+            if (!c) contexts.set(u.ctxKey, c = { base, reach: new Map(), sids: [] });
+            if (u.sid && c.sids.indexOf(u.sid) === -1) c.sids.push(u.sid);
+            for (const action of u.act.pos) {
+                let res = c.reach.get(action);
+                if (!res) c.reach.set(action, res = new Set());
+                u.resTokens.forEach(t => res.add(t));
+            }
+        }
+
+        const blocks = [...negated.values()];
+        for (const c of contexts.values()) {
+            const byReach = new Map();
+            for (const [action, res] of c.reach) {
+                const key = setKey(res);
+                let group = byReach.get(key);
+                if (!group) byReach.set(key, group = { res, actions: new Set() });
+                group.actions.add(action);
+            }
+            for (const { res, actions } of byReach.values()) {
+                blocks.push(Object.assign({}, c.base, {
+                    actions, notActions: new Set(), res, sids: c.sids.slice(),
+                }));
+            }
+        }
+        return finishBlocks(blocks);
+    }
+
+    // ------------------------------------------------------------
     // Checking that a rewrite kept every permission
     // ------------------------------------------------------------
     // Merging statements and expanding them into permissions are two different
@@ -509,6 +585,6 @@
         canonValues, canonCondition, canonPrincipal,
         parseInput, statementUnits, actionContexts, movedActions, blocksFrom,
         actionToken, policyDocument,
-        flatten, compareAtoms, describeAtom, verifyLossless,
+        flatten, compareAtoms, describeAtom, verifyLossless, canonicalBlocks,
     };
 })();

@@ -186,6 +186,10 @@
                 <section id="tool-iam-norm" class="tool-section active">
                     <div class="iamn-toolbar card">
                         <div class="iamn-main">
+                            <div class="segmented" id="iamn-form">
+                                <button type="button" class="active" data-form="minimized">Minimized</button>
+                                <button type="button" data-form="canonical">Canonical</button>
+                            </div>
                             <div class="iamn-options">
                                 <label><input type="checkbox" id="iamn-opt-account"> Normalize account IDs</label>
                                 <label><input type="checkbox" id="iamn-opt-region"> Normalize regions</label>
@@ -196,7 +200,8 @@
                                 <button id="btn-iamn-clear" class="btn">Clear</button>
                             </div>
                         </div>
-                        <div class="field-hint">Both options are off by default because they make the result a comparison aid rather than a policy you can deploy.</div>
+                        <div class="field-hint" id="iamn-form-hint">Fewest statements that keep every permission. Depends on how the input was written: the same access split two ways can minimize to two different texts.</div>
+                        <div class="field-hint">The two normalize options are off by default because they make the result a comparison aid rather than a policy you can deploy.</div>
                     </div>
 
                     <div class="pane" id="iamn-pane">
@@ -256,8 +261,12 @@
                             <dd>Kept on their own axis and never merged with the positive form.</dd>
                             <dt>Conditions</dt>
                             <dd>Sorted, never evaluated. Two blocks differing by a condition stay apart, and two ways of writing the same restriction stay different.</dd>
-                            <dt>Not a canonical form</dt>
-                            <dd>This is a minimization, not a canonical form: two policies granting exactly the same access, written differently, can still minimize to different text. Finding the smallest set of blocks for a relation is NP-hard and the smallest is not unique, so no cheap rule gets there. The form that does not depend on how a policy was written is the permission expansion — every action against the exact set of resources it reaches — which is what the check below and the Effective permissions comparison use. To ask whether two policies are the same, compare them; do not compare their normalized text.</dd>
+                            <dt>Minimized</dt>
+                            <dd>The fewest statements that keep every permission. It reads like a policy someone wrote, and it depends on how the input was written: the same access split by action or split by resource stops at different text. Finding the genuinely smallest set of blocks is NP-hard and the smallest is not unique, so this is a good minimization rather than the best one.</dd>
+                            <dt>Canonical</dt>
+                            <dd>Every action grouped by the exact set of resources it reaches, taken from the relation rather than from the statements. Two policies granting the same access come out identical whatever they looked like going in, so two of these can be compared as text. It costs readability: the groups a policy was written in are pulled apart.</dd>
+                            <dt>Statements using Not</dt>
+                            <dd>Carried through as written in both forms, deduplicated but never regrouped. NotAction expands to one permission per excluded value, so the relation cannot tell one statement excluding two actions from two statements excluding one each — and those are not the same policy. Rebuilding them would have to guess.</dd>
                             <dt>Nothing is dropped</dt>
                             <dd>Checked on every run, not just promised. Merging statements and expanding them into permissions are two different pieces of code; the second is run over the input and over the result, and the two sets have to be identical. The page says so either way and refuses to vouch for an output that fails — it does not try to patch one, because a policy assembled by code that has just been caught getting this wrong is not a policy to hand anyone. Both sides normalize values with the same helpers, so a defect in those would be invisible here; what this catches is a permission dropped, gained, or re-attached to the wrong scope.</dd>
                         </dl>
@@ -286,9 +295,18 @@
             // Parsing, normalization and merging are the same code the comparison
             // runs — see iam-core.js.
             const {
-                parseInput, statementUnits, blocksFrom, policyDocument,
+                parseInput, statementUnits, blocksFrom, canonicalBlocks, policyDocument,
                 verifyLossless, describeAtom,
             } = window.LocalUtilIAM;
+
+            // Minimized reads like a policy someone wrote; canonical is the same
+            // access in a shape that does not depend on how it was written, so two
+            // of them can be compared as text.
+            let form = 'minimized';
+            const FORM_HINT = {
+                minimized: 'Fewest statements that keep every permission. Depends on how the input was written: the same access split two ways can minimize to two different texts.',
+                canonical: 'Every action grouped by the exact set of resources it reaches. Two policies granting the same access come out identical, whatever they looked like going in — so two of these can be compared as text.',
+            };
 
             // How many of the differences to name before the list stops helping.
             const MAX_NAMED = 8;
@@ -324,7 +342,7 @@
                 setError('');
 
                 const units = statementUnits(docs, opt, notes, 'Policy');
-                const blocks = blocksFrom(units, new Set());
+                const blocks = form === 'canonical' ? canonicalBlocks(units) : blocksFrom(units, new Set());
                 const policy = policyDocument(blocks);
 
                 // Merging and expanding are different code. Run the second over
@@ -452,6 +470,16 @@
             // ------------------------------------------------------------
             // Wiring
             // ------------------------------------------------------------
+            el('iamn-form').addEventListener('click', e => {
+                const btn = e.target.closest('button[data-form]');
+                if (!btn || btn.dataset.form === form) return;
+                form = btn.dataset.form;
+                el('iamn-form').querySelectorAll('button').forEach(b =>
+                    b.classList.toggle('active', b.dataset.form === form));
+                el('iamn-form-hint').textContent = FORM_HINT[form];
+                if (!stats.hidden || !errorBox.hidden) run();
+            });
+
             el('btn-iamn-run').addEventListener('click', run);
             input.addEventListener('input', () => showFile(null));
             [optAccount, optRegion].forEach(o =>
