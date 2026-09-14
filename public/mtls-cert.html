@@ -878,8 +878,12 @@
                     const crtPem = pki.certificateToPem(cert);
                     const caPem = pki.certificateToPem(CA.cert);
                     const keyPem = privateKeyPem(keys.priv, keyPassword);
+                    // forge's PBKDF2 still defaults to hmacWithSHA1; SHA-256 is the
+                    // stronger derivation and every PKCS#12 reader takes it. The 3DES
+                    // option encrypts with PKCS#12 PBE, which has no PBKDF2 in it.
                     const p12Asn1 = pkcs12.toPkcs12Asn1(keys.priv, [cert, CA.cert], p12pass || null, {
                         algorithm: $('p12-alg').value,
+                        prfAlgorithm: 'sha256',
                         friendlyName: cnOf(cert) || 'client',
                         generateLocalKeyId: true,
                     });

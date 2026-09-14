@@ -122,6 +122,20 @@ test('the .p12 opens with the password it was given', async () => {
     assert.equal(opened.wrongAccepted, false, 'a wrong password must not open it');
 });
 
+// forge derives the PBES2 key with hmacWithSHA1 unless told otherwise, and a
+// weaker KDF is not something to ship silently.
+test('the AES .p12 derives its key with SHA-256, not SHA-1', async () => {
+    await env.page.fill('#p12-pass', 'p12-secret');
+    await issue({ 'cl-cn': 'macos' });
+    const der = Buffer.from(await artifact('#mc-results', 'macos.p12'), 'base64');
+
+    const oid = alg => Buffer.from(alg, 'hex');            // DER: OID tag, length, body
+    const HMAC_SHA256 = oid('06082a864886f70d0209');
+    const HMAC_SHA1 = oid('06082a864886f70d0207');
+    assert.ok(der.includes(HMAC_SHA256), 'PBKDF2 PRF is hmacWithSHA256');
+    assert.ok(!der.includes(HMAC_SHA1), 'no hmacWithSHA1 PRF left anywhere in the bag');
+});
+
 test('serverAuth is added only when asked for', async () => {
     await env.page.evaluate(() => { document.querySelector('#client-card details').open = true; });
     // the checkbox itself is the invisible half of a .switch — the track is what a user clicks
