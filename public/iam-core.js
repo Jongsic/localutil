@@ -287,6 +287,7 @@
                 // A statement's actions are split when only some of them moved:
                 // a lifted action must not be merged back in by the rules below.
                 const parts = new Map();
+                const negResource = resAxis.indexOf('!R') !== -1;
                 const place = (value, neg) => {
                     const solo = apart.has(actionToken(value, neg)) ? 'moved' : '';
                     const axis = (neg ? '!A' : 'A') + resAxis;
@@ -296,7 +297,8 @@
                         parts.set(partKey, b = {
                             ctx: u.ctx, ctxKey: u.ctxKey, effect: u.effect,
                             principal: u.principal, notPrincipal: u.notPrincipal, cond: u.cond,
-                            solo, axis, actions: new Set(), notActions: new Set(),
+                            solo, axis, negAction: neg, negResource,
+                            actions: new Set(), notActions: new Set(),
                             res: new Set(u.resTokens), sids: u.sid ? [u.sid] : [],
                         });
                     }
@@ -310,11 +312,22 @@
             // Merging on one axis creates blocks that can merge on the other,
             // so both rules run until the count stops falling. Each pass only
             // ever removes blocks, so this terminates.
+            //
+            // A negated axis is never unioned, only deduplicated: NOT a OR NOT b
+            // is not NOT (a OR b). Two statements allowing everything but
+            // iam:DeleteUser and everything but s3:DeleteBucket allow everything
+            // between them, while one block excluding both allows strictly less.
+            // Putting the negated side's own values in the key leaves identical
+            // statements folding together and different ones apart.
             for (let pass = 0; pass < 8; pass++) {
                 const before = blocks.length;
-                blocks = mergeOn(blocks, b => b.ctxKey + ' ' + b.solo + ' ' + b.axis + ' ' + setKey(b.res),
+                blocks = mergeOn(blocks,
+                    b => b.ctxKey + ' ' + b.solo + ' ' + b.axis + ' ' + setKey(b.res) +
+                        (b.negAction ? ' ' + actionsKey(b) : ''),
                     (a, b) => { addAll(a.actions, b.actions); addAll(a.notActions, b.notActions); });
-                blocks = mergeOn(blocks, b => b.ctxKey + ' ' + b.solo + ' ' + b.axis + ' ' + actionsKey(b),
+                blocks = mergeOn(blocks,
+                    b => b.ctxKey + ' ' + b.solo + ' ' + b.axis + ' ' + actionsKey(b) +
+                        (b.negResource ? ' ' + setKey(b.res) : ''),
                     (a, b) => { addAll(a.res, b.res); });
                 if (blocks.length === before) break;
             }
@@ -370,10 +383,132 @@
         return { Version: '2012-10-17', Statement: blocks.map(b => b.shape) };
     }
 
+        // ------------------------------------------------------------
+        // Flattening statements into single permissions
+        // ------------------------------------------------------------
+        const MAX_ATOMS = 20000;
+
+        function principalsOf(st, opt) {
+            const out = [];
+            const add = (p, neg) => {
+                const mark = neg ? 'NOT ' : '';
+                if (typeof p === 'string') { out.push(mark + normalizeText(p, opt)); return; }
+                if (!p || typeof p !== 'object') return;
+                for (const type of Object.keys(p).sort()) {
+                    for (const v of asList(p[type])) out.push(mark + type + ':' + normalizeText(v, opt));
+                }
+            };
+            if (st.Principal) add(st.Principal, false);
+            if (st.NotPrincipal) add(st.NotPrincipal, true);
+            return out;
+        }
+
+        // Actions are keyed case-insensitively because IAM matches them that
+        // way; resources are not, because an S3 key is case-sensitive.
+        function atomKeys(a) {
+            a.ar = a.effect + ' ' + (a.actionNeg ? '!' : '') + a.action.toLowerCase() +
+                ' ' + (a.resourceNeg ? '!' : '') + (a.resource === null ? '' : a.resource) +
+                ' ' + a.principal;
+            a.key = a.ar + ' ' + a.condKey;
+        }
+
+        function compareAtoms(x, y) {
+            return x.effect.localeCompare(y.effect) ||
+                x.action.localeCompare(y.action) ||
+                String(x.resource).localeCompare(String(y.resource)) ||
+                x.principal.localeCompare(y.principal) ||
+                x.condKey.localeCompare(y.condKey);
+        }
+
+        function flatten(docs, opt, notes, side) {
+            const byKey = new Map();
+            let capped = false, skipped = 0;
+            for (const doc of docs) {
+                for (const st of asList(doc.Statement)) {
+                    if (!st || typeof st !== 'object') continue;
+                    const effect = /^deny$/i.test(String(st.Effect || '')) ? 'Deny' : 'Allow';
+                    const cond = opt.ignoreCond ? null : canonCondition(st.Condition, opt);
+                    const condKey = cond ? JSON.stringify(cond) : '';
+                    const actions = asList(st.Action).map(a => ({ v: normalizeText(a, opt), neg: false }))
+                        .concat(asList(st.NotAction).map(a => ({ v: normalizeText(a, opt), neg: true })));
+                    if (!actions.length) { skipped++; continue; }
+                    const resources = asList(st.Resource).map(r => ({ v: normalizeText(r, opt), neg: false }))
+                        .concat(asList(st.NotResource).map(r => ({ v: normalizeText(r, opt), neg: true })));
+                    const resList = resources.length ? resources : [null];
+                    const princes = principalsOf(st, opt);
+                    const prList = princes.length ? princes : [''];
+                    const sid = typeof st.Sid === 'string' ? st.Sid : '';
+                    for (const a of actions) {
+                        for (const r of resList) {
+                            for (const p of prList) {
+                                if (byKey.size >= MAX_ATOMS) { capped = true; continue; }
+                                const atom = {
+                                    effect,
+                                    action: a.v, actionNeg: a.neg,
+                                    resource: r ? r.v : null, resourceNeg: r ? r.neg : false,
+                                    principal: p, cond, condKey, sid, side,
+                                };
+                                atomKeys(atom);
+                                if (!byKey.has(atom.key)) byKey.set(atom.key, atom);
+                            }
+                        }
+                    }
+                }
+            }
+            if (skipped) {
+                notes.push(side + ': ' + skipped + ' statement(s) had neither Action nor NotAction and were skipped.');
+            }
+            if (capped) {
+                notes.push(side + ': stopped at ' + MAX_ATOMS.toLocaleString() +
+                    ' permissions — the rest were not compared. Narrow the input.');
+            }
+            return [...byKey.values()].sort(compareAtoms);
+        }
+
+    // ------------------------------------------------------------
+    // Checking that a rewrite kept every permission
+    // ------------------------------------------------------------
+    // Merging statements and expanding them into permissions are two different
+    // pieces of code. Running the second over a policy and over its rewrite has
+    // to produce the same set: grouped by scope, the actions allowed under each
+    // must be identical on both sides. That makes every run checked, not just
+    // the ones someone thought to write a test for.
+    //
+    // It is not a proof of everything. Both sides normalize their values with
+    // the same helpers above, so a defect in those is invisible here; what this
+    // catches is a permission dropped, gained, or re-attached to the wrong
+    // scope, which is what a merge gets wrong.
+    function describeAtom(a) {
+        const action = (a.actionNeg ? 'NOT ' : '') + a.action;
+        const resource = a.resource === null ? '-' : (a.resourceNeg ? 'NOT ' : '') + a.resource;
+        return a.effect.toUpperCase() + ' ' + action + ' on ' + resource +
+            (a.principal ? ' by ' + a.principal : '') +
+            (a.condKey ? ' if ' + a.condKey : '');
+    }
+
+    function verifyLossless(beforeDocs, afterDocs, opt) {
+        const notes = [];
+        const before = flatten(beforeDocs, opt, notes, 'before');
+        const after = flatten(afterDocs, opt, notes, 'after');
+        const afterKeys = new Set(after.map(a => a.key));
+        const beforeKeys = new Set(before.map(a => a.key));
+        return {
+            ok: notes.length === 0 &&
+                before.every(a => afterKeys.has(a.key)) && after.every(a => beforeKeys.has(a.key)),
+            total: before.length,
+            lost: before.filter(a => !afterKeys.has(a.key)),
+            gained: after.filter(a => !beforeKeys.has(a.key)),
+            // Past the expansion cap neither side is complete, so silence is not
+            // evidence and the check has to say it could not finish.
+            capped: notes.length > 0,
+        };
+    }
+
     window.LocalUtilIAM = {
         asList, hasWild, uniqSort, normalizeText,
         canonValues, canonCondition, canonPrincipal,
         parseInput, statementUnits, actionContexts, movedActions, blocksFrom,
         actionToken, policyDocument,
+        flatten, compareAtoms, describeAtom, verifyLossless,
     };
 })();

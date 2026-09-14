@@ -657,90 +657,9 @@
                 asList, hasWild, uniqSort, normalizeText,
                 canonCondition, canonPrincipal,
                 parseInput, statementUnits, movedActions, blocksFrom, policyDocument,
+                flatten, compareAtoms,
             } = window.LocalUtilIAM;
 
-
-            // ------------------------------------------------------------
-            // Flattening statements into single permissions
-            // ------------------------------------------------------------
-            const MAX_ATOMS = 20000;
-
-            function principalsOf(st, opt) {
-                const out = [];
-                const add = (p, neg) => {
-                    const mark = neg ? 'NOT ' : '';
-                    if (typeof p === 'string') { out.push(mark + normalizeText(p, opt)); return; }
-                    if (!p || typeof p !== 'object') return;
-                    for (const type of Object.keys(p).sort()) {
-                        for (const v of asList(p[type])) out.push(mark + type + ':' + normalizeText(v, opt));
-                    }
-                };
-                if (st.Principal) add(st.Principal, false);
-                if (st.NotPrincipal) add(st.NotPrincipal, true);
-                return out;
-            }
-
-            // Actions are keyed case-insensitively because IAM matches them that
-            // way; resources are not, because an S3 key is case-sensitive.
-            function atomKeys(a) {
-                a.ar = a.effect + ' ' + (a.actionNeg ? '!' : '') + a.action.toLowerCase() +
-                    ' ' + (a.resourceNeg ? '!' : '') + (a.resource === null ? '' : a.resource) +
-                    ' ' + a.principal;
-                a.key = a.ar + ' ' + a.condKey;
-            }
-
-            function compareAtoms(x, y) {
-                return x.effect.localeCompare(y.effect) ||
-                    x.action.localeCompare(y.action) ||
-                    String(x.resource).localeCompare(String(y.resource)) ||
-                    x.principal.localeCompare(y.principal) ||
-                    x.condKey.localeCompare(y.condKey);
-            }
-
-            function flatten(docs, opt, notes, side) {
-                const byKey = new Map();
-                let capped = false, skipped = 0;
-                for (const doc of docs) {
-                    for (const st of asList(doc.Statement)) {
-                        if (!st || typeof st !== 'object') continue;
-                        const effect = /^deny$/i.test(String(st.Effect || '')) ? 'Deny' : 'Allow';
-                        const cond = opt.ignoreCond ? null : canonCondition(st.Condition, opt);
-                        const condKey = cond ? JSON.stringify(cond) : '';
-                        const actions = asList(st.Action).map(a => ({ v: normalizeText(a, opt), neg: false }))
-                            .concat(asList(st.NotAction).map(a => ({ v: normalizeText(a, opt), neg: true })));
-                        if (!actions.length) { skipped++; continue; }
-                        const resources = asList(st.Resource).map(r => ({ v: normalizeText(r, opt), neg: false }))
-                            .concat(asList(st.NotResource).map(r => ({ v: normalizeText(r, opt), neg: true })));
-                        const resList = resources.length ? resources : [null];
-                        const princes = principalsOf(st, opt);
-                        const prList = princes.length ? princes : [''];
-                        const sid = typeof st.Sid === 'string' ? st.Sid : '';
-                        for (const a of actions) {
-                            for (const r of resList) {
-                                for (const p of prList) {
-                                    if (byKey.size >= MAX_ATOMS) { capped = true; continue; }
-                                    const atom = {
-                                        effect,
-                                        action: a.v, actionNeg: a.neg,
-                                        resource: r ? r.v : null, resourceNeg: r ? r.neg : false,
-                                        principal: p, cond, condKey, sid, side,
-                                    };
-                                    atomKeys(atom);
-                                    if (!byKey.has(atom.key)) byKey.set(atom.key, atom);
-                                }
-                            }
-                        }
-                    }
-                }
-                if (skipped) {
-                    notes.push(side + ': ' + skipped + ' statement(s) had neither Action nor NotAction and were skipped.');
-                }
-                if (capped) {
-                    notes.push(side + ': stopped at ' + MAX_ATOMS.toLocaleString() +
-                        ' permissions — the rest were not compared. Narrow the input.');
-                }
-                return [...byKey.values()].sort(compareAtoms);
-            }
 
             // ------------------------------------------------------------
             // Wildcard containment

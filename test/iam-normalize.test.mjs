@@ -156,6 +156,40 @@ test('NotAction stays on its own axis', async () => {
     assert.ok(st.some(s => s.NotAction));
 });
 
+test('a negated axis is deduplicated, never unioned', async () => {
+    // NOT a OR NOT b is not NOT (a OR b). One statement allowing everything but
+    // iam:DeleteUser and another allowing everything but s3:DeleteBucket allow
+    // everything between them; a single block excluding both allows less, which
+    // would be a silent loss of permission. The permission check cannot see this
+    // — a negated axis expands to one atom per excluded value either way — so it
+    // has to be prevented structurally.
+    await normalize(doc(
+        { Effect: 'Allow', NotAction: 'iam:DeleteUser', Resource: '*' },
+        { Effect: 'Allow', NotAction: 's3:DeleteBucket', Resource: '*' },
+    ));
+    assert.deepEqual(await statements(), [
+        { Effect: 'Allow', NotAction: ['iam:DeleteUser'], Resource: ['*'] },
+        { Effect: 'Allow', NotAction: ['s3:DeleteBucket'], Resource: ['*'] },
+    ], 'two exclusions stay two statements');
+
+    await normalize(doc(
+        { Effect: 'Allow', Action: 's3:GetObject', NotResource: 'arn:secret/*' },
+        { Effect: 'Allow', Action: 's3:GetObject', NotResource: 'arn:other/*' },
+    ));
+    assert.equal((await statements()).length, 2, 'and so do two excluded resources');
+});
+
+test('identical negated statements still collapse', async () => {
+    // Deduplicating them changes nothing, so it is safe and worth doing.
+    await normalize(doc(
+        { Effect: 'Allow', NotAction: 'iam:DeleteUser', Resource: 'arn:a' },
+        { Effect: 'Allow', NotAction: ['iam:DeleteUser'], Resource: 'arn:b' },
+    ));
+    assert.deepEqual(await statements(), [
+        { Effect: 'Allow', NotAction: ['iam:DeleteUser'], Resource: ['arn:a', 'arn:b'] },
+    ]);
+});
+
 test('a bare Statement array and aws iam wrappers are read', async () => {
     const expected = [{ Effect: 'Allow', Action: ['s3:GetObject'], Resource: ['*'] }];
     await normalize(JSON.stringify([{ Effect: 'Allow', Action: 's3:GetObject', Resource: '*' }]));
@@ -312,6 +346,11 @@ const SHAPES = {
         { Effect: 'Allow', Action: 'sts:AssumeRole', Resource: 'arn:r' },
         { Effect: 'Allow', Action: 'sts:TagSession', Resource: 'arn:r',
           Condition: { StringNotEquals: { 'aws:PrincipalTag/team': 'ops' } } }] },
+    'two different exclusions on one scope': { Statement: [
+        { Effect: 'Allow', NotAction: 'iam:DeleteUser', Resource: '*' },
+        { Effect: 'Allow', NotAction: 's3:DeleteBucket', Resource: '*' },
+        { Effect: 'Allow', Action: 'ec2:RunInstances', NotResource: 'arn:locked/*' },
+        { Effect: 'Allow', Action: 'ec2:RunInstances', NotResource: 'arn:other/*' }] },
     'NotAction and NotResource': { Statement: [
         { Effect: 'Allow', NotAction: ['iam:*', 'organizations:*'], Resource: '*' },
         { Effect: 'Deny', Action: 'ec2:*', NotResource: ['arn:allowed/*', 'arn:also/*'] },

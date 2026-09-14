@@ -82,6 +82,37 @@
         .iamn-chip.good b { color: var(--success); }
         .iamn-chip.bad b { color: var(--danger); }
 
+        /* Every run is checked, and the page says so either way. A quiet line
+           when it holds; an unmissable one when it does not. */
+        .iamn-verdict { display: flex; align-items: flex-start; gap: 10px; font-size: 0.82rem; }
+        .iamn-verdict[hidden] { display: none; }
+        .iamn-verdict .mark {
+            flex-shrink: 0;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.68rem;
+            font-weight: 700;
+        }
+        .iamn-verdict.ok { color: var(--text-muted); }
+        .iamn-verdict.ok .mark { background: rgba(62, 207, 127, 0.18); color: var(--success); }
+        .iamn-verdict.bad { color: var(--danger); font-weight: 600; }
+        .iamn-verdict.bad .mark { background: rgba(229, 72, 77, 0.18); color: var(--danger); }
+        .iamn-verdict.warn { color: var(--warning); font-weight: 600; }
+        .iamn-verdict.warn .mark { background: rgba(240, 180, 41, 0.2); color: var(--warning); }
+        .iamn-detail {
+            font-family: var(--font-mono);
+            font-size: 0.74rem;
+            font-weight: 400;
+            color: var(--text-muted);
+            margin-top: 6px;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+
         .iamn-notes { display: flex; flex-direction: column; gap: 6px; margin: 0; padding: 0; list-style: none; }
         .iamn-notes:empty { display: none; }
         .iamn-notes li {
@@ -178,6 +209,13 @@
 
                     <div class="card iamn-stats" id="iamn-stats" hidden>
                         <div class="iamn-chips" id="iamn-chips"></div>
+                        <div class="iamn-verdict" id="iamn-verdict" hidden>
+                            <span class="mark" id="iamn-verdict-mark" data-i18n-skip></span>
+                            <div>
+                                <span id="iamn-verdict-text"></span>
+                                <div class="iamn-detail" id="iamn-verdict-detail" hidden data-i18n-skip></div>
+                            </div>
+                        </div>
                         <ul class="iamn-notes" id="iamn-notes"></ul>
                     </div>
 
@@ -219,7 +257,7 @@
                             <dt>Conditions</dt>
                             <dd>Sorted, never evaluated. Two blocks differing by a condition stay apart, and two ways of writing the same restriction stay different.</dd>
                             <dt>Nothing is dropped</dt>
-                            <dd>Every action, resource, principal and condition in the input is in the output. Paste the result into IAM Policy Diff against the original to check that for yourself.</dd>
+                            <dd>Checked on every run, not just promised. Merging statements and expanding them into permissions are two different pieces of code; the second is run over the input and over the result, and the two sets have to be identical. The page says so either way and refuses to vouch for an output that fails — it does not try to patch one, because a policy assembled by code that has just been caught getting this wrong is not a policy to hand anyone. Both sides normalize values with the same helpers, so a defect in those would be invisible here; what this catches is a permission dropped, gained, or re-attached to the wrong scope.</dd>
                         </dl>
                     </div>
                 </section>
@@ -245,7 +283,13 @@
 
             // Parsing, normalization and merging are the same code the comparison
             // runs — see iam-core.js.
-            const { parseInput, statementUnits, blocksFrom, policyDocument } = window.LocalUtilIAM;
+            const {
+                parseInput, statementUnits, blocksFrom, policyDocument,
+                verifyLossless, describeAtom,
+            } = window.LocalUtilIAM;
+
+            // How many of the differences to name before the list stops helping.
+            const MAX_NAMED = 8;
 
             // IAM does not count whitespace towards a policy's size, so the number
             // worth reporting is the minified one.
@@ -256,7 +300,7 @@
             function setError(msg) {
                 errorBox.textContent = msg;
                 errorBox.hidden = !msg;
-                if (msg) { out.textContent = ''; stats.hidden = true; }
+                if (msg) { out.textContent = ''; stats.hidden = true; el('iamn-verdict').hidden = true; }
             }
 
             function run() {
@@ -280,7 +324,14 @@
                 const units = statementUnits(docs, opt, notes, 'Policy');
                 const blocks = blocksFrom(units, new Set());
                 const policy = policyDocument(blocks);
+
+                // Merging and expanding are different code. Run the second over
+                // the input and over what was just produced: if the two sets of
+                // permissions are not identical, this output must not be trusted,
+                // and the page has to say which way it went wrong.
+                const check = verifyLossless(docs, [policy], opt);
                 out.textContent = JSON.stringify(policy, null, 2);
+                showCheck(check);
 
                 // What the merge actually bought, in the terms the limits are in.
                 const actions = new Set();
@@ -318,6 +369,39 @@
                 }
                 el('iamn-notes').innerHTML = notes.map(n => '<li>' + n + '</li>').join('');
                 stats.hidden = false;
+            }
+
+            function showCheck(check) {
+                const box = el('iamn-verdict');
+                const detail = el('iamn-verdict-detail');
+                const name = list => list.slice(0, MAX_NAMED).map(describeAtom).join('\n') +
+                    (list.length > MAX_NAMED ? '\n… and ' + (list.length - MAX_NAMED) + ' more' : '');
+
+                let tone, mark, text, lines = '';
+                if (check.capped) {
+                    tone = 'warn'; mark = '?';
+                    text = 'Too large to check. The policy went past the expansion limit, so this output has not been verified.';
+                } else if (check.ok) {
+                    tone = 'ok'; mark = '\u2713';
+                    text = 'Checked: all ' + check.total.toLocaleString() +
+                        ' permissions in the input are in the output, and nothing else is.';
+                } else if (check.gained.length) {
+                    tone = 'bad'; mark = '!';
+                    text = 'Do not use this output. It grants ' + check.gained.length +
+                        ' permission(s) the input does not.';
+                    lines = name(check.gained);
+                } else {
+                    tone = 'bad'; mark = '!';
+                    text = 'Do not use this output. ' + check.lost.length +
+                        ' permission(s) from the input are missing.';
+                    lines = name(check.lost);
+                }
+                box.className = 'iamn-verdict ' + tone;
+                el('iamn-verdict-mark').textContent = mark;
+                el('iamn-verdict-text').textContent = text;
+                detail.textContent = lines;
+                detail.hidden = !lines;
+                box.hidden = false;
             }
 
             // ------------------------------------------------------------
