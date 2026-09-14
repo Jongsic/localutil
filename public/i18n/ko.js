@@ -1864,6 +1864,19 @@ window.LOCALUTIL_I18N = Object.assign(window.LOCALUTIL_I18N || {}, {
         "Statements using Not": "Not을 쓰는 statement",
         "Carried through as written in both forms, deduplicated but never regrouped. NotAction expands to one permission per excluded value, so the relation cannot tell one statement excluding two actions from two statements excluding one each — and those are not the same policy. Rebuilding them would have to guess.": "두 형태 모두에서 적힌 그대로 가져갑니다. 중복만 제거하고 다시 묶지는 않습니다. NotAction은 제외값 하나당 권한 하나로 펼쳐지므로, action 두 개를 제외한 statement 하나와 하나씩 제외한 statement 두 개를 관계만으로는 구분할 수 없습니다. 그리고 그 둘은 같은 정책이 아닙니다. 다시 조립하려면 추측해야 합니다.",
 
+        // --- IAM Normalize: size notes and the losslessness verdict ---
+        "Over the": "관리형 정책의",
+        "-character limit for a managed policy. Whitespace is not counted; the number above already excludes it.": "자 제한을 넘었습니다. 공백은 세지 않으며, 위 숫자에도 공백은 빠져 있습니다.",
+        "characters shorter than the input, whitespace excluded.": "글자 짧아졌습니다 (공백 제외).",
+        "Too large to check. The policy went past the expansion limit, so this output has not been verified.": "검사하기에 너무 큽니다. 정책이 전개 한도를 넘어서, 이 출력은 검증되지 않았습니다.",
+        "Checked: all": "확인 완료 — 입력의",
+        "permissions in the input are in the output, and nothing else is.": "개 권한이 모두 출력에 들어 있고, 그 외에는 없습니다.",
+        "Do not use this output. It grants": "이 출력을 쓰지 마세요. 입력에 없는 권한을",
+        "permission(s) the input does not.": "개 부여합니다.",
+        "Do not use this output.": "이 출력을 쓰지 마세요.",
+        "permission(s) from the input are missing.": "개 권한이 입력에서 빠졌습니다.",
+        "Checked on every run, not just promised. Merging statements and expanding them into permissions are two different pieces of code; the second is run over the input and over the result, and the two sets have to be identical. The page says so either way and refuses to vouch for an output that fails — it does not try to patch one, because a policy assembled by code that has just been caught getting this wrong is not a policy to hand anyone. Both sides normalize values with the same helpers, so a defect in those would be invisible here; what this catches is a permission dropped, gained, or re-attached to the wrong scope.": "약속이 아니라 실행할 때마다 검사합니다. statement를 병합하는 코드와 그것을 권한으로 전개하는 코드는 서로 다른 코드이고, 두 번째 코드를 입력과 결과 양쪽에 돌려 나온 두 집합이 완전히 같아야 합니다. 페이지는 어느 쪽이든 결과를 그대로 알리고, 검사에 실패한 출력은 보증하지 않습니다 — 고쳐 보려 하지도 않습니다. 방금 이 부분을 틀린 것으로 드러난 코드가 조립한 정책은 누구에게도 건넬 정책이 아니기 때문입니다. 양쪽 모두 같은 헬퍼로 값을 정규화하므로 그 헬퍼의 결함은 여기서 드러나지 않습니다. 여기서 잡히는 것은 권한이 빠지거나, 늘어나거나, 엉뚱한 범위에 다시 붙는 경우입니다.",
+
         // --- mTLS client certificate issuer ---
         "mTLS Cert Issuer": "mTLS 인증서 발급",
         "What comes out": "무엇이 나오나",

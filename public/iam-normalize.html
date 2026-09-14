@@ -397,28 +397,30 @@
                 const name = list => list.slice(0, MAX_NAMED).map(describeAtom).join('\n') +
                     (list.length > MAX_NAMED ? '\n… and ' + (list.length - MAX_NAMED) + ' more' : '');
 
+                // Counts go in their own <b> so the prose around them stays a whole
+                // text node — that is what the i18n runtime can look up and replace.
                 let tone, mark, text, lines = '';
                 if (check.capped) {
                     tone = 'warn'; mark = '?';
                     text = 'Too large to check. The policy went past the expansion limit, so this output has not been verified.';
                 } else if (check.ok) {
                     tone = 'ok'; mark = '\u2713';
-                    text = 'Checked: all ' + check.total.toLocaleString() +
-                        ' permissions in the input are in the output, and nothing else is.';
+                    text = 'Checked: all <b>' + check.total.toLocaleString() +
+                        '</b> permissions in the input are in the output, and nothing else is.';
                 } else if (check.gained.length) {
                     tone = 'bad'; mark = '!';
-                    text = 'Do not use this output. It grants ' + check.gained.length +
-                        ' permission(s) the input does not.';
+                    text = 'Do not use this output. It grants <b>' + check.gained.length +
+                        '</b> permission(s) the input does not.';
                     lines = name(check.gained);
                 } else {
                     tone = 'bad'; mark = '!';
-                    text = 'Do not use this output. ' + check.lost.length +
-                        ' permission(s) from the input are missing.';
+                    text = 'Do not use this output. <b>' + check.lost.length +
+                        '</b> permission(s) from the input are missing.';
                     lines = name(check.lost);
                 }
                 box.className = 'iamn-verdict ' + tone;
                 el('iamn-verdict-mark').textContent = mark;
-                el('iamn-verdict-text').textContent = text;
+                el('iamn-verdict-text').innerHTML = text;
                 detail.textContent = lines;
                 detail.hidden = !lines;
                 box.hidden = false;

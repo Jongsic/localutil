@@ -535,6 +535,53 @@ test('normalizing loses and invents nothing, over generated policies', async () 
     assert.deepEqual(failures, []);
 });
 
+// The verdict and the size notes are built with counts spliced into them; the
+// i18n runtime can only replace a whole text node, so the counts have to sit in
+// their own element or the Korean sentence silently stays English.
+test('the verdict and the size notes translate, counts and all', async () => {
+    const page = await env.browser.newPage();
+    await page.addInitScript(() => localStorage.setItem('localutil-lang', 'ko'));
+    await page.goto(`${env.server.base}/iam-normalize.html`, { waitUntil: 'networkidle' });
+    const dict = await page.evaluate(() => window.LOCALUTIL_I18N.ko);
+
+    // one statement, and a second that is the same permission written apart
+    await page.fill('#iamn-in', doc(
+        { Effect: 'Allow', Action: ['s3:GetObject'], Resource: ['arn:aws:s3:::bucket/*'] },
+        { Effect: 'Allow', Action: ['s3:GetObject'], Resource: ['arn:aws:s3:::bucket/*'] },
+    ));
+    await page.click('#btn-iamn-run');
+    await page.waitForSelector('#iamn-stats:not([hidden])');
+
+    const verdict = (await page.textContent('#iamn-verdict')).replace(/\s+/g, ' ').trim();
+    assert.ok(verdict.includes(dict['Checked: all']), verdict);
+    assert.ok(verdict.includes(dict['permissions in the input are in the output, and nothing else is.']), verdict);
+    assert.match(verdict, /[0-9]/, 'the count survives the translation');
+
+    const notes = (await page.textContent('#iamn-notes')).replace(/\s+/g, ' ').trim();
+    assert.ok(notes.includes(dict['characters shorter than the input, whitespace excluded.']), notes);
+
+    // the failing verdicts never fire on a correct run, so check the markup
+    // showCheck() builds for them reaches the dictionary too
+    const failures = await page.evaluate(async () => {
+        const el = document.getElementById('iamn-verdict-text');
+        const out = [];
+        for (const html of [
+            'Too large to check. The policy went past the expansion limit, so this output has not been verified.',
+            'Do not use this output. It grants <b>3</b> permission(s) the input does not.',
+            'Do not use this output. <b>2</b> permission(s) from the input are missing.',
+        ]) {
+            el.innerHTML = html;
+            await new Promise(r => setTimeout(r, 60));
+            out.push(el.textContent.replace(/\s+/g, ' ').trim());
+        }
+        return out;
+    });
+    assert.equal(failures[0], dict['Too large to check. The policy went past the expansion limit, so this output has not been verified.']);
+    assert.equal(failures[1], `${dict['Do not use this output. It grants']} 3 ${dict['permission(s) the input does not.']}`);
+    assert.equal(failures[2], `${dict['Do not use this output.']} 2 ${dict['permission(s) from the input are missing.']}`);
+    await page.close();
+});
+
 test('nothing on the page threw', () => {
     assert.deepEqual(env.errors, []);
 });
