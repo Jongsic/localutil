@@ -231,6 +231,7 @@ document.addEventListener('DOMContentLoaded', () => {
     renderLanding();
     initTheme();
     initNavCollapse();
+    initNavScroll();
     initSearch();
     initCopyButtons();
     initTextareaResize();
@@ -321,6 +322,42 @@ function initNavCollapse() {
     btn.addEventListener('click', () => {
         setNavCollapsed(!sidebar.classList.contains('collapsed'));
     });
+}
+
+// ------------------------------------------------------------
+// Sidebar scroll memory — each tool is a full page load, so without this the
+// nav snaps back to the top and the tool you just clicked scrolls out of view.
+// ------------------------------------------------------------
+const NAV_SCROLL_KEY = 'localutil-nav-scroll';
+
+function initNavScroll() {
+    const list = document.getElementById('tool-list');
+    if (!list) return;
+
+    // Restore the position the nav was left at on the previous page...
+    const saved = parseInt(sessionStorage.getItem(NAV_SCROLL_KEY) || '', 10);
+    if (saved > 0) list.scrollTop = saved;
+
+    // ...then make sure the current tool is actually on screen anyway (fresh
+    // tab, deep link, or a jump from the landing grid leaves no saved offset).
+    const active = list.querySelector('.nav-item.active');
+    if (active) {
+        const a = active.getBoundingClientRect();
+        const l = list.getBoundingClientRect();
+        if (a.top < l.top || a.bottom > l.bottom) {
+            list.scrollTop += a.top - l.top - (l.height - a.height) / 2;
+        }
+    }
+
+    let pending = false;
+    list.addEventListener('scroll', () => {
+        if (pending) return;
+        pending = true;
+        requestAnimationFrame(() => {
+            pending = false;
+            sessionStorage.setItem(NAV_SCROLL_KEY, String(Math.round(list.scrollTop)));
+        });
+    }, { passive: true });
 }
 
 // ------------------------------------------------------------

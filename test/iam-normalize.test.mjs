@@ -79,22 +79,44 @@ test('the output is a policy document, sorted and stable', async () => {
     assert.equal(await output(), first);
 });
 
-test('nothing in the input is missing from the output', async () => {
-    const policy = doc(
-        { Sid: 'One', Effect: 'Allow', Action: ['s3:GetObject', 's3:PutObject'], Resource: 'arn:aws:s3:::b/*' },
-        { Sid: 'Two', Effect: 'Deny', Action: 's3:DeleteBucket', Resource: '*' },
-        { Sid: 'Three', Effect: 'Allow', Action: 'sts:AssumeRole', Resource: 'arn:aws:iam::111122223333:role/r',
-          Condition: { StringEquals: { 'sts:ExternalId': 'abc' } } },
-        { Sid: 'Four', Effect: 'Allow', Principal: { Service: 'lambda.amazonaws.com' }, Action: 'sts:AssumeRole' },
-        { Sid: 'Five', Effect: 'Allow', NotAction: 'iam:*', Resource: '*' },
-    );
+// Every string the input holds, except the ones normalization is documented to
+// drop. A value that vanishes has to fail something.
+function leafStrings(value, out = new Set(), key = '') {
+    if (typeof value === 'string') {
+        if (key !== 'Sid' && key !== 'Version') out.add(value);
+        return out;
+    }
+    if (Array.isArray(value)) { value.forEach(v => leafStrings(v, out, key)); return out; }
+    if (value && typeof value === 'object') {
+        for (const [k, v] of Object.entries(value)) {
+            out.add(k === 'Sid' || k === 'Version' ? null : k);
+            leafStrings(v, out, k);
+        }
+        out.delete(null);
+    }
+    return out;
+}
+
+test('every value in the input is still in the output', async () => {
+    const policy = {
+        Version: '2012-10-17',
+        Statement: [
+            { Sid: 'One', Effect: 'Allow', Action: ['s3:GetObject', 's3:PutObject'], Resource: 'arn:aws:s3:::b/*' },
+            { Sid: 'Two', Effect: 'Deny', Action: 's3:DeleteBucket', Resource: '*' },
+            { Sid: 'Three', Effect: 'Allow', Action: 'sts:AssumeRole', Resource: 'arn:aws:iam::111122223333:role/r',
+              Condition: { StringEquals: { 'sts:ExternalId': 'abc' }, Bool: { 'aws:SecureTransport': 'true' } } },
+            { Sid: 'Four', Effect: 'Allow', Principal: { Service: 'lambda.amazonaws.com' }, Action: 'sts:AssumeRole' },
+            { Sid: 'Five', Effect: 'Allow', NotAction: 'iam:*', NotResource: 'arn:aws:iam::111122223333:role/admin' },
+        ],
+    };
     await normalize(policy);
     const text = await output();
-    for (const needle of ['s3:GetObject', 's3:PutObject', 's3:DeleteBucket', 'sts:AssumeRole',
-        'arn:aws:s3:::b/*', 'arn:aws:iam::111122223333:role/r', 'sts:ExternalId', 'abc',
-        'lambda.amazonaws.com', 'iam:*', '"Deny"', '"NotAction"']) {
-        assert.ok(text.includes(needle), needle + ' survived normalization');
-    }
+    const missing = [...leafStrings(policy)].filter(v => !text.includes(v));
+    assert.deepEqual(missing, [], 'these values did not survive normalization');
+
+    // And the two things it is documented to drop really are gone.
+    assert.ok(!text.includes('"Sid"'), 'Sid is dropped');
+    assert.match(text, /"Version": "2012-10-17"/, 'the document version is rewritten, not carried over');
 });
 
 test('a Deny is a block like any other and cancels nothing', async () => {
@@ -213,6 +235,151 @@ test('Clear empties both sides', async () => {
     assert.equal(await env.page.inputValue('#iamn-in'), '');
     assert.equal(await env.page.isHidden('#iamn-stats'), true);
     assert.match(await output(), /Paste a policy above/);
+});
+
+// ------------------------------------------------------------
+// Losslessness, checked against a different algorithm
+// ------------------------------------------------------------
+// Normalizing merges statements into blocks; the comparison expands them into
+// one permission per Effect/Action/Resource/Principal/Condition. The two share
+// no code, so running one against the other is a real check rather than the
+// tool agreeing with itself. A weaker check — that the output reads back to the
+// same blocks — only proves the merge is a fixed point of itself.
+//
+// Both passes are batched into one page load each: navigation dominates.
+
+async function normalizeAll(policies) {
+    await env.goto('iam-normalize.html');
+    const out = [];
+    for (const policy of policies) {
+        await env.page.fill('#iamn-in', JSON.stringify(policy));
+        await env.page.click('#btn-iamn-run');
+        out.push(await env.page.textContent('#iamn-out'));
+    }
+    return out;
+}
+
+async function comparePermissions(policies, normalized) {
+    await env.goto('iam-diff.html');
+    await env.page.click('#iam-opt-matched');   // count what matched, not just what differs
+    await env.page.click('#iam-opt-deny');      // off, so a Deny cannot hide a lost Allow
+    const out = [];
+    for (let i = 0; i < policies.length; i++) {
+        // Comparing puts the inputs away; they have to come back to be refilled.
+        if (await env.page.isHidden('#iam-split')) await env.page.click('#btn-iam-edit');
+        await env.page.fill('#iam-a', JSON.stringify(policies[i]));
+        await env.page.fill('#iam-b', normalized[i]);
+        await env.page.click('#btn-iam-run');
+        out.push(Object.fromEntries(await env.page.$$eval('.iam-chip', els => els.map(e => {
+            const n = e.querySelector('b').textContent;
+            return [e.textContent.slice(n.length).trim(), Number(n)];
+        }))));
+    }
+    return out;
+}
+
+function lossReport(name, c) {
+    // Every permission on each side has to be matched *exactly*. Accepting
+    // "covered by a wider rule" would let a dropped s3:GetObject hide behind an
+    // s3:* that happened to survive.
+    const problems = [];
+    if (c['only in A']) problems.push(c['only in A'] + ' permission(s) lost');
+    if (c['only in B']) problems.push(c['only in B'] + ' permission(s) invented');
+    if (c['condition differs']) problems.push(c['condition differs'] + ' condition(s) changed');
+    if (c['covered by a wider rule']) problems.push(c['covered by a wider rule'] + ' matched only by a wildcard');
+    if (c['identical'] !== c['permissions in A'] || c['identical'] !== c['permissions in B']) {
+        problems.push('identical ' + c['identical'] + ' != A ' + c['permissions in A'] + ' / B ' + c['permissions in B']);
+    }
+    return problems.length ? name + ': ' + problems.join(', ') : null;
+}
+
+const SHAPES = {
+    'duplicates and splits': { Version: '2012-10-17', Statement: [
+        { Sid: 'a', Effect: 'Allow', Action: ['s3:GetObject', 's3:PutObject'], Resource: 'arn:x' },
+        { Sid: 'b', Effect: 'Allow', Action: 's3:GetObject', Resource: ['arn:x', 'arn:y'] },
+        { Sid: 'c', Effect: 'Allow', Action: ['s3:PutObject', 's3:GetObject'], Resource: 'arn:x' }] },
+    'an action shared between two groups': { Statement: [
+        { Sid: 'web', Effect: 'Allow', Action: ['s3:DeleteObject', 's3:PutObject'], Resource: 'arn:site/*' },
+        { Sid: 'backup', Effect: 'Allow', Action: ['s3:GetObject', 's3:PutObject'], Resource: 'arn:backup/*' }] },
+    'deny beside allow on the same scope': { Statement: [
+        { Effect: 'Allow', Action: ['s3:*'], Resource: '*' },
+        { Effect: 'Deny', Action: 's3:DeleteBucket', Resource: '*' },
+        { Effect: 'Deny', Action: 's3:DeleteBucketPolicy', Resource: '*' }] },
+    'conditions of several shapes': { Statement: [
+        { Effect: 'Allow', Action: 'sts:AssumeRole', Resource: 'arn:r',
+          Condition: { StringEquals: { 'sts:ExternalId': ['b', 'a'], 'aws:PrincipalAccount': '1' },
+                       Bool: { 'aws:SecureTransport': 'true' } } },
+        { Effect: 'Allow', Action: 'sts:AssumeRole', Resource: 'arn:r' },
+        { Effect: 'Allow', Action: 'sts:TagSession', Resource: 'arn:r',
+          Condition: { StringNotEquals: { 'aws:PrincipalTag/team': 'ops' } } }] },
+    'NotAction and NotResource': { Statement: [
+        { Effect: 'Allow', NotAction: ['iam:*', 'organizations:*'], Resource: '*' },
+        { Effect: 'Deny', Action: 'ec2:*', NotResource: ['arn:allowed/*', 'arn:also/*'] },
+        { Effect: 'Allow', Action: 'ec2:DescribeInstances', Resource: '*' }] },
+    'a trust policy': { Statement: [
+        { Effect: 'Allow', Principal: { Service: ['lambda.amazonaws.com', 'ec2.amazonaws.com'] }, Action: 'sts:AssumeRole' },
+        { Effect: 'Allow', Principal: { AWS: 'arn:aws:iam::111122223333:root' }, Action: ['sts:AssumeRole', 'sts:TagSession'] },
+        { Effect: 'Deny', NotPrincipal: { Service: 'lambda.amazonaws.com' }, Action: 'sts:AssumeRole' }] },
+    'the same action in two contexts': { Statement: [
+        { Effect: 'Allow', Action: ['cloudtrail:LookupEvents', 'ec2:DescribeInstances'], Resource: '*' },
+        { Effect: 'Allow', Action: 'cloudtrail:LookupEvents', Resource: '*',
+          Condition: { StringEquals: { 'aws:RequestedRegion': 'ap-northeast-2' } } }] },
+    'wildcards beside what they cover': { Statement: [
+        { Effect: 'Allow', Action: ['s3:*', 's3:GetObject', 's3:Get*'], Resource: ['arn:a', 'arn:a/*', '*'] }] },
+    'many statements on one scope': { Statement: Array.from({ length: 12 }, (_, i) => (
+        { Sid: 's' + i, Effect: 'Allow', Action: 'svc:Action' + i, Resource: ['arn:one', 'arn:two'] })) },
+};
+
+test('normalizing loses and invents nothing, shape by shape', async () => {
+    const names = Object.keys(SHAPES);
+    const policies = names.map(n => SHAPES[n]);
+    const counts = await comparePermissions(policies, await normalizeAll(policies));
+    assert.deepEqual(names.map((n, i) => lossReport(n, counts[i])).filter(Boolean), []);
+});
+
+// A seeded generator, so a failure is reproducible rather than a flake.
+function makePolicies(seed, count) {
+    let state = seed;
+    const next = () => (state = (state * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
+    const pick = list => list[Math.floor(next() * list.length) % list.length];
+    const some = (list, max) => {
+        const n = 1 + Math.floor(next() * max);
+        const out = new Set();
+        while (out.size < n) out.add(pick(list));
+        return [...out];
+    };
+    const ACTIONS = ['s3:GetObject', 's3:PutObject', 's3:*', 'ec2:Describe*', 'ec2:RunInstances',
+        'iam:PassRole', 'sts:AssumeRole', 'ssm:GetParameter'];
+    const RESOURCES = ['*', 'arn:aws:s3:::one', 'arn:aws:s3:::one/*', 'arn:aws:s3:::two/*',
+        'arn:aws:iam::111122223333:role/r', 'arn:aws:ssm:ap-northeast-2:111122223333:parameter/a/*'];
+    const CONDITIONS = [null, null, null,
+        { StringEquals: { 'aws:RequestedRegion': 'ap-northeast-2' } },
+        { StringEquals: { 'aws:PrincipalTag/team': ['ops', 'dev'] } },
+        { Bool: { 'aws:SecureTransport': 'true' } },
+        { StringNotEquals: { 'aws:PrincipalAccount': '111122223333' } }];
+
+    return Array.from({ length: count }, () => ({
+        Version: '2012-10-17',
+        Statement: Array.from({ length: 1 + Math.floor(next() * 6) }, (_, i) => {
+            const st = { Sid: 'S' + i, Effect: next() < 0.8 ? 'Allow' : 'Deny' };
+            if (next() < 0.9) st.Action = some(ACTIONS, 4);
+            else st.NotAction = some(ACTIONS, 2);
+            if (next() < 0.9) st.Resource = some(RESOURCES, 3);
+            else st.NotResource = some(RESOURCES, 2);
+            const cond = pick(CONDITIONS);
+            if (cond) st.Condition = cond;
+            return st;
+        }),
+    }));
+}
+
+test('normalizing loses and invents nothing, over generated policies', async () => {
+    const policies = makePolicies(20260914, 14);
+    const counts = await comparePermissions(policies, await normalizeAll(policies));
+    const failures = counts
+        .map((c, i) => lossReport('policy #' + i + ' ' + JSON.stringify(policies[i]).slice(0, 120), c))
+        .filter(Boolean);
+    assert.deepEqual(failures, []);
 });
 
 test('nothing on the page threw', () => {
