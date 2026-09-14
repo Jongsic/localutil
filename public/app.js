@@ -45,6 +45,7 @@ const ICONS = {
     seocheck: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><circle cx="11" cy="14" r="2.5"/><path d="m13 16 2.5 2.5"/>',
     iam: '<path d="M12 2 4 5v6c0 4.9 3.4 8.4 8 10 4.6-1.6 8-5.1 8-10V5z"/><path d="M12 3.2v17.6"/><line x1="8.4" y1="9.4" x2="8.41" y2="9.4"/><line x1="8.4" y1="13" x2="8.41" y2="13"/><line x1="15.6" y1="9.4" x2="15.61" y2="9.4"/>',
     iamnorm: '<path d="M12 2 4 5v6c0 4.9 3.4 8.4 8 10 4.6-1.6 8-5.1 8-10V5z"/><path d="M8 9h8"/><path d="M8 12.4h8"/><path d="M10 15.8h4"/>',
+    mtls: '<circle cx="12" cy="8.5" r="5.5"/><path d="m9.6 8.6 1.7 1.7 3.3-3.4"/><polyline points="8.4 13.4 8.4 22 12 19.7 15.6 22 15.6 13.4"/>',
     pwacheck: '<rect x="7" y="2" width="10" height="20" rx="2"/><path d="M12 8v5"/><polyline points="9.5 11 12 13.5 14.5 11"/><line x1="10.5" y1="18" x2="13.5" y2="18"/>',
     // chrome
     search: '<circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>',
@@ -88,6 +89,7 @@ const TOOLS = [
     { file: 'totp.html', name: 'TOTP Generator', desc: 'Generate 2FA codes from a TOTP secret', icon: 'totp', cat: 'Crypto & Auth' },
     { file: 'passkey.html', name: 'Passkey Debugger', desc: 'Create, sign in with, and inspect WebAuthn passkeys against a simulated local server — every byte decoded and verified', icon: 'passkey', cat: 'Crypto & Auth' },
     { file: 'encrypt.html', name: 'Encrypt / Decrypt', desc: 'Protect text or files with a security key, a password, a raw key, or a key pair — whatever locks it is what unlocks it', icon: 'encrypt', cat: 'Crypto & Auth' },
+    { file: 'mtls-cert.html', name: 'mTLS Cert Issuer', desc: 'Create a CA and issue client certificates from it for mutual TLS — .crt, .key and a password-protected .p12', icon: 'mtls', cat: 'Crypto & Auth' },
     { file: 'sign.html', name: 'Sign / Verify', desc: 'Sign text with a security key or a private key, then verify it check by check', icon: 'sign', cat: 'Crypto & Auth' },
     { file: 'hd-wallet.html', name: 'Web3 Wallet', desc: 'Create a root key from a seed phrase or raw hex, derive HD accounts, or inspect a public key', icon: 'wallet', cat: 'Web3' },
     { file: 'calldata.html', name: 'ABI / Calldata', desc: 'Encode calldata & event topics, decode calldata and logs — from a signature or ABI', icon: 'eth', cat: 'Web3' },

@@ -10,7 +10,7 @@ A collection of small, self-contained developer utilities that run entirely in t
 
 - **Encoding** — Base64, URL Encode/Decode, Hex/ASCII
 - **Formatting** — JS Beautifier, JS Minify, Markdown Preview, JSON Formatter, CSV ⇄ Markdown
-- **Crypto & Auth** — JWT Encode/Decode, GPG Key Inspector, SSH Key Converter, Keystore Inspector, Key Pair Generator, Password Generator, Hash & HMAC, TOTP Generator, Passkey Debugger, Encrypt/Decrypt, Sign/Verify
+- **Crypto & Auth** — JWT Encode/Decode, GPG Key Inspector, SSH Key Converter, Keystore Inspector, Key Pair Generator, Password Generator, Hash & HMAC, TOTP Generator, Passkey Debugger, Encrypt/Decrypt, Sign/Verify, mTLS Cert Issuer
 - **Web3** — Ethereum ABI, HD Wallet Deriver
 - **Utilities** — Epoch Converter, CIDR Calculator, IAM Policy Diff, IAM Normalize, QR Generator, QR Reader, ICO Converter, GIF Studio, Image Resizer, SVG to Image, Image to Base64, Diff/Compare, Regex Tester, Cron Parser, Telegram Bot Logger, SEO Checker
 
