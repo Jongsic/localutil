@@ -180,6 +180,10 @@ const SEO = {
         title: 'AWS IAM Policy Normalizer',
         desc: `Merge duplicate and overlapping statements in an AWS IAM policy into one canonical document — sorted, deduplicated, and measured against the policy size limit. ${LOCAL}`,
     },
+    'pwa-check.html': {
+        title: 'PWA Install Checker (Manifest & Service Worker)',
+        desc: 'Audit PWA installability from page HTML and manifest JSON — install criteria checklist, icon previews, maskable safe zone, and service worker guidance. Runs in your browser.',
+    },
     'seo-check.html': {
         title: 'SEO Meta Tag Checker',
         desc: 'Audit title, description, canonical, robots, Open Graph, and JSON-LD from a page URL or pasted HTML — with search and social previews. Runs in your browser.',
