@@ -118,7 +118,7 @@ const SEO = {
     },
     'hd-wallet.html': {
         title: 'HD Wallet Deriver (BIP-39 Seed Phrase)',
-        desc: 'Derive HD wallet accounts from a BIP-39 seed phrase or raw hex root key, or inspect a public key: addresses, public and private keys. Runs 100% in your browser — keys never leave your machine.',
+        desc: 'Derive HD wallet accounts from a BIP-39 seed phrase, a raw hex root key or an encrypted keystore file, or inspect a public key: addresses, public and private keys. Runs 100% in your browser — keys never leave your machine.',
     },
     'calldata.html': {
         title: 'Ethereum ABI Encoder / Calldata Decoder',

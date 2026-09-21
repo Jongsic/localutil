@@ -225,6 +225,173 @@ test('public key mode: random buttons generate detectable keys', async () => {
     assert.equal(await summaryValue(env.page, 'SOL Address') !== null, true);
 });
 
+// Keystores are built in the page itself with ethers, so the tests run against
+// the real formats rather than a hand-written fixture. N=1024 keeps scrypt quick.
+const KS_PASSWORD = 'correct horse battery staple';
+
+function makeKeystore(page, { mnemonic = null, privateKey = null, password = KS_PASSWORD }) {
+    return page.evaluate(async ({ m, pk, pw }) => {
+        // fromPhrase lands on the default account path, m/44'/60'/0'/0/0.
+        const wallet = m ? ethers.HDNodeWallet.fromPhrase(m) : new ethers.Wallet('0x' + pk);
+        const account = { address: wallet.address, privateKey: wallet.privateKey };
+        if (m) account.mnemonic = { path: wallet.path, locale: 'en', entropy: wallet.mnemonic.entropy };
+        return ethers.encryptKeystoreJson(account, pw, { scrypt: { N: 1024, r: 8, p: 1 } });
+    }, { m: mnemonic, pk: privateKey, pw: password });
+}
+
+const openKeystoreTab = (page) => page.click('#hd-mode button[data-mode="keystore"]');
+
+test('keystore mode: a v3 keystore carrying a mnemonic recovers the whole tree', async () => {
+    await env.goto('hd-wallet.html');
+    await openKeystoreTab(env.page);
+    await env.page.fill('#hd-ks-json', await makeKeystore(env.page, { mnemonic: TEST_MNEMONIC }));
+
+    // The format is detected on input, and only then is a password asked for.
+    const detect = await env.page.$eval('#hd-ks-detect', e => e.textContent);
+    assert.match(detect, /Web3 Secret Storage v3 · scrypt \(N=1024/);
+    assert.match(detect, /carries an encrypted seed phrase/);
+    assert.notEqual(await env.page.$eval('#hd-ks-unlock-row', e => getComputedStyle(e).display), 'none');
+    assert.equal(await env.page.$eval('#hd-summary', e => e.style.display), 'none');
+
+    await env.page.fill('#hd-ks-pass', KS_PASSWORD);
+    await env.page.click('#btn-hd-ks-unlock');
+    await env.page.waitForSelector('#hd-summary .card');
+
+    // The recovered mnemonic rebuilds the master key, not just the one account.
+    const expected = await env.page.evaluate(m => ({
+        root: ethers.HDNodeWallet.fromPhrase(m, '', 'm').address,
+        account: ethers.HDNodeWallet.fromPhrase(m).address,
+    }), TEST_MNEMONIC);
+    assert.equal(await summaryValue(env.page, 'ETH Address'), expected.root);
+    assert.equal(await summaryValue(env.page, 'Address'), expected.account);
+
+    // The base path is pre-filled from the keystore's own account path, so row 0
+    // of the table is the account the file was written for.
+    assert.equal(await env.page.$eval('#hd-path', e => e.value), "m/44'/60'/0'/0");
+    assert.equal(await env.page.$eval('#hd-table-wrap tbody tr td:nth-child(3)', e => e.textContent), expected.account);
+
+    // Read the file, derive the KEK, check the MAC and decrypt, rebuild the tree.
+    assert.equal(await env.page.$$eval('#hd-steps .hd-step', s => s.length), 4);
+    assert.equal(await env.page.$eval('#hd-warn', e => e.style.display), 'none');
+});
+
+test('keystore mode: a key-only keystore derives like a raw key', async () => {
+    await env.goto('hd-wallet.html');
+    await openKeystoreTab(env.page);
+    await env.page.fill('#hd-ks-json', await makeKeystore(env.page, { privateKey: TEST_PK }));
+    await env.page.fill('#hd-ks-pass', KS_PASSWORD);
+    await env.page.click('#btn-hd-ks-unlock');
+    await env.page.waitForSelector('#hd-summary .card');
+
+    assert.equal(await summaryValue(env.page, 'ETH Address'), TEST_PK_ADDR);
+    assert.equal(await summaryValue(env.page, 'SOL Address'), TEST_PK_CHAINS['SOL Address']);
+    // No mnemonic means no chain code — the same caveat as the raw hex tab.
+    assert.match(await env.page.$eval('#hd-derive-note', e => e.textContent), /chain code/);
+    assert.equal(await env.page.$$eval('#hd-steps .hd-step', s => s.length), 3);
+    assert.equal(await env.page.$$eval('#hd-table-wrap tbody tr', r => r.length), 30);
+});
+
+test('keystore mode: a wrong password fails on the MAC, the right one still works', async () => {
+    await env.goto('hd-wallet.html');
+    await openKeystoreTab(env.page);
+    await env.page.fill('#hd-ks-json', await makeKeystore(env.page, { privateKey: TEST_PK }));
+
+    await env.page.fill('#hd-ks-pass', 'not the password');
+    await env.page.click('#btn-hd-ks-unlock');
+    await env.page.waitForFunction(() => document.getElementById('hd-error').style.display === 'block');
+    assert.match(await env.page.$eval('#hd-error', e => e.textContent), /Incorrect password/);
+    assert.equal(await env.page.$eval('#hd-summary', e => e.style.display), 'none');
+    // The button must come back, not stay stuck mid-unlock.
+    assert.equal(await env.page.$eval('#btn-hd-ks-unlock', e => e.disabled), false);
+
+    await env.page.fill('#hd-ks-pass', KS_PASSWORD);
+    await env.page.press('#hd-ks-pass', 'Enter');
+    await env.page.waitForSelector('#hd-summary .card');
+    assert.equal(await summaryValue(env.page, 'ETH Address'), TEST_PK_ADDR);
+    assert.equal(await env.page.$eval('#hd-error', e => e.style.display), 'none');
+});
+
+test('keystore mode: an unencrypted keypair file needs no password', async () => {
+    await env.goto('hd-wallet.html');
+    await openKeystoreTab(env.page);
+
+    // Solana CLI id.json: secret then Ed25519 public, as a plain byte array.
+    const secret = [...Buffer.from(TEST_PK, 'hex')];
+    const pub = [...Buffer.from(TEST_PK_CHAINS['TON Public key (Ed25519)'], 'hex')];
+    await env.page.fill('#hd-ks-json', JSON.stringify(secret.concat(pub)));
+    await env.page.waitForSelector('#hd-summary .card');
+
+    assert.match(await env.page.$eval('#hd-ks-detect', e => e.textContent), /Solana CLI keypair — 64 raw bytes/);
+    assert.equal(await env.page.$eval('#hd-ks-unlock-row', e => getComputedStyle(e).display), 'none');
+    assert.equal(await summaryValue(env.page, 'SOL Address'), TEST_PK_CHAINS['SOL Address']);
+    assert.equal(await env.page.$eval('#hd-warn', e => e.style.display), 'none');
+
+    // A public half that does not belong to the secret is called out.
+    await env.page.fill('#hd-ks-json', JSON.stringify(secret.concat(pub.slice().reverse())));
+    await env.page.waitForFunction(() => document.getElementById('hd-warn').style.display === 'block');
+    assert.match(await env.page.$eval('#hd-warn', e => e.textContent), /not the Ed25519 public key of its secret half/);
+    // Still unlocked — the addresses come from the secret.
+    assert.equal(await summaryValue(env.page, 'SOL Address'), TEST_PK_CHAINS['SOL Address']);
+});
+
+test('keystore mode: files it cannot open explain themselves', async () => {
+    await env.goto('hd-wallet.html');
+    await openKeystoreTab(env.page);
+
+    // A binary keystore is a different format entirely.
+    await env.page.fill('#hd-ks-json', '0 binary p12 bytes');
+    await env.page.dispatchEvent('#hd-ks-json', 'change');
+    assert.match(await env.page.$eval('#hd-error', e => e.textContent), /Keystore Inspector/);
+
+    // Valid JSON, but nothing a wallet would write.
+    await env.page.fill('#hd-ks-json', '{"hello":"world"}');
+    await env.page.dispatchEvent('#hd-ks-json', 'change');
+    assert.match(await env.page.$eval('#hd-error', e => e.textContent), /Unrecognized wallet JSON/);
+
+    // A v1 keystore is recognizable, and refused for the right reason.
+    await env.page.fill('#hd-ks-json', '{"version":1,"crypto":{"cipher":"aes-128-cbc"}}');
+    await env.page.dispatchEvent('#hd-ks-json', 'change');
+    assert.match(await env.page.$eval('#hd-error', e => e.textContent), /not a version-3 one/);
+
+    // Half-pasted JSON stays quiet while typing.
+    await env.page.fill('#hd-ks-json', '{"version":3,"cry');
+    assert.equal(await env.page.$eval('#hd-error', e => e.style.display), 'none');
+});
+
+test('keystore mode: a chosen file fills the form and survives a tab round-trip', async () => {
+    await env.goto('hd-wallet.html');
+    await openKeystoreTab(env.page);
+    const json = await makeKeystore(env.page, { privateKey: TEST_PK });
+
+    await env.page.setInputFiles('#hd-ks-file', {
+        name: 'UTC--2024-01-01T00-00-00.0Z--2c7536e3605d9c16a7a3d7b1898e529396a65c23',
+        mimeType: 'application/json',
+        buffer: Buffer.from(json),
+    });
+    await env.page.waitForFunction(() => document.getElementById('hd-ks-detect').style.display === 'block');
+    assert.match(await env.page.$eval('#hd-ks-drop-main', e => e.textContent), /^UTC--2024-01-01/);
+    assert.equal(await env.page.$eval('#hd-ks-json', e => e.value), json);
+
+    await env.page.fill('#hd-ks-pass', KS_PASSWORD);
+    await env.page.click('#btn-hd-ks-unlock');
+    await env.page.waitForSelector('#hd-summary .card');
+    assert.equal(await summaryValue(env.page, 'ETH Address'), TEST_PK_ADDR);
+
+    // Leaving the tab clears the output; coming back shows the unlocked key again.
+    await env.page.click('#hd-mode button[data-mode="pub"]');
+    assert.equal(await env.page.$eval('#hd-summary', e => e.style.display), 'none');
+    await openKeystoreTab(env.page);
+    await env.page.waitForSelector('#hd-summary .card');
+    assert.equal(await summaryValue(env.page, 'ETH Address'), TEST_PK_ADDR);
+
+    // Clear wipes the file, the password and the output.
+    await env.page.click('#btn-hd-ks-clear');
+    assert.equal(await env.page.$eval('#hd-ks-json', e => e.value), '');
+    assert.equal(await env.page.$eval('#hd-ks-pass', e => e.value), '');
+    assert.equal(await env.page.$eval('#hd-summary', e => e.style.display), 'none');
+    assert.match(await env.page.$eval('#hd-ks-drop-main', e => e.textContent), /Drop a keystore file/);
+});
+
 test('no page errors', () => {
     assert.deepEqual(env.errors, []);
 });

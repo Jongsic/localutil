@@ -7,7 +7,7 @@
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
     <title>HD Wallet Deriver (BIP-39 Seed Phrase) — LocalUtil</title>
     <!-- social / favicon -->
-    <meta name="description" content="Derive HD wallet accounts from a BIP-39 seed phrase or raw hex root key, or inspect a public key: addresses, public and private keys. Runs 100% in your browser — keys never leave your machine.">
+    <meta name="description" content="Derive HD wallet accounts from a BIP-39 seed phrase, a raw hex root key or an encrypted keystore file, or inspect a public key: addresses, public and private keys. Runs 100% in your browser — keys never leave your machine.">
     <link rel="canonical" href="https://jongsic.github.io/localutil/hd-wallet.html">
     <link rel="icon" href="favicon.ico" sizes="any">
     <link rel="icon" type="image/png" href="favicon.png">
@@ -15,14 +15,14 @@
     <meta property="og:type" content="website">
     <meta property="og:site_name" content="LocalUtil">
     <meta property="og:title" content="HD Wallet Deriver (BIP-39 Seed Phrase) — LocalUtil">
-    <meta property="og:description" content="Derive HD wallet accounts from a BIP-39 seed phrase or raw hex root key, or inspect a public key: addresses, public and private keys. Runs 100% in your browser — keys never leave your machine.">
+    <meta property="og:description" content="Derive HD wallet accounts from a BIP-39 seed phrase, a raw hex root key or an encrypted keystore file, or inspect a public key: addresses, public and private keys. Runs 100% in your browser — keys never leave your machine.">
     <meta property="og:image" content="https://jongsic.github.io/localutil/og.png">
     <meta property="og:image:width" content="1200">
     <meta property="og:image:height" content="630">
     <meta property="og:url" content="https://jongsic.github.io/localutil/hd-wallet.html">
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:image" content="https://jongsic.github.io/localutil/og.png">
-    <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebApplication","name":"HD Wallet Deriver (BIP-39 Seed Phrase)","url":"https://jongsic.github.io/localutil/hd-wallet.html","description":"Derive HD wallet accounts from a BIP-39 seed phrase or raw hex root key, or inspect a public key: addresses, public and private keys. Runs 100% in your browser — keys never leave your machine.","applicationCategory":"DeveloperApplication","operatingSystem":"Any","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"isPartOf":{"@type":"WebSite","name":"LocalUtil","url":"https://jongsic.github.io/localutil/"}}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebApplication","name":"HD Wallet Deriver (BIP-39 Seed Phrase)","url":"https://jongsic.github.io/localutil/hd-wallet.html","description":"Derive HD wallet accounts from a BIP-39 seed phrase, a raw hex root key or an encrypted keystore file, or inspect a public key: addresses, public and private keys. Runs 100% in your browser — keys never leave your machine.","applicationCategory":"DeveloperApplication","operatingSystem":"Any","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"isPartOf":{"@type":"WebSite","name":"LocalUtil","url":"https://jongsic.github.io/localutil/"}}</script>
     <!-- /social -->
     <script src="theme-init.js"></script>
     <link rel="stylesheet" href="styles.css">
@@ -68,6 +68,28 @@
             background: var(--primary-hover);
             color: #fff;
         }
+
+        /* Keystore drop zone */
+        .hd-drop-zone {
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 24px 20px;
+            border: 2px dashed var(--border-strong);
+            border-radius: var(--r-md);
+            background-color: var(--bg-subtle);
+            cursor: pointer;
+            text-align: center;
+            transition: border-color 0.18s, background-color 0.18s;
+        }
+        .hd-drop-zone:hover { border-color: var(--primary); background-color: var(--bg-hover); }
+        .hd-drop-zone.dragover { border-color: var(--primary); background-color: var(--primary-soft); }
+        .hd-drop-icon { color: var(--primary); opacity: 0.85; margin-bottom: 10px; }
+        .hd-drop-main { font-size: 0.92rem; font-weight: 600; color: var(--text-main); margin-bottom: 4px; }
+        .hd-drop-sub { font-size: 0.8rem; color: var(--text-muted); }
+        .hd-file-name { font-family: var(--font-mono); font-size: 0.83rem; color: var(--primary); word-break: break-all; }
 
         /* Inline callouts */
         .hd-callout {
@@ -229,7 +251,7 @@
             <header class="topbar" id="app-topbar">
                 <div class="topbar-title">
                     <h1 id="current-tool-title">Web3 Wallet</h1>
-                    <p id="current-tool-desc" class="topbar-desc">Create a root key from a seed phrase or raw hex, derive HD accounts, or inspect a public key</p>
+                    <p id="current-tool-desc" class="topbar-desc">Create a root key from a seed phrase, raw hex or a keystore file, derive HD accounts, or inspect a public key</p>
                 </div>
             </header>
 
@@ -244,6 +266,7 @@
                             <div class="segmented mb-2" id="hd-mode">
                                 <button type="button" data-mode="seed" class="active">From seed phrase</button>
                                 <button type="button" data-mode="hex">From raw hex</button>
+                                <button type="button" data-mode="keystore">From keystore file</button>
                                 <button type="button" data-mode="pub">From public key</button>
                             </div>
 
@@ -283,6 +306,38 @@
                                     <div class="hd-preset-row">
                                         <button id="btn-hd-hex-random" class="btn btn-small" type="button">🎲 Random 32 bytes</button>
                                     </div>
+                                </div>
+                            </div>
+
+                            <!-- Keystore file panel -->
+                            <div id="hd-panel-keystore" style="display:none;">
+                                <div id="hd-ks-drop" class="hd-drop-zone">
+                                    <div class="hd-drop-icon">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><circle cx="10" cy="15" r="2"/><path d="M12 17v3"/></svg>
+                                    </div>
+                                    <div class="hd-drop-main" id="hd-ks-drop-main">Drop a keystore file here or click to browse</div>
+                                    <div class="hd-drop-sub">Web3 Secret Storage v3 (geth · MyEtherWallet · ethers) · Ethereum pre-sale wallet · Solana CLI keypair</div>
+                                </div>
+                                <input type="file" id="hd-ks-file" accept=".json,.txt,application/json" style="display:none;">
+
+                                <div class="field-group mt-2">
+                                    <label for="hd-ks-json">…or paste the keystore JSON</label>
+                                    <textarea id="hd-ks-json" rows="3" class="mono"
+                                        placeholder='{"version":3,"id":"…","address":"…","crypto":{"cipher":"aes-128-ctr", …}}'></textarea>
+                                    <div class="field-hint">The format is detected as you paste. The file and its password are only ever used here — nothing is uploaded.</div>
+                                    <div class="hd-preset-row">
+                                        <button id="btn-hd-ks-clear" class="btn btn-small" type="button">Clear</button>
+                                    </div>
+                                </div>
+
+                                <div id="hd-ks-detect" class="hd-callout info mt-2" style="display:none;"></div>
+
+                                <div id="hd-ks-unlock-row" class="form-grid mt-2" style="grid-template-columns: 1fr auto; align-items: end; display:none;">
+                                    <div class="field-group">
+                                        <label for="hd-ks-pass">Keystore password</label>
+                                        <input type="password" id="hd-ks-pass" autocomplete="off" placeholder="The password this keystore was encrypted with">
+                                    </div>
+                                    <button id="btn-hd-ks-unlock" class="btn btn-primary">Unlock keystore</button>
                                 </div>
                             </div>
 
@@ -382,6 +437,14 @@
             const passInput = document.getElementById('hd-passphrase');
             const hexInput = document.getElementById('hd-hex');
             const pubInput = document.getElementById('hd-pub');
+            const ksDrop = document.getElementById('hd-ks-drop');
+            const ksDropMain = document.getElementById('hd-ks-drop-main');
+            const ksFileInput = document.getElementById('hd-ks-file');
+            const ksJson = document.getElementById('hd-ks-json');
+            const ksDetect = document.getElementById('hd-ks-detect');
+            const ksUnlockRow = document.getElementById('hd-ks-unlock-row');
+            const ksPass = document.getElementById('hd-ks-pass');
+            const ksUnlockBtn = document.getElementById('btn-hd-ks-unlock');
             const warnEl = document.getElementById('hd-warn');
             const errEl = document.getElementById('hd-error');
             const inputTitle = document.getElementById('hd-input-title');
@@ -410,16 +473,23 @@
             const panels = {
                 seed: document.getElementById('hd-panel-seed'),
                 hex: document.getElementById('hd-panel-hex'),
+                keystore: document.getElementById('hd-panel-keystore'),
                 pub: document.getElementById('hd-panel-pub'),
             };
+            const MODE_HEADINGS = {
+                keystore: ['Open a keystore file',
+                    'Drop or paste a wallet keystore. Its password unlocks the private key — and the seed phrase too, when the file carries one. Everything runs locally in your browser.'],
+                pub: ['Inspect a public key',
+                    'Paste a public key in hex — its type is auto-detected from the length and prefix, and everything publicly derivable from it is shown below.'],
+            };
+            const DEFAULT_HEADING = ['Create a root private key',
+                'Start from a BIP39 seed phrase, or bring a raw 32-byte hex key. Everything runs locally in your browser.'];
             modeButtons.forEach(b => b.addEventListener('click', () => {
                 modeButtons.forEach(x => x.classList.toggle('active', x === b));
                 Object.entries(panels).forEach(([m, el]) => el.style.display = m === b.dataset.mode ? '' : 'none');
-                const pub = b.dataset.mode === 'pub';
-                inputTitle.textContent = pub ? 'Inspect a public key' : 'Create a root private key';
-                inputSubtitle.textContent = pub
-                    ? 'Paste a public key in hex — its type is auto-detected from the length and prefix, and everything publicly derivable from it is shown below.'
-                    : 'Start from a BIP39 seed phrase, or bring a raw 32-byte hex key. Everything runs locally in your browser.';
+                const [title, subtitle] = MODE_HEADINGS[b.dataset.mode] || DEFAULT_HEADING;
+                inputTitle.textContent = title;
+                inputSubtitle.textContent = subtitle;
                 refreshForMode(b.dataset.mode);
             }));
 
@@ -429,6 +499,8 @@
                     handleHexInput(true);
                 } else if (mode === 'pub') {
                     handlePubInput(true);
+                } else if (mode === 'keystore') {
+                    if (ksUnlocked) renderKeystore(); else resetOutput();
                 } else if (mnemonicInput.value.trim()) {
                     generateFromSeed();
                 } else {
@@ -936,6 +1008,356 @@
             document.getElementById('btn-hd-hex-random').addEventListener('click', () => {
                 hexInput.value = ethers.hexlify(randomBytes32());
                 generateFromHex();
+            });
+
+            // --- Keystore file ---------------------------------------------------
+            // A wallet keystore is a key in a lockbox: the file carries the
+            // ciphertext plus every parameter needed to rebuild the unlocking key
+            // from a password. Detection describes the box, unlocking opens it —
+            // and some wallet files are not locked at all, so no password is asked
+            // for those.
+            let ksUnlocked = null; // { info, privateKey, mnemonic, path } once opened
+
+            // An encrypted keystore is validated by its MAC, but a key handed over
+            // in the clear has to be checked here: it must be in the secp256k1 range.
+            function assertUsableKey(pkHex) {
+                try { new ethers.Wallet(pkHex); }
+                catch (e) { throw new Error('Those 32 bytes are not a usable private key — the value must be greater than 0 and below the secp256k1 curve order n.'); }
+            }
+
+            // Values read out of the file end up inside a <code> element in the
+            // step text, which is rendered as HTML — so they are escaped first.
+            function escapeHtml(value) {
+                return String(value).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+            }
+
+            function checksumAddress(value) {
+                try { return ethers.getAddress('0x' + String(value).replace(/^0x/i, '')); }
+                catch (e) { return null; }
+            }
+
+            // Identify the wallet file and describe it. Throws with a
+            // human-readable reason when it is not a format this tool can open.
+            function classifyKeystore(text) {
+                const trimmed = (text || '').trim();
+                if (!trimmed) throw new Error('Drop a keystore file, or paste its JSON.');
+
+                let json;
+                try {
+                    json = JSON.parse(trimmed);
+                } catch (e) {
+                    throw new Error('This is not JSON. A wallet keystore is a JSON file — a binary .p12 / .jks keystore is a different format, and the Keystore Inspector tool reads those.');
+                }
+
+                // Solana CLI keypair (id.json): a bare byte array, never encrypted.
+                if (Array.isArray(json)) {
+                    if ((json.length !== 64 && json.length !== 32) || !json.every(b => Number.isInteger(b) && b >= 0 && b <= 255)) {
+                        throw new Error('A byte-array keypair holds 64 bytes (secret ‖ public) or 32 (secret only), each 0–255 — got ' + json.length + ' values.');
+                    }
+                    const secret = ethers.hexlify(new Uint8Array(json.slice(0, 32)));
+                    assertUsableKey(secret);
+                    return {
+                        kind: 'bytes', text: trimmed, needsPassword: false,
+                        privateKey: secret,
+                        // The trailing 32 bytes claim to be the matching Ed25519
+                        // public key; renderKeystore checks that claim.
+                        declaredEd25519: json.length === 64 ? ethers.hexlify(new Uint8Array(json.slice(32))) : null,
+                        summary: 'Solana CLI keypair — ' + json.length + ' raw bytes, stored unencrypted. No password needed.',
+                        reason: 'A Solana CLI keypair file is a plain JSON array of bytes: the first 32 are the secret, the rest the Ed25519 public key. Nothing is encrypted, so there is no password to ask for.',
+                        rows: [
+                            ['Format', 'Solana CLI keypair (' + json.length + ' bytes)'],
+                            ['Protection', 'none — the key is stored in the clear'],
+                        ],
+                    };
+                }
+
+                // Web3 Secret Storage v3 — what geth, MyEtherWallet and ethers write.
+                if (ethers.isKeystoreJson(trimmed)) {
+                    const c = json.crypto || json.Crypto;
+                    const kp = c.kdfparams || {};
+                    const kdf = String(c.kdf || '').toLowerCase();
+                    const kdfDesc = kdf === 'scrypt'
+                        ? 'scrypt (N=' + kp.n + ', r=' + kp.r + ', p=' + kp.p + ', dklen=' + kp.dklen + ')'
+                        : kdf === 'pbkdf2'
+                            ? 'PBKDF2-' + String(kp.prf || 'hmac-sha256').replace('hmac-', 'HMAC-').toUpperCase() + ' (c=' + kp.c + ', dklen=' + kp.dklen + ')'
+                            : (c.kdf || 'unknown');
+                    const address = json.address ? checksumAddress(json.address) : null;
+                    const xe = json['x-ethers'] || {};
+                    const hasMnemonic = !!xe.mnemonicCiphertext;
+                    const rows = [
+                        ['Format', 'Web3 Secret Storage, version ' + json.version],
+                        ['Key derivation', kdfDesc],
+                        ['Cipher', c.cipher || 'unknown'],
+                    ];
+                    if (address) rows.push(['Address in file', address]);
+                    if (json.id) rows.push(['UUID', json.id]);
+                    if (hasMnemonic) rows.push(['Also inside', 'the BIP39 mnemonic, encrypted with the same password (path ' + (xe.path || 'm') + ')']);
+                    return {
+                        kind: 'v3', text: trimmed, needsPassword: true, address, hasMnemonic,
+                        cipher: c.cipher || 'the stored cipher',
+                        kdfDesc,
+                        summary: 'Web3 Secret Storage v' + json.version + ' · ' + kdfDesc + ' · ' + (c.cipher || 'unknown cipher')
+                            + (hasMnemonic ? ' · carries an encrypted seed phrase' : '') + ' — enter the password to unlock it.',
+                        reason: 'A geth / MyEtherWallet / ethers keystore. The private key is encrypted, and every parameter needed to rebuild the unlocking key from your password sits in the file beside it.',
+                        rows,
+                    };
+                }
+
+                // 2015 Ethereum pre-sale wallet.
+                if (ethers.isCrowdsaleJson(trimmed)) {
+                    const address = json.ethaddr ? checksumAddress(json.ethaddr) : null;
+                    const rows = [
+                        ['Format', 'Ethereum pre-sale wallet (crowdsale JSON)'],
+                        ['Key derivation', 'PBKDF2-HMAC-SHA256 (c=2000)'],
+                        ['Cipher', 'aes-128-cbc'],
+                    ];
+                    if (address) rows.push(['Address in file', address]);
+                    return {
+                        kind: 'crowdsale', text: trimmed, needsPassword: true, address, hasMnemonic: false,
+                        cipher: 'aes-128-cbc',
+                        kdfDesc: 'PBKDF2-HMAC-SHA256 (c=2000)',
+                        summary: 'Ethereum pre-sale wallet — encrypted; enter the password to unlock it.',
+                        reason: 'The 2015 Ethereum pre-sale format: the password unlocks an AES-128-CBC blob, and the private key is the keccak256 hash of what comes out.',
+                        rows,
+                    };
+                }
+
+                // Unencrypted export: a JSON object that simply holds the key.
+                const bare = [json.privateKey, json.private_key, json.privatekey].find(v => typeof v === 'string');
+                if (bare) {
+                    let pk;
+                    try { pk = parseHexKey(bare); }
+                    catch (e) { throw new Error('The privateKey field is not a 32-byte hex key: ' + e.message); }
+                    assertUsableKey(pk);
+                    const address = json.address ? checksumAddress(json.address) : null;
+                    const rows = [
+                        ['Format', 'wallet JSON with a plain privateKey field'],
+                        ['Protection', 'none — the key is stored in the clear'],
+                    ];
+                    if (address) rows.push(['Address in file', address]);
+                    return {
+                        kind: 'plain', text: trimmed, needsPassword: false, privateKey: pk, address,
+                        summary: 'Unencrypted wallet JSON — the private key is stored in the clear. No password needed.',
+                        reason: 'This file holds the private key as plain text. Anyone who can read the file has the key.',
+                        rows,
+                    };
+                }
+
+                if (json && (json.crypto || json.Crypto)) {
+                    throw new Error('This is a keystore, but not a version-3 one (version ' + json.version + '). Only Web3 Secret Storage v3 — what geth, MyEtherWallet and ethers write — can be opened here.');
+                }
+                throw new Error('Unrecognized wallet JSON: no v3 "crypto" section, no "privateKey" field, and not a byte-array keypair.');
+            }
+
+            // Show what the file is, and ask for a password only when one is needed.
+            // Typing is quiet: a half-pasted keystore is not an error yet.
+            function handleKeystoreInput(commit) {
+                ksUnlocked = null;
+                if (!ksJson.value.trim()) {
+                    ksDetect.style.display = 'none';
+                    ksUnlockRow.style.display = 'none';
+                    resetOutput();
+                    return;
+                }
+
+                let info;
+                try {
+                    info = classifyKeystore(ksJson.value);
+                } catch (e) {
+                    ksDetect.style.display = 'none';
+                    ksUnlockRow.style.display = 'none';
+                    resetOutput();
+                    if (commit) showErr(e.message || String(e));
+                    return;
+                }
+
+                ksDetect.textContent = info.summary;
+                ksDetect.style.display = 'block';
+
+                if (!info.needsPassword) {
+                    ksUnlockRow.style.display = 'none';
+                    ksUnlocked = { info: info, privateKey: info.privateKey, mnemonic: null, path: null };
+                    renderKeystore();
+                    return;
+                }
+                ksUnlockRow.style.display = '';
+                resetOutput();
+                if (commit && !ksPass.value) ksPass.focus();
+            }
+
+            async function unlockKeystore() {
+                let info;
+                try {
+                    info = classifyKeystore(ksJson.value);
+                } catch (e) {
+                    resetOutput();
+                    showErr(e.message || String(e));
+                    return;
+                }
+                if (!info.needsPassword) { handleKeystoreInput(true); return; }
+                if (!ksPass.value) {
+                    resetOutput();
+                    showErr('This keystore is encrypted — enter its password to unlock it.');
+                    return;
+                }
+
+                resetOutput();
+                ksUnlockBtn.disabled = true;
+                ksUnlockBtn.textContent = 'Unlocking…';
+                try {
+                    // scrypt at the parameters real wallets use takes a moment;
+                    // the progress callback keeps the button honest about it.
+                    const wallet = await ethers.Wallet.fromEncryptedJson(info.text, ksPass.value, pct => {
+                        ksUnlockBtn.textContent = 'Unlocking… ' + Math.round(pct * 100) + '%';
+                    });
+                    ksUnlocked = {
+                        info: info,
+                        privateKey: wallet.privateKey,
+                        mnemonic: wallet.mnemonic ? wallet.mnemonic.phrase : null,
+                        path: wallet.path || null,
+                    };
+                } catch (e) {
+                    const msg = (e && (e.shortMessage || e.message)) || String(e);
+                    ksUnlocked = null;
+                    resetOutput();
+                    showErr(/incorrect password/i.test(msg)
+                        ? 'Incorrect password — the MAC check failed, so nothing was decrypted.'
+                        : 'Could not unlock the keystore: ' + msg);
+                    return;
+                } finally {
+                    ksUnlockBtn.disabled = false;
+                    ksUnlockBtn.textContent = 'Unlock keystore';
+                }
+                renderKeystore();
+            }
+
+            function renderKeystore() {
+                resetOutput();
+                if (!ksUnlocked) return;
+                const { info, privateKey, mnemonic, path } = ksUnlocked;
+
+                const steps = [{
+                    title: 'Read the keystore',
+                    desc: info.reason,
+                    rows: info.rows,
+                }];
+                if (info.needsPassword) {
+                    steps.push({
+                        title: 'Stretch the password into a key-encryption key',
+                        desc: '<code>' + escapeHtml(info.kdfDesc) + '</code> turns the password into 32 bytes: the first 16 are the AES key, the last 16 the MAC key. The slow KDF is what makes guessing the password expensive.',
+                    });
+                    steps.push({
+                        title: 'Check the MAC, then decrypt',
+                        desc: '<code>keccak256(derivedKey[16:32] ‖ ciphertext)</code> must match the stored <code>mac</code> — that is why a wrong password fails loudly instead of handing back plausible garbage. The ciphertext is then decrypted with <code>' + escapeHtml(info.cipher) + '</code>.',
+                        rows: [[mnemonic ? 'Account private key' : 'Private key', secretSpan(privateKey)]],
+                    });
+                } else {
+                    steps.push({
+                        title: 'Read the key bytes',
+                        desc: 'Nothing to decrypt — the file hands over the key as it is.',
+                        rows: [['Private key', secretSpan(privateKey)]],
+                    });
+                }
+
+                const derivedAddress = ethers.computeAddress(privateKey);
+                if (info.address && info.address !== derivedAddress) {
+                    showWarn('⚠ The address in the file (' + info.address + ') is not the address of the key that came out (' + derivedAddress + '). The file was still unlocked — but it does not describe its own key.');
+                } else if (info.address) {
+                    steps[steps.length - 1].rows = (steps[steps.length - 1].rows || []).concat([
+                        ['Address check', derivedAddress + ' — matches the address in the file ✓'],
+                    ]);
+                }
+
+                if (info.declaredEd25519) {
+                    const edPub = ed25519Pub(privateKey);
+                    const actual = edPub ? ethers.hexlify(edPub) : null;
+                    if (actual && actual !== info.declaredEd25519) {
+                        showWarn('⚠ The public half of this keypair file (' + info.declaredEd25519.slice(0, 18) + '…) is not the Ed25519 public key of its secret half. The file contradicts itself — the addresses below come from the secret.');
+                    }
+                }
+
+                if (mnemonic) {
+                    steps.push({
+                        title: 'Rebuild the whole tree from the recovered mnemonic',
+                        desc: 'This keystore also carries the seed phrase it was made from, encrypted with the same password. Recovering it brings back the entire BIP32 tree — not just the single account the file was written for.',
+                        rows: [
+                            ['Mnemonic (' + mnemonic.split(' ').length + ' words)', secretSpan(mnemonic)],
+                            ['Account path in the file', path || 'm'],
+                        ],
+                    });
+                }
+
+                renderSteps(mnemonic
+                    ? 'Keystore → password → private key → the seed phrase behind it.'
+                    : 'Keystore → password → private key.',
+                    steps, 'How this key came out of the keystore');
+
+                if (mnemonic) {
+                    // fromPhrase defaults to the first Ethereum account, so ask for
+                    // the master node explicitly — the tree starts at m.
+                    rootNode = ethers.HDNodeWallet.fromPhrase(mnemonic, '', 'm');
+                    summaryEl.appendChild(rootKeyCard(rootNode.privateKey));
+                    summaryEl.appendChild(summaryCard('The keystore account (' + (path || 'm') + ')', [
+                        ['Address', derivedAddress],
+                        ['Public key (compressed)', ethers.SigningKey.computePublicKey(privateKey, true)],
+                        ['Private key (hex)', secretSpan(privateKey)],
+                        ['Private key (WIF)', secretSpan(btcWIF(privateKey))],
+                    ], 'The one account this keystore was written for. The root above is the master key of the recovered tree, and this account sits inside it at the path in the title.'));
+                    if (path && path.lastIndexOf('/') > 0) {
+                        pathInput.value = path.slice(0, path.lastIndexOf('/'));
+                        syncPresetActive();
+                    }
+                } else {
+                    rootNode = ethers.HDNodeWallet.fromSeed(privateKey);
+                    summaryEl.appendChild(rootKeyCard(privateKey));
+                    deriveNote.textContent = 'This file holds a single private key and no chain code, so it cannot be a BIP32 parent by itself. The accounts below are derived by using those 32 bytes as a BIP32 seed instead (so the master key of this tree differs from the key above).';
+                    deriveNote.style.display = 'block';
+                }
+
+                summaryEl.style.display = 'flex';
+                derivePanel.style.display = 'block';
+                derive();
+            }
+
+            function loadKeystoreFile(file) {
+                if (file.size > 1024 * 1024) {
+                    resetOutput();
+                    showErr('That file is ' + Math.round(file.size / 1024) + ' KB — far larger than any wallet keystore. Check you picked the right file.');
+                    return;
+                }
+                const reader = new FileReader();
+                reader.onload = () => {
+                    ksJson.value = String(reader.result || '');
+                    ksDropMain.textContent = '';
+                    const name = document.createElement('span');
+                    name.className = 'hd-file-name';
+                    name.textContent = file.name + '  (' + file.size.toLocaleString() + ' bytes)';
+                    ksDropMain.appendChild(name);
+                    handleKeystoreInput(true);
+                };
+                reader.onerror = () => { resetOutput(); showErr('Could not read the file.'); };
+                reader.readAsText(file);
+            }
+
+            ksDrop.addEventListener('click', () => ksFileInput.click());
+            ksFileInput.addEventListener('change', (e) => { if (e.target.files && e.target.files[0]) loadKeystoreFile(e.target.files[0]); });
+            ksDrop.addEventListener('dragover', (e) => { e.preventDefault(); ksDrop.classList.add('dragover'); });
+            ksDrop.addEventListener('dragleave', () => ksDrop.classList.remove('dragover'));
+            ksDrop.addEventListener('drop', (e) => {
+                e.preventDefault();
+                ksDrop.classList.remove('dragover');
+                if (e.dataTransfer.files && e.dataTransfer.files[0]) loadKeystoreFile(e.dataTransfer.files[0]);
+            });
+            ksJson.addEventListener('input', () => handleKeystoreInput(false));
+            ksJson.addEventListener('change', () => handleKeystoreInput(true));
+            ksUnlockBtn.addEventListener('click', unlockKeystore);
+            ksPass.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !ksUnlockBtn.disabled) unlockKeystore(); });
+            document.getElementById('btn-hd-ks-clear').addEventListener('click', () => {
+                ksJson.value = '';
+                ksPass.value = '';
+                ksFileInput.value = '';
+                ksDropMain.textContent = 'Drop a keystore file here or click to browse';
+                handleKeystoreInput(false);
             });
 
             // --- Public key inspection ------------------------------------------
