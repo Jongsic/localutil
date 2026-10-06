@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
+    <title>Clipboard Paste Board — Save Screenshots &amp; Text — LocalUtil</title>
+    <!-- social / favicon -->
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebApplication","name":"Clipboard Paste Board — Save Screenshots & Text","url":"https://jongsic.github.io/localutil/paste-board.html","description":"Paste screenshots, copied images and text into a list, view images at their original size, copy them back or download each as a file. Kept only while the tab is open. Runs 100% in your browser — nothing is uploaded.","applicationCategory":"DeveloperApplication","operatingSystem":"Any","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"isPartOf":{"@type":"WebSite","name":"LocalUtil","url":"https://jongsic.github.io/localutil/"}}</script>
+    <!-- /social -->
+    <script src="theme-init.js"></script>
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        .pb-intake {
+            display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+            padding: 16px 18px;
+            border: 2px dashed var(--border-strong);
+            border-radius: var(--r-md);
+            background-color: var(--bg-subtle);
+            transition: border-color 0.18s, background-color 0.18s;
+        }
+        .pb-intake.dragover { border-color: var(--primary); background-color: var(--primary-soft); }
+        .pb-intake-text { flex: 1; min-width: 200px; }
+        .pb-intake-main { font-size: 0.92rem; font-weight: 600; color: var(--text-main); margin-bottom: 4px; }
+        .pb-intake-sub { font-size: 0.8rem; color: var(--text-muted); }
+        .pb-kbd {
+            font-family: var(--font-mono); font-size: 0.78rem;
+            padding: 1px 6px; border: 1px solid var(--border-strong); border-bottom-width: 2px;
+            border-radius: var(--r-xs); background: var(--bg-elevated);
+        }
+
+        .pb-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+        .pb-item {
+            display: flex; align-items: flex-start; gap: 14px;
+            padding: 12px; border: 1px solid var(--border-color); border-radius: var(--r-md);
+            background: var(--bg-elevated);
+        }
+        .pb-item.fresh { animation: pb-flash 1.2s ease-out; }
+        @keyframes pb-flash { from { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-ring); } }
+
+        /* Checkerboard behind the thumbnail, so transparent pixels read as transparent */
+        .pb-thumb {
+            width: 120px; height: 90px; flex-shrink: 0; padding: 0;
+            border: 1px solid var(--border-color); border-radius: var(--r-sm);
+            background: var(--bg-subtle);
+            background-image: conic-gradient(var(--bg-hover) 25%, transparent 0 50%, var(--bg-hover) 0 75%, transparent 0);
+            background-size: 14px 14px;
+            overflow: hidden; cursor: zoom-in;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .pb-thumb img { max-width: 100%; max-height: 100%; object-fit: contain; display: block; }
+        .pb-thumb:hover { border-color: var(--primary); }
+        .pb-thumb.text {
+            cursor: pointer; align-items: flex-start; justify-content: flex-start;
+            background-image: none; text-align: left;
+        }
+        .pb-thumb.text pre {
+            margin: 0; padding: 7px 8px; width: 100%; height: 100%; overflow: hidden;
+            font-family: var(--font-mono); font-size: 0.62rem; line-height: 1.35;
+            color: var(--text-muted); white-space: pre-wrap; word-break: break-all;
+        }
+
+        .pb-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+        .pb-meta { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+        .pb-kind {
+            font-size: 0.7rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase;
+            padding: 2px 7px; border-radius: var(--r-pill);
+            background: var(--primary-soft); color: var(--active-text);
+        }
+        .pb-kind.text { background: var(--bg-subtle); color: var(--text-muted); }
+        .pb-detail { font-size: 0.8rem; color: var(--text-muted); }
+        .pb-name { font-family: var(--font-mono); font-size: 0.78rem; color: var(--text-main); overflow-wrap: anywhere; }
+        .pb-snippet {
+            margin: 0; font-family: var(--font-mono); font-size: 0.78rem; line-height: 1.45;
+            color: var(--text-main); white-space: pre-wrap; word-break: break-word;
+            max-height: 4.4em; overflow: hidden;
+        }
+        .pb-actions { display: flex; gap: 6px; flex-shrink: 0; }
+        .pb-empty { padding: 26px 8px; text-align: center; color: var(--text-muted); font-size: 0.86rem; }
+
+        @media (max-width: 640px) {
+            .pb-item { flex-wrap: wrap; }
+            .pb-thumb { width: 96px; height: 72px; }
+            .pb-actions { width: 100%; justify-content: flex-end; }
+        }
+
+        /* Viewer: the image at its own pixel size, scrolling when it is bigger than the window */
+        .pb-viewer {
+            position: fixed; inset: 0; z-index: 1000;
+            display: none; flex-direction: column;
+            background: rgba(4, 8, 16, 0.94);
+            backdrop-filter: blur(6px);
+        }
+        .pb-viewer.show { display: flex; }
+        .pb-viewer-bar {
+            display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+            padding: 10px 14px; color: #e8ecf3; font-size: 0.82rem;
+            background: #0b111d; border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        }
+        .pb-viewer-bar .pb-viewer-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .pb-viewer-stage { flex: 1; min-height: 0; overflow: auto; display: flex; padding: 14px; }
+        /* margin:auto centres the content while it fits and lets it scroll from the edge once it does not */
+        .pb-viewer-stage > * { margin: auto; flex-shrink: 0; }
+        .pb-viewer-stage img {
+            display: block;
+            background-image: conic-gradient(#ccc 25%, #fff 0 50%, #ccc 0 75%, #fff 0);
+            background-size: 16px 16px;
+        }
+        .pb-viewer-stage.fit img { max-width: 100%; max-height: 100%; object-fit: contain; }
+        .pb-viewer-stage pre {
+            margin: auto; max-width: min(100%, 980px); width: 100%;
+            padding: 16px 18px; border-radius: var(--r-md);
+            background: var(--bg-content); color: var(--text-main);
+            font-family: var(--font-mono); font-size: 0.84rem; line-height: 1.5;
+            white-space: pre-wrap; word-break: break-word;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="app-container">
+        <aside class="sidebar" id="app-sidebar"></aside>
+
+        <main class="main-content">
+            <header class="topbar" id="app-topbar">
+                <div class="topbar-title">
+                    <h1 id="current-tool-title">Paste Board</h1>
+                    <p id="current-tool-desc" class="topbar-desc">Paste screenshots, images and text into a list for this tab only — view, copy back or download each one</p>
+                </div>
+            </header>
+
+            <div class="tools-container">
+                <section id="tool-paste-board" class="tool-section active">
+                    <div class="tool-shell">
+                        <div id="pb-intake" class="pb-intake">
+                            <div class="pb-intake-text">
+                                <div class="pb-intake-main">Paste anywhere on this page <span class="pb-kbd" id="pb-shortcut" data-i18n-skip>Ctrl+V</span></div>
+                                <div class="pb-intake-sub">Screenshots, copied images and text pile up below — or drop files here. Kept only while this tab is open; nothing is stored or uploaded.</div>
+                            </div>
+                            <button id="pb-paste" class="btn btn-primary">Paste from clipboard</button>
+                        </div>
+
+                        <div class="card">
+                            <div class="log-header mb-2">
+                                <div>
+                                    <div class="card-title" style="margin:0;">Pasted items</div>
+                                    <div class="field-hint" id="pb-count"></div>
+                                </div>
+                                <button id="pb-clear" class="btn btn-small" disabled>Clear all</button>
+                            </div>
+                            <ul id="pb-list" class="pb-list"></ul>
+                            <div id="pb-empty" class="pb-empty">Nothing pasted yet.</div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </div>
+
+    <div id="pb-viewer" class="pb-viewer" role="dialog" aria-modal="true" aria-label="Viewer">
+        <div class="pb-viewer-bar">
+            <span class="pb-viewer-title" id="pb-viewer-title" data-i18n-skip></span>
+            <button id="pb-viewer-zoom" class="btn btn-small">Fit to window</button>
+            <button id="pb-viewer-copy" class="btn btn-small">Copy</button>
+            <button id="pb-viewer-download" class="btn btn-small">Download</button>
+            <button id="pb-viewer-close" class="btn btn-small" aria-label="Close">Close</button>
+        </div>
+        <div id="pb-viewer-stage" class="pb-viewer-stage"></div>
+    </div>
+
+    <div id="toast" class="toast">Copied to clipboard</div>
+
+    <script src="app.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const $ = id => document.getElementById(id);
+            const list = $('pb-list');
+            const viewer = $('pb-viewer');
+            const stage = $('pb-viewer-stage');
+
+            // Everything lives in this array and in blob: URLs — gone when the tab closes.
+            const items = [];
+            let seq = 0;
+            let viewing = null;
+
+            if (/Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent)) $('pb-shortcut').textContent = '⌘V';
+
+            const EXT = {
+                'image/png': 'png', 'image/jpeg': 'jpg', 'image/gif': 'gif', 'image/webp': 'webp',
+                'image/svg+xml': 'svg', 'image/bmp': 'bmp', 'image/avif': 'avif', 'image/tiff': 'tiff',
+            };
+
+            const pad = n => String(n).padStart(2, '0');
+            function stamp(d) {
+                return d.getFullYear() + pad(d.getMonth() + 1) + pad(d.getDate()) + '-' +
+                    pad(d.getHours()) + pad(d.getMinutes()) + pad(d.getSeconds());
+            }
+            function fmtBytes(n) {
+                if (n < 1024) return n + ' B';
+                if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB';
+                return (n / 1024 / 1024).toFixed(2) + ' MB';
+            }
+            function fmtTime(d) { return pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds()); }
+
+            // A pasted screenshot arrives as a generic "image.png"; give it a name that will not
+            // collide in the Downloads folder. A dropped file keeps the name it already has.
+            function fileName(ext, at, n) { return 'paste-' + stamp(at) + '-' + n + '.' + ext; }
+
+            function addImage(blob, name) {
+                const at = new Date();
+                const n = ++seq;
+                const ext = EXT[blob.type] || (blob.type.split('/')[1] || 'bin').replace(/[^a-z0-9]/gi, '');
+                const item = {
+                    id: n, kind: 'image', at, blob, url: URL.createObjectURL(blob),
+                    name: name || fileName(ext, at, n), width: 0, height: 0,
+                };
+                items.unshift(item);
+                render(item.id);
+                const probe = new Image();
+                probe.onload = () => {
+                    item.width = probe.naturalWidth;
+                    item.height = probe.naturalHeight;
+                    const el = list.querySelector('[data-id="' + item.id + '"] .pb-detail');
+                    if (el) el.textContent = detail(item);
+                };
+                probe.src = item.url;
+            }
+
+            function addText(text, name) {
+                if (!text) return;
+                const at = new Date();
+                const n = ++seq;
+                const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+                items.unshift({
+                    id: n, kind: 'text', at, text, blob, url: URL.createObjectURL(blob),
+                    name: name || fileName('txt', at, n),
+                });
+                render(n);
+            }
+
+            function addFile(file) {
+                const base = file.name && file.name !== 'image.png' ? file.name : null;
+                if (file.type.startsWith('image/')) {
+                    addImage(file, base);
+                } else if (file.type.startsWith('text/') || /\.(txt|md|json|csv|log)$/i.test(file.name)) {
+                    file.text().then(text => addText(text, base));
+                } else {
+                    showToast(t('Only images and text are kept'), true);
+                }
+            }
+
+            function detail(item) {
+                if (item.kind === 'text') {
+                    const lines = item.text.split('\n').length;
+                    return item.text.length.toLocaleString() + ' ' + t('chars') + ' · ' +
+                        lines.toLocaleString() + ' ' + t(lines === 1 ? 'line' : 'lines') + ' · ' + fmtTime(item.at);
+                }
+                const dims = item.width ? item.width + ' × ' + item.height + ' · ' : '';
+                return dims + fmtBytes(item.blob.size) + ' · ' + fmtTime(item.at);
+            }
+
+            function actionBtn(label, action, onClick, danger) {
+                const b = document.createElement('button');
+                b.className = 'btn btn-small' + (danger ? ' btn-danger' : '');
+                b.type = 'button';
+                b.textContent = label;
+                b.dataset.action = action;
+                b.addEventListener('click', onClick);
+                return b;
+            }
+
+            function render(freshId) {
+                list.innerHTML = '';
+                for (const item of items) {
+                    const li = document.createElement('li');
+                    li.className = 'pb-item' + (item.id === freshId ? ' fresh' : '');
+                    li.dataset.id = item.id;
+                    li.dataset.kind = item.kind;
+
+                    const thumb = document.createElement('button');
+                    thumb.type = 'button';
+                    thumb.className = 'pb-thumb' + (item.kind === 'text' ? ' text' : '');
+                    thumb.title = t(item.kind === 'text' ? 'Show full text' : 'View at original size');
+                    if (item.kind === 'image') {
+                        const img = document.createElement('img');
+                        img.src = item.url;
+                        img.alt = item.name;
+                        thumb.appendChild(img);
+                    } else {
+                        const pre = document.createElement('pre');
+                        pre.textContent = item.text.slice(0, 400);
+                        thumb.appendChild(pre);
+                    }
+                    thumb.addEventListener('click', () => openViewer(item));
+
+                    const body = document.createElement('div');
+                    body.className = 'pb-body';
+                    const meta = document.createElement('div');
+                    meta.className = 'pb-meta';
+                    const kind = document.createElement('span');
+                    kind.className = 'pb-kind' + (item.kind === 'text' ? ' text' : '');
+                    kind.textContent = item.kind === 'text' ? 'Text' : (EXT[item.blob.type] || 'image').toUpperCase();
+                    const det = document.createElement('span');
+                    det.className = 'pb-detail';
+                    det.textContent = detail(item);
+                    meta.append(kind, det);
+                    const name = document.createElement('div');
+                    name.className = 'pb-name';
+                    name.dataset.i18nSkip = '';
+                    name.textContent = item.name;
+                    body.append(meta, name);
+                    if (item.kind === 'text') {
+                        const snip = document.createElement('pre');
+                        snip.className = 'pb-snippet';
+                        snip.textContent = item.text.slice(0, 600);
+                        body.appendChild(snip);
+                    }
+
+                    const actions = document.createElement('div');
+                    actions.className = 'pb-actions';
+                    actions.append(
+                        actionBtn('Copy', 'copy', () => copyItem(item)),
+                        actionBtn('Download', 'download', () => download(item)),
+                        actionBtn('Delete', 'delete', () => remove(item), true),
+                    );
+
+                    li.append(thumb, body, actions);
+                    list.appendChild(li);
+                }
+                const imgs = items.filter(i => i.kind === 'image').length;
+                const texts = items.length - imgs;
+                $('pb-count').textContent = items.length
+                    ? imgs + ' ' + t(imgs === 1 ? 'image' : 'images') + ' · ' + texts + ' ' + t(texts === 1 ? 'text' : 'texts')
+                    : t('Kept in memory only');
+                $('pb-empty').style.display = items.length ? 'none' : 'block';
+                $('pb-clear').disabled = !items.length;
+            }
+
+            function remove(item) {
+                const i = items.indexOf(item);
+                if (i < 0) return;
+                items.splice(i, 1);
+                URL.revokeObjectURL(item.url);
+                if (viewing === item) closeViewer();
+                render();
+            }
+
+            function download(item) {
+                const a = document.createElement('a');
+                a.href = item.url;
+                a.download = item.name;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+            }
+
+            // The async clipboard API only reliably takes PNG, so other formats are redrawn first.
+            function asPng(item) {
+                if (item.blob.type === 'image/png') return Promise.resolve(item.blob);
+                return new Promise((resolve, reject) => {
+                    const img = new Image();
+                    img.onload = () => {
+                        const c = document.createElement('canvas');
+                        c.width = img.naturalWidth;
+                        c.height = img.naturalHeight;
+                        c.getContext('2d').drawImage(img, 0, 0);
+                        c.toBlob(b => b ? resolve(b) : reject(new Error('encode failed')), 'image/png');
+                    };
+                    img.onerror = () => reject(new Error('decode failed'));
+                    img.src = item.url;
+                });
+            }
+
+            async function copyItem(item) {
+                try {
+                    if (item.kind === 'text') {
+                        await navigator.clipboard.writeText(item.text);
+                    } else {
+                        // Hand ClipboardItem the promise so Safari still counts this as part of the click.
+                        await navigator.clipboard.write([new ClipboardItem({ 'image/png': asPng(item) })]);
+                    }
+                    showToast(t(item.kind === 'text' ? 'Text copied' : 'Image copied'));
+                } catch (e) {
+                    showToast(t('Copy failed'), true);
+                }
+            }
+
+            // --- Intake -------------------------------------------------------------
+            function takeTransfer(dt) {
+                const files = [...(dt.files || [])];
+                if (files.length) { files.forEach(addFile); return true; }
+                const text = dt.getData('text/plain');
+                if (text) { addText(text); return true; }
+                return false;
+            }
+
+            document.addEventListener('paste', e => {
+                // Typing into the tool search or any other field keeps the normal paste.
+                const el = e.target;
+                if (el && el.closest && el.closest('input, textarea, select, [contenteditable]')) return;
+                if (!e.clipboardData) return;
+                // An image copied from a web page also carries text/html; the image is what is wanted.
+                const files = [...e.clipboardData.files];
+                if (files.length) {
+                    e.preventDefault();
+                    files.forEach(addFile);
+                    return;
+                }
+                const text = e.clipboardData.getData('text/plain');
+                if (text) {
+                    e.preventDefault();
+                    addText(text);
+                } else {
+                    showToast(t('The clipboard holds no image or text'), true);
+                }
+            });
+
+            $('pb-paste').addEventListener('click', async () => {
+                if (!navigator.clipboard || !navigator.clipboard.read) {
+                    showToast(t('This browser cannot read the clipboard from a button — use the keyboard shortcut'), true);
+                    return;
+                }
+                try {
+                    const entries = await navigator.clipboard.read();
+                    let took = false;
+                    for (const entry of entries) {
+                        const imageType = entry.types.find(type => type.startsWith('image/'));
+                        if (imageType) {
+                            addImage(await entry.getType(imageType));
+                            took = true;
+                        } else if (entry.types.includes('text/plain')) {
+                            const text = await (await entry.getType('text/plain')).text();
+                            if (text) { addText(text); took = true; }
+                        }
+                    }
+                    if (!took) showToast(t('The clipboard holds no image or text'), true);
+                } catch (e) {
+                    showToast(t('Clipboard access was denied — use the keyboard shortcut'), true);
+                }
+            });
+
+            const intake = $('pb-intake');
+            let dragDepth = 0;
+            document.addEventListener('dragenter', e => { e.preventDefault(); dragDepth++; intake.classList.add('dragover'); });
+            document.addEventListener('dragleave', () => { if (--dragDepth <= 0) { dragDepth = 0; intake.classList.remove('dragover'); } });
+            document.addEventListener('dragover', e => e.preventDefault());
+            document.addEventListener('drop', e => {
+                e.preventDefault();
+                dragDepth = 0;
+                intake.classList.remove('dragover');
+                if (e.dataTransfer) takeTransfer(e.dataTransfer);
+            });
+
+            $('pb-clear').addEventListener('click', () => {
+                closeViewer();
+                items.forEach(i => URL.revokeObjectURL(i.url));
+                items.length = 0;
+                render();
+            });
+
+            // --- Viewer -------------------------------------------------------------
+            function openViewer(item) {
+                viewing = item;
+                stage.innerHTML = '';
+                stage.classList.remove('fit');
+                $('pb-viewer-title').textContent = item.name +
+                    (item.kind === 'image' && item.width ? '  ·  ' + item.width + ' × ' + item.height : '');
+                if (item.kind === 'image') {
+                    const img = document.createElement('img');
+                    img.src = item.url;
+                    img.alt = item.name;
+                    // One image pixel per CSS pixel: the original size, whatever the screen's density.
+                    img.onload = () => {
+                        img.style.width = img.naturalWidth + 'px';
+                        img.style.height = img.naturalHeight + 'px';
+                    };
+                    img.addEventListener('click', toggleFit);
+                    stage.appendChild(img);
+                    $('pb-viewer-zoom').style.display = '';
+                    $('pb-viewer-zoom').textContent = t('Fit to window');
+                } else {
+                    const pre = document.createElement('pre');
+                    pre.textContent = item.text;
+                    stage.appendChild(pre);
+                    $('pb-viewer-zoom').style.display = 'none';
+                }
+                viewer.classList.add('show');
+                $('pb-viewer-close').focus();
+            }
+
+            function toggleFit() {
+                const img = stage.querySelector('img');
+                if (!img) return;
+                const fit = stage.classList.toggle('fit');
+                img.style.width = fit ? '' : img.naturalWidth + 'px';
+                img.style.height = fit ? '' : img.naturalHeight + 'px';
+                $('pb-viewer-zoom').textContent = t(fit ? 'Original size' : 'Fit to window');
+            }
+
+            function closeViewer() {
+                viewing = null;
+                viewer.classList.remove('show');
+                stage.innerHTML = '';
+            }
+
+            $('pb-viewer-zoom').addEventListener('click', toggleFit);
+            $('pb-viewer-copy').addEventListener('click', () => viewing && copyItem(viewing));
+            $('pb-viewer-download').addEventListener('click', () => viewing && download(viewing));
+            $('pb-viewer-close').addEventListener('click', closeViewer);
+            stage.addEventListener('click', e => { if (e.target === stage) closeViewer(); });
+            document.addEventListener('keydown', e => {
+                if (e.key === 'Escape' && viewer.classList.contains('show')) closeViewer();
+            });
+
+            render();
+        });
+    </script>
+</body>
+
+</html>

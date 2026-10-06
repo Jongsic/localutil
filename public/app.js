@@ -46,6 +46,7 @@ const ICONS = {
     iam: '<path d="M12 2 4 5v6c0 4.9 3.4 8.4 8 10 4.6-1.6 8-5.1 8-10V5z"/><path d="M12 3.2v17.6"/><line x1="8.4" y1="9.4" x2="8.41" y2="9.4"/><line x1="8.4" y1="13" x2="8.41" y2="13"/><line x1="15.6" y1="9.4" x2="15.61" y2="9.4"/>',
     iamnorm: '<path d="M12 2 4 5v6c0 4.9 3.4 8.4 8 10 4.6-1.6 8-5.1 8-10V5z"/><path d="M8 9h8"/><path d="M8 12.4h8"/><path d="M10 15.8h4"/>',
     mtls: '<circle cx="12" cy="8.5" r="5.5"/><path d="m9.6 8.6 1.7 1.7 3.3-3.4"/><polyline points="8.4 13.4 8.4 22 12 19.7 15.6 22 15.6 13.4"/>',
+    pasteboard: '<rect x="5" y="4" width="14" height="18" rx="2"/><path d="M9 4V3a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v1"/><line x1="9" y1="10" x2="15" y2="10"/><line x1="9" y1="14" x2="15" y2="14"/><line x1="9" y1="18" x2="12" y2="18"/>',
     pwacheck: '<rect x="7" y="2" width="10" height="20" rx="2"/><path d="M12 8v5"/><polyline points="9.5 11 12 13.5 14.5 11"/><line x1="10.5" y1="18" x2="13.5" y2="18"/>',
     // chrome
     search: '<circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>',
@@ -102,6 +103,7 @@ const TOOLS = [
     { file: 'image-resize.html', name: 'Image Resizer', desc: 'Place an image on a custom-sized canvas (cm/inch/px + dpi) and export it', icon: 'resize', cat: 'Images' },
     { file: 'svg-to-image.html', name: 'SVG to Image', desc: 'Rasterize SVG markup or files to PNG / JPEG — copy or download', icon: 'svgimage', cat: 'Images' },
     { file: 'image-base64.html', name: 'Image to Base64', desc: 'Encode images as Base64 data URIs or decode one back — resize, cap the output, compare formats, copy the HTML / CSS / JSX snippet', icon: 'imgb64', cat: 'Images' },
+    { file: 'paste-board.html', name: 'Paste Board', desc: 'Paste screenshots, images and text into a list for this tab only — view, copy back or download each one', icon: 'pasteboard', cat: 'Utilities' },
     { file: 'epoch.html', name: 'Epoch Converter', desc: 'Convert Unix timestamps and dates', icon: 'clock', cat: 'Utilities' },
     { file: 'cron.html', name: 'Cron Parser', desc: 'Explain cron expressions and preview next runs', icon: 'cron', cat: 'Utilities' },
     { file: 'cidr.html', name: 'CIDR Calculator', desc: 'Subnet math for IPv4 / IPv6 CIDR ranges', icon: 'cidr', cat: 'Utilities' },

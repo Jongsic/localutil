@@ -160,6 +160,10 @@ const SEO = {
         title: 'Image to Base64 Data URI Converter',
         desc: `Convert an image to a Base64 data URI and decode data URIs back to images. Resize first, cap how long the output may get, compare PNG / JPEG / WebP sizes, and copy the ready-made HTML img or CSS background snippet. ${LOCAL}`,
     },
+    'paste-board.html': {
+        title: 'Clipboard Paste Board — Save Screenshots & Text',
+        desc: `Paste screenshots, copied images and text into a list, view images at their original size, copy them back or download each as a file. Kept only while the tab is open. ${LOCAL}`,
+    },
     'epoch.html': {
         title: 'Epoch / Unix Timestamp Converter',
         desc: `Convert Unix timestamps (seconds or milliseconds) to human-readable dates, and dates back to timestamps. ${LOCAL}`,

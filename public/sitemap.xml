@@ -62,7 +62,7 @@
   </url>
   <url>
     <loc>https://jongsic.github.io/localutil/hd-wallet.html</loc>
-    <lastmod>2026-09-13</lastmod>
+    <lastmod>2026-09-21</lastmod>
     <priority>0.8</priority>
   </url>
   <url>
@@ -148,6 +148,11 @@
   <url>
     <loc>https://jongsic.github.io/localutil/password.html</loc>
     <lastmod>2026-09-13</lastmod>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://jongsic.github.io/localutil/paste-board.html</loc>
+    <lastmod>2026-10-06</lastmod>
     <priority>0.8</priority>
   </url>
   <url>
