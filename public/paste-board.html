@@ -69,6 +69,8 @@
             background: var(--primary-soft); color: var(--active-text);
         }
         .pb-kind.text { background: var(--bg-subtle); color: var(--text-muted); }
+        .pb-kind.stripped { background: var(--primary-soft); color: var(--primary); }
+
         .pb-detail { font-size: 1rem; color: var(--text-muted); }
         .pb-name { font-family: var(--font-mono); font-size: 1rem; color: var(--text-main); overflow-wrap: anywhere; }
         .pb-snippet {
@@ -140,6 +142,7 @@
                             </div>
                             <button id="pb-paste" class="btn btn-primary">Paste from clipboard</button>
                         </div>
+                        <div class="field-hint" style="margin-top:10px;">Copying from a web page puts the same text on the clipboard several times — plain, HTML, sometimes RTF — and the app you paste into picks the richest one. "Copy as plain text" puts back only the plain version, so it pastes without fonts, colors or links; "Copy cleaned" also drops invisible characters (non-breaking and zero-width spaces, soft hyphens, trailing spaces).</div>
 
                         <div class="card">
                             <div class="log-header mb-2">
@@ -227,16 +230,30 @@
                 probe.src = item.url;
             }
 
-            function addText(text, name) {
-                if (!text) return;
+            // html: the formatted version that came with the text, kept so "Copy" can hand it back.
+            function addText(text, name, html) {
+                if (!text) return null;
                 const at = new Date();
                 const n = ++seq;
                 const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
-                items.unshift({
+                const item = {
                     id: n, kind: 'text', at, text, blob, url: URL.createObjectURL(blob),
-                    name: name || fileName('txt', at, n),
-                });
+                    name: name || fileName('txt', at, n), html: html || '',
+                };
+                items.unshift(item);
                 render(n);
+                return item;
+            }
+
+            // Characters that survive as "plain" text but still trip up pasting:
+            // non-breaking / narrow spaces, zero-width characters, soft hyphens,
+            // CRLF line ends and spaces left at the end of lines.
+            function cleanText(text) {
+                return text
+                    .replace(/\r\n?/g, '\n')
+                    .replace(/[\u00A0\u2007\u202F]/g, ' ')
+                    .replace(/[\u200B-\u200D\u2060\uFEFF\u00AD]/g, '')
+                    .replace(/[ \t]+$/gm, '');
             }
 
             function addFile(file) {
@@ -304,7 +321,15 @@
                     const det = document.createElement('span');
                     det.className = 'pb-detail';
                     det.textContent = detail(item);
-                    meta.append(kind, det);
+                    meta.append(kind);
+                    if (item.kind === 'text' && item.html) {
+                        const st = document.createElement('span');
+                        st.className = 'pb-kind stripped';
+                        st.textContent = t('Has formatting');
+                        st.title = t('The copy also carried formatted (HTML) text');
+                        meta.append(st);
+                    }
+                    meta.append(det);
                     const name = document.createElement('div');
                     name.className = 'pb-name';
                     name.dataset.i18nSkip = '';
@@ -319,6 +344,10 @@
 
                     const actions = document.createElement('div');
                     actions.className = 'pb-actions';
+                    if (item.kind === 'text') actions.append(
+                        actionBtn('Copy as plain text', 'copy-plain', () => copyItem(item, 'plain')),
+                        actionBtn('Copy cleaned', 'copy-clean', () => copyItem(item, 'clean')),
+                    );
                     actions.append(
                         actionBtn('Copy', 'copy', () => copyItem(item)),
                         actionBtn('Download', 'download', () => download(item)),
@@ -372,15 +401,21 @@
                 });
             }
 
-            async function copyItem(item) {
+            // mode: undefined = as pasted (with its formatting if it had any), 'plain', 'clean'
+            async function copyItem(item, mode) {
                 try {
-                    if (item.kind === 'text') {
-                        await navigator.clipboard.writeText(item.text);
+                    if (item.kind === 'text' && !mode && item.html && window.ClipboardItem) {
+                        await navigator.clipboard.write([new ClipboardItem({
+                            'text/plain': new Blob([item.text], { type: 'text/plain' }),
+                            'text/html': new Blob([item.html], { type: 'text/html' }),
+                        })]);
+                    } else if (item.kind === 'text') {
+                        await navigator.clipboard.writeText(mode === 'clean' ? cleanText(item.text) : item.text);
                     } else {
                         // Hand ClipboardItem the promise so Safari still counts this as part of the click.
                         await navigator.clipboard.write([new ClipboardItem({ 'image/png': asPng(item) })]);
                     }
-                    showToast(t(item.kind === 'text' ? 'Text copied' : 'Image copied'));
+                    showToast(t(item.kind !== 'text' ? 'Image copied' : mode === 'clean' ? 'Cleaned plain text copied' : mode === 'plain' || !item.html ? 'Plain text copied' : 'Text copied with its formatting'));
                 } catch (e) {
                     showToast(t('Copy failed'), true);
                 }
@@ -391,7 +426,7 @@
                 const files = [...(dt.files || [])];
                 if (files.length) { files.forEach(addFile); return true; }
                 const text = dt.getData('text/plain');
-                if (text) { addText(text); return true; }
+                if (text) { addText(text, null, dt.getData('text/html')); return true; }
                 return false;
             }
 
@@ -410,7 +445,7 @@
                 const text = e.clipboardData.getData('text/plain');
                 if (text) {
                     e.preventDefault();
-                    addText(text);
+                    addText(text, null, e.clipboardData.getData('text/html'));
                 } else {
                     showToast(t('The clipboard holds no image or text'), true);
                 }
@@ -431,7 +466,8 @@
                             took = true;
                         } else if (entry.types.includes('text/plain')) {
                             const text = await (await entry.getType('text/plain')).text();
-                            if (text) { addText(text); took = true; }
+                            const html = entry.types.includes('text/html') ? await (await entry.getType('text/html')).text() : '';
+                            if (text) { addText(text, null, html); took = true; }
                         }
                     }
                     if (!took) showToast(t('The clipboard holds no image or text'), true);

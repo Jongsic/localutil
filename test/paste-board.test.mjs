@@ -14,8 +14,8 @@ after(async () => {
 });
 
 // Fires a real paste event at the page, carrying a PNG drawn in the page (w × h) and/or text.
-function paste({ png, text } = {}) {
-    return env.page.evaluate(async ({ png, text }) => {
+function paste({ png, text, html } = {}) {
+    return env.page.evaluate(async ({ png, text, html }) => {
         const dt = new DataTransfer();
         if (png) {
             const c = document.createElement('canvas');
@@ -28,8 +28,9 @@ function paste({ png, text } = {}) {
             dt.items.add(new File([blob], 'image.png', { type: 'image/png' }));
         }
         if (text) dt.setData('text/plain', text);
+        if (html) dt.setData('text/html', html);
         document.body.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
-    }, { png, text });
+    }, { png, text, html });
 }
 
 const rows = () => env.page.$$eval('#pb-list .pb-item', els => els.map(el => ({
@@ -122,6 +123,25 @@ test('copy puts text and images back on the clipboard', async () => {
         const [entry] = await navigator.clipboard.read();
         return entry.types.includes('image/png');
     });
+});
+
+test('formatted text: copy as pasted, as plain text, or cleaned', async () => {
+    await paste({ text: 'Big\u00A0title  \r\nbo\u200Bdy', html: '<h1 style="color:red">Big&nbsp;title</h1><p>body</p>' });
+    const first = env.page.locator('#pb-list .pb-item').first();
+    assert.match(await first.locator('.pb-kind.stripped').textContent(), /Has formatting/);
+    // waits until the clipboard holds exactly these types and this text
+    const expectClip = (types, text) => env.page.waitForFunction(async ([types, text]) => {
+        const [e] = await navigator.clipboard.read();
+        if (e.types.slice().sort().join() !== types.slice().sort().join()) return false;
+        return (await (await e.getType('text/plain')).text()) === text;
+    }, [types, text], { timeout: 3000 });
+    await first.locator('[data-action="copy"]').click();
+    await expectClip(['text/html', 'text/plain'], 'Big\u00A0title  \r\nbo\u200Bdy');
+    await first.locator('[data-action="copy-plain"]').click();
+    await expectClip(['text/plain'], 'Big\u00A0title  \r\nbo\u200Bdy');
+    await first.locator('[data-action="copy-clean"]').click();
+    await expectClip(['text/plain'], 'Big title\nbody');
+    await first.locator('[data-action="delete"]').click();
 });
 
 test('delete removes one item; clear all empties the list', async () => {
