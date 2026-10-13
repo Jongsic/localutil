@@ -41,7 +41,7 @@
         .iam-actions { display: flex; gap: 10px; flex-wrap: wrap; }
         .iam-actions .btn[hidden] { display: none; }
 
-        #tool-iam .pane textarea { min-height: 200px; font-size: 0.82rem; }
+        #tool-iam .pane textarea { min-height: 200px; font-size: 1rem; }
         /* .split-pane is display:flex, which outranks the [hidden] default. */
         #iam-split[hidden] { display: none; }
 
@@ -55,10 +55,10 @@
         }
         .iam-sources[hidden] { display: none; }
         .iam-source { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
-        .iam-source-label { font-size: 0.85rem; font-weight: 600; white-space: nowrap; }
+        .iam-source-label { font-size: 1rem; font-weight: 600; white-space: nowrap; }
         .iam-source-what {
             font-family: var(--font-mono);
-            font-size: 0.76rem;
+            font-size: 1rem;
             color: var(--text-muted);
             word-break: break-all;
         }
@@ -108,14 +108,14 @@
             border-radius: var(--r-md);
             background-color: var(--primary-soft);
             color: var(--active-text);
-            font-size: 0.95rem;
+            font-size: 1rem;
             pointer-events: none;
             z-index: 2;
         }
         #tool-iam .pane.dragover .iam-dropzone { display: flex; }
         .iam-file {
             font-family: var(--font-mono);
-            font-size: 0.76rem;
+            font-size: 1rem;
             color: var(--text-muted);
             margin: 0;
             word-break: break-all;
@@ -147,11 +147,11 @@
         .iam-verdict.ok .iam-verdict-title { color: var(--success); }
         .iam-verdict.warn .iam-verdict-title { color: var(--warning); }
         .iam-verdict.bad .iam-verdict-title { color: var(--danger); }
-        .iam-verdict-sub { font-size: 0.85rem; color: var(--text-muted); margin-top: 2px; }
+        .iam-verdict-sub { font-size: 1rem; color: var(--text-muted); margin-top: 2px; }
 
         .iam-chips { display: flex; flex-wrap: wrap; gap: 8px 10px; }
         .iam-chip {
-            font-size: 0.78rem;
+            font-size: 1rem;
             color: var(--text-muted);
             background: var(--bg-subtle);
             border: 1px solid var(--border-color);
@@ -168,7 +168,7 @@
         .iam-notes { display: flex; flex-direction: column; gap: 6px; margin: 0; padding: 0; list-style: none; }
         .iam-notes:empty { display: none; }
         .iam-notes li {
-            font-size: 0.8rem;
+            font-size: 1rem;
             color: var(--text-muted);
             padding-left: 20px;
             position: relative;
@@ -184,7 +184,7 @@
             border-radius: 50%;
             background: rgba(240, 180, 41, 0.2);
             color: var(--warning);
-            font-size: 0.62rem;
+            font-size: 1rem;
             font-weight: 700;
             display: flex;
             align-items: center;
@@ -207,7 +207,7 @@
         .iam-table tr.iam-group:first-child > td { border-top: none; }
         .iam-group-key { font-weight: 700; color: var(--text-main); word-break: break-all; }
         .iam-group-counts { display: inline-flex; flex-wrap: wrap; gap: 4px 12px; margin-left: 12px; font-family: inherit; }
-        .iam-group-count { font-family: var(--font-mono); font-size: 0.72rem; color: var(--text-faint); }
+        .iam-group-count { font-family: var(--font-mono); font-size: 1rem; color: var(--text-faint); }
         .iam-group-count b { font-variant-numeric: tabular-nums; }
         .iam-group-count.a b { color: var(--danger); }
         .iam-group-count.b b { color: var(--success); }
@@ -231,21 +231,21 @@
             background: var(--bg-subtle);
             color: var(--text-muted);
             font: inherit;
-            font-size: 0.8rem;
+            font-size: 1rem;
             cursor: pointer;
         }
         .iam-fold-btn:hover { background: var(--bg-hover); color: var(--text-main); }
         .iam-fold-btn b { color: var(--text-main); font-variant-numeric: tabular-nums; }
-        .iam-error { padding: 16px 18px; color: var(--danger); font-size: 0.85rem; white-space: pre-wrap; }
+        .iam-error { padding: 16px 18px; color: var(--danger); font-size: 1rem; white-space: pre-wrap; }
         .iam-error[hidden] { display: none; }
 
-        .iam-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+        .iam-table { width: 100%; border-collapse: collapse; font-size: 1rem; }
         .iam-table th {
             text-align: left;
             padding: 10px 12px;
             color: var(--text-faint);
             font-weight: 700;
-            font-size: 0.7rem;
+            font-size: 1rem;
             text-transform: uppercase;
             letter-spacing: 0.06em;
             white-space: nowrap;
@@ -271,7 +271,7 @@
             display: inline-block;
             padding: 2px 8px;
             border-radius: var(--r-pill);
-            font-size: 0.68rem;
+            font-size: 1rem;
             font-weight: 700;
             letter-spacing: 0.02em;
             white-space: nowrap;
@@ -281,7 +281,7 @@
         .iam-tag.c { background: rgba(240, 180, 41, 0.18); color: var(--warning); }
         .iam-tag.m { background: var(--bg-subtle); color: var(--text-muted); }
 
-        .iam-sub { font-family: var(--font-mono); font-size: 0.7rem; color: var(--text-faint); margin-top: 3px; }
+        .iam-sub { font-family: var(--font-mono); font-size: 1rem; color: var(--text-faint); margin-top: 3px; }
         .iam-sub.warn { color: var(--warning); }
         .iam-sub.plain { font-family: inherit; }
         .iam-cond-a { color: var(--danger); }
@@ -299,7 +299,7 @@
             width: 100%;
             border-collapse: collapse;
             font-family: var(--font-mono);
-            font-size: 0.78rem;
+            font-size: 1rem;
             line-height: 1.55;
         }
         .iam-json th {
@@ -308,7 +308,7 @@
             color: var(--text-faint);
             font-family: inherit;
             font-weight: 700;
-            font-size: 0.7rem;
+            font-size: 1rem;
             text-transform: uppercase;
             letter-spacing: 0.06em;
             border-bottom: 1px solid var(--border-color);
@@ -351,7 +351,7 @@
         .iam-json tr.block-head > td {
             background: var(--bg-subtle);
             color: var(--text-faint);
-            font-size: 0.72rem;
+            font-size: 1rem;
             padding: 5px 10px;
             border-top: 1px solid var(--border-color);
             border-bottom: 1px solid var(--border-color);
@@ -370,11 +370,11 @@
            when you want a line-by-line read rather than this table. */
         .iam-norm[hidden] { display: none; }
         .iam-norm .pane { gap: 8px; }
-        .iam-norm .code-view { font-size: 0.76rem; max-height: 46vh; min-height: 90px; }
+        .iam-norm .code-view { font-size: 1rem; max-height: 46vh; min-height: 90px; }
         .iam-norm .pane-head { justify-content: space-between; }
 
         .iam-doc-section {
-            font-size: 0.72rem;
+            font-size: 1rem;
             font-weight: 700;
             text-transform: uppercase;
             letter-spacing: 0.06em;
@@ -387,7 +387,7 @@
             grid-template-columns: minmax(130px, 210px) 1fr;
             gap: 7px 22px;
             margin: 0;
-            font-size: 0.85rem;
+            font-size: 1rem;
             line-height: 1.6;
         }
         .iam-doc dt { font-weight: 600; color: var(--text-main); }
@@ -397,7 +397,7 @@
             .iam-doc dd { margin-bottom: 11px; }
         }
         @media (max-width: 700px) {
-            .iam-table { font-size: 0.74rem; }
+            .iam-table { font-size: 1rem; }
             .iam-table td, .iam-table th { padding: 6px 8px; }
         }
     </style>

@@ -43,15 +43,15 @@
         .ks-row-body { margin-top: 10px; }
         .ks-row-body input[type="password"],
         .ks-row-body input[type="text"] { width: 100%; }
-        .ks-row-body textarea { width: 100%; min-height: 96px; font-family: var(--font-mono); font-size: 0.8rem; }
-        .ks-row-note { font-size: 0.8rem; color: var(--text-muted); margin-top: 8px; }
+        .ks-row-body textarea { width: 100%; min-height: 96px; font-family: var(--font-mono); font-size: 1rem; }
+        .ks-row-note { font-size: 1rem; color: var(--text-muted); margin-top: 8px; }
         .ks-row-note.err { color: var(--danger); }
         .ks-row-note.ok { color: var(--success); }
 
         /* Badges */
         .ks-badge {
             display: inline-block; padding: 2px 8px; border-radius: var(--r-pill);
-            font-size: 0.72rem; font-weight: 700; font-family: var(--font-mono);
+            font-size: 1rem; font-weight: 700; font-family: var(--font-mono);
             border: 1px solid var(--border-strong); color: var(--text-faint);
         }
         .ks-badge.on { background: var(--primary-soft); border-color: var(--primary); color: var(--primary); }
@@ -59,7 +59,7 @@
         .ks-badge.bad { border-color: var(--danger); color: var(--danger); }
 
         /* Capability notice */
-        .ks-cap { font-size: 0.85rem; line-height: 1.55; }
+        .ks-cap { font-size: 1rem; line-height: 1.55; }
         .ks-cap b { color: var(--text-main); }
         .ks-cap-list { margin: 8px 0 0; padding-left: 18px; color: var(--text-muted); }
         .ks-cap-list li { margin: 3px 0; }
@@ -70,17 +70,17 @@
             border-radius: var(--r-sm);
             padding: 14px;
             text-align: center;
-            font-size: 0.85rem;
+            font-size: 1rem;
             color: var(--text-muted);
             cursor: pointer;
         }
         .ks-drop.over { border-color: var(--primary); color: var(--primary); background: var(--primary-soft); }
-        .ks-file { font-family: var(--font-mono); font-size: 0.8rem; color: var(--text-main); }
+        .ks-file { font-family: var(--font-mono); font-size: 1rem; color: var(--text-main); }
 
         .ks-out { min-height: 64px; white-space: pre-wrap; }
         .ks-out.placeholder { color: var(--text-faint); font-family: inherit; }
         textarea.ks-input { width: 100%; min-height: 120px; }
-        textarea.ks-params { width: 100%; min-height: 92px; font-family: var(--font-mono); font-size: 0.8rem; }
+        textarea.ks-params { width: 100%; min-height: 92px; font-family: var(--font-mono); font-size: 1rem; }
         .ks-params-out { white-space: pre; overflow-x: auto; }
     </style>
 </head>
@@ -157,7 +157,7 @@
 
                             <div id="ec-params-out-wrap" style="display:none;" class="mt-2">
                                 <div class="flex-row gap-1 items-center">
-                                    <div class="card-title" style="margin:0;font-size:0.9rem;">Decryption parameters</div>
+                                    <div class="card-title" style="margin:0;font-size:1rem;">Decryption parameters</div>
                                     <button class="btn btn-small" id="ec-copy-params">Copy parameters</button>
                                 </div>
                                 <div class="field-hint">Keep these with whoever decrypts — separately from the

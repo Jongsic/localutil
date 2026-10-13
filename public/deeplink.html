@@ -38,7 +38,7 @@
             border-left: 3px solid var(--primary);
             border-radius: var(--r-sm);
             background-color: var(--bg-subtle);
-            font-size: 0.82rem;
+            font-size: 1rem;
             line-height: 1.5;
             color: var(--text-muted);
         }
@@ -46,7 +46,7 @@
         .dl-badge {
             display: inline-block;
             font-family: var(--font-mono);
-            font-size: 0.72rem;
+            font-size: 1rem;
             padding: 1px 7px;
             border-radius: 999px;
             border: 1px solid var(--border-strong);
@@ -57,19 +57,19 @@
         /* Config grid */
         .dl-config-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
         @media (max-width: 620px) { .dl-config-grid { grid-template-columns: 1fr; } }
-        .dl-paths textarea { min-height: 132px; font-family: var(--font-mono); font-size: 0.82rem; }
+        .dl-paths textarea { min-height: 132px; font-family: var(--font-mono); font-size: 1rem; }
         .dl-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
 
         /* Advanced (collapsible) */
         details.dl-advanced { margin-top: 12px; }
         details.dl-advanced > summary {
-            cursor: pointer; font-size: 0.82rem; font-weight: 600;
+            cursor: pointer; font-size: 1rem; font-weight: 600;
             color: var(--text-muted); user-select: none;
         }
         details.dl-advanced[open] > summary { margin-bottom: 10px; }
 
         /* Inspector table */
-        .dl-kv { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+        .dl-kv { width: 100%; border-collapse: collapse; font-size: 1rem; }
         .dl-kv td { padding: 5px 8px; border-bottom: 1px solid var(--border-color); vertical-align: top; word-break: break-all; }
         .dl-kv tr:last-child td { border-bottom: none; }
         .dl-kv td.k { color: var(--text-muted); white-space: nowrap; width: 1%; font-family: var(--font-mono); }
@@ -79,7 +79,7 @@
         .dl-path-card { padding: 16px; }
         .dl-path-card + .dl-path-card { margin-top: 14px; }
         .dl-path-head {
-            font-family: var(--font-mono); font-size: 0.9rem; font-weight: 700;
+            font-family: var(--font-mono); font-size: 1rem; font-weight: 700;
             color: var(--text-color); word-break: break-all; margin-bottom: 4px;
         }
         .dl-variant {
@@ -87,13 +87,13 @@
             padding: 12px 0; border-top: 1px solid var(--border-color);
         }
         .dl-variant-main { flex: 1; min-width: 0; }
-        .dl-variant-label { font-size: 0.72rem; font-weight: 700; letter-spacing: .02em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 4px; }
+        .dl-variant-label { font-size: 1rem; font-weight: 700; letter-spacing: .02em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 4px; }
         .dl-variant-uri {
-            font-family: var(--font-mono); font-size: 0.8rem; color: var(--text-color);
+            font-family: var(--font-mono); font-size: 1rem; color: var(--text-color);
             word-break: break-all; margin-bottom: 8px; display: block;
         }
         .dl-variant-btns { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
-        .dl-open-result { font-size: 0.74rem; font-family: var(--font-mono); color: var(--text-muted); }
+        .dl-open-result { font-size: 1rem; font-family: var(--font-mono); color: var(--text-muted); }
         .dl-qr {
             flex: 0 0 auto; width: 120px; height: 120px; padding: 8px;
             background: #fff; border-radius: var(--r-xs); cursor: zoom-in;
@@ -106,7 +106,7 @@
         }
 
         /* Event log */
-        .dl-log { font-family: var(--font-mono); font-size: 0.76rem; max-height: 180px; overflow: auto; }
+        .dl-log { font-family: var(--font-mono); font-size: 1rem; max-height: 180px; overflow: auto; }
         .dl-log div { padding: 2px 0; border-bottom: 1px dashed var(--border-color); color: var(--text-muted); }
         .dl-log div:last-child { border-bottom: none; }
 
@@ -128,20 +128,20 @@
             background: #f4f4f5; color: #111; font-size: 1.2rem; line-height: 1; cursor: pointer;
         }
         .dl-modal-bar button:hover { background: #e7e7ea; }
-        .dl-modal-zoom { font-family: var(--font-mono); font-size: 0.78rem; color: #333; min-width: 64px; text-align: center; }
+        .dl-modal-zoom { font-family: var(--font-mono); font-size: 1rem; color: #333; min-width: 64px; text-align: center; }
         /* Zoom is capped to what fits the viewport (see maxFit in JS), so the QR is always
            fully visible at once — never wider than the dialog, no horizontal scroll. */
         #dl-modal-qr { display: flex; justify-content: center; }
         .dl-modal-cap {
-            margin: 12px auto 0; font-family: var(--font-mono); font-size: 0.74rem; color: #333;
+            margin: 12px auto 0; font-family: var(--font-mono); font-size: 1rem; color: #333;
             text-align: center; max-width: 100%; word-break: break-all; overflow-wrap: anywhere;
         }
 
-        .dl-empty { color: var(--text-muted); font-size: 0.85rem; padding: 8px 0; }
+        .dl-empty { color: var(--text-muted); font-size: 1rem; padding: 8px 0; }
 
         /* Caveats list */
         .dl-notes { margin: 0; padding-left: 18px; }
-        .dl-notes li { font-size: 0.82rem; line-height: 1.55; color: var(--text-muted); margin-bottom: 8px; }
+        .dl-notes li { font-size: 1rem; line-height: 1.55; color: var(--text-muted); margin-bottom: 8px; }
         .dl-notes li:last-child { margin-bottom: 0; }
         .dl-notes b { color: var(--text-color); }
     </style>
@@ -485,7 +485,7 @@
                 } catch (e) {
                     // Explicit inline color: these boxes are white even in dark mode.
                     const msg = document.createElement('div');
-                    msg.style.cssText = 'color:#111;font-size:0.75rem;line-height:1.4;padding:10px;text-align:center;';
+                    msg.style.cssText = 'color:#111;font-size:1rem;line-height:1.4;padding:10px;text-align:center;';
                     const tr = window.t || (s => s);
                     msg.textContent = /overflow/i.test(String(e))
                         ? tr('URL is too long for a QR code — remove some paths.')

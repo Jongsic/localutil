@@ -46,8 +46,8 @@
         .ib-drop-zone:hover { border-color: var(--primary); background-color: var(--bg-hover); }
         .ib-drop-zone.dragover { border-color: var(--primary); background-color: var(--primary-soft); }
         .ib-drop-icon { color: var(--primary); opacity: 0.85; margin-bottom: 10px; }
-        .ib-drop-main { font-size: 0.92rem; font-weight: 600; color: var(--text-main); margin-bottom: 5px; }
-        .ib-drop-sub { font-size: 0.8rem; color: var(--text-muted); }
+        .ib-drop-main { font-size: 1rem; font-weight: 600; color: var(--text-main); margin-bottom: 5px; }
+        .ib-drop-sub { font-size: 1rem; color: var(--text-muted); }
 
         .ib-source-row { display: flex; align-items: center; gap: 12px; }
         .ib-source-thumb {
@@ -76,7 +76,7 @@
             width: 100%; height: 42px; object-fit: contain; display: block;
         }
         .ib-strip-size {
-            font-size: 0.62rem; color: var(--text-muted);
+            font-size: 1rem; color: var(--text-muted);
             font-variant-numeric: tabular-nums;
             white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
         }
@@ -88,7 +88,7 @@
             border: 1px solid var(--border-strong);
             background: var(--bg-elevated);
             color: var(--text-muted);
-            font-size: 0.7rem; padding: 0; cursor: pointer;
+            font-size: 1rem; padding: 0; cursor: pointer;
         }
         .ib-strip-del:hover { color: #fff; background: var(--danger); border-color: var(--danger); }
 
@@ -99,13 +99,13 @@
         .ib-opt-row input[type="range"] { flex: 1; min-width: 0; }
         .ib-opt-val {
             min-width: 42px; text-align: right;
-            font-size: 0.82rem; color: var(--text-muted);
+            font-size: 1rem; color: var(--text-muted);
             font-variant-numeric: tabular-nums;
         }
         .ib-custom-row { display: flex; align-items: center; gap: 8px; }
         .ib-custom-row input { width: 100%; padding: 8px 11px; }
-        .ib-custom-row span { color: var(--text-muted); font-size: 0.85rem; }
-        .ib-check-row { display: flex; align-items: center; gap: 8px; font-size: 0.85rem; }
+        .ib-custom-row span { color: var(--text-muted); font-size: 1rem; }
+        .ib-check-row { display: flex; align-items: center; gap: 8px; font-size: 1rem; }
         .ib-check-row input { margin: 0; }
         .ib-color {
             width: 44px; height: 30px; padding: 2px;
@@ -119,7 +119,7 @@
         .ib-compare { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
         .ib-compare-btn {
             padding: 5px 9px;
-            font-size: 0.75rem;
+            font-size: 1rem;
             border-radius: var(--r-xs);
             font-variant-numeric: tabular-nums;
         }
@@ -143,9 +143,9 @@
             background-color: var(--bg-subtle);
         }
         .ib-stats div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-        .ib-stats span { font-size: 0.74rem; color: var(--text-muted); }
+        .ib-stats span { font-size: 1rem; color: var(--text-muted); }
         .ib-stats strong {
-            font-size: 0.85rem; font-weight: 600;
+            font-size: 1rem; font-weight: 600;
             font-variant-numeric: tabular-nums;
             word-break: break-word;
         }
@@ -180,14 +180,14 @@
             border-radius: var(--r-md);
             background-color: var(--bg-subtle);
             color: var(--text-muted);
-            font-size: 0.88rem; text-align: center; padding: 18px;
+            font-size: 1rem; text-align: center; padding: 18px;
         }
         .ib-empty svg { color: var(--primary); opacity: 0.85; }
 
         /* Notices */
         .ib-note {
             display: flex; gap: 8px;
-            font-size: 0.8rem; line-height: 1.5;
+            font-size: 1rem; line-height: 1.5;
             color: var(--text-muted);
         }
         .ib-note::before { content: "•"; color: var(--text-faint); }
@@ -198,14 +198,14 @@
             border: 1px solid var(--warning);
             border-radius: var(--r-sm);
             background-color: var(--bg-subtle);
-            font-size: 0.85rem;
+            font-size: 1rem;
             line-height: 1.55;
         }
         .ib-warn strong { color: var(--warning); }
         .ib-warn .ib-warn-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
 
         /* Output */
-        #ib-datauri, #ib-decode-input { resize: vertical; font-size: 0.78rem; }
+        #ib-datauri, #ib-decode-input { resize: vertical; font-size: 1rem; }
         #ib-datauri { min-height: 108px; }
         #ib-decode-input { min-height: 190px; flex: 1; }
 
@@ -215,14 +215,14 @@
             display: flex; align-items: center; gap: 10px;
             margin-bottom: 5px;
         }
-        .ib-block-title { font-size: 0.8rem; font-weight: 600; }
+        .ib-block-title { font-size: 1rem; font-weight: 600; }
         .ib-block-head .btn { margin-left: auto; }
-        .ib-block-code { min-height: 0; font-size: 0.8rem; }
+        .ib-block-code { min-height: 0; font-size: 1rem; }
 
         /* The CSS demo sits on the plain page background on purpose — that is what a
            CSS background actually looks like in a page. The dashed border marks the box. */
         .ib-css-demo { margin-top: 10px; }
-        .ib-css-demo-label { font-size: 0.75rem; color: var(--text-muted); margin-bottom: 8px; }
+        .ib-css-demo-label { font-size: 1rem; color: var(--text-muted); margin-bottom: 8px; }
         .ib-css-demo-box {
             max-width: 100%;
             max-height: 300px;
@@ -289,7 +289,7 @@
                                     <div id="ib-source-row" class="ib-source-row hidden">
                                         <img id="ib-source-thumb" class="ib-source-thumb" alt="source">
                                         <div style="text-align:left;min-width:0;">
-                                            <div id="ib-source-name" style="font-weight:600;font-size:0.88rem;word-break:break-all;"></div>
+                                            <div id="ib-source-name" style="font-weight:600;font-size:1rem;word-break:break-all;"></div>
                                             <div id="ib-source-dim" class="field-hint" style="margin:2px 0 0;"></div>
                                         </div>
                                     </div>
