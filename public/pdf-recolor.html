@@ -42,7 +42,7 @@
 
             <div class="tools-container">
                 <section class="tool-section active">
-                    <div class="tool-shell pdf-wide">
+                    <div class="tool-shell wide pdf-wide">
                         <div class="split-pane">
                             <div class="pane">
                                 <div>
@@ -221,15 +221,15 @@
                     const img = await get(card.info);
                     if (!img) { card.status.textContent = 'Cannot read this picture'; return; }
                     card.img = img;
-                    U.drawFit(card.before, img, 150);
+                    U.drawFit(card.before, img, U.thumbBox(card));
                     const p = params(card, img);
                     card.tolVal.textContent = p ? p.tol : '–';
                     if (!p) {
-                        U.drawFit(card.after, img, 150);
+                        U.drawFit(card.after, img, U.thumbBox(card));
                         card.status.textContent = 'No background color yet — click this picture on the background';
                         return;
                     }
-                    U.drawFit(card.after, card.enabled.checked ? apply(img, p) : img, 150);
+                    U.drawFit(card.after, card.enabled.checked ? apply(img, p) : img, U.thumbBox(card));
                     card.status.textContent = p.colors.length + ' colors ± ' + p.tol + (p.color ? ' (incl. its own ' + C.toHex(p.color) + ')' : '');
                 }
                 function build(card) {

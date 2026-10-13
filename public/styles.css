@@ -399,6 +399,8 @@ body {
 }
 
 .tool-section { display: none; }
+/* Tools whose side-by-side panes, previews or picture grids grow with the screen */
+.tool-shell.wide { max-width: 2000px; }
 .tool-section.active { display: flex; flex-direction: column; gap: 16px; }
 
 /* Content max width for readability */
@@ -1177,7 +1179,7 @@ input[type="checkbox"]:focus-visible { box-shadow: 0 0 0 3px var(--primary-ring)
 .pdf-summary code { font-family: var(--font-mono); font-size: 1rem; }
 
 /* Picture grid (pdf-recolor / pdf-upscale) */
-.pdf-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 10px; }
+.pdf-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; }
 .pdf-pic { border: 1px solid var(--border-color); border-radius: var(--r-sm); padding: 8px; display: flex; flex-direction: column; gap: 6px; min-height: 200px; background: var(--bg-content); }
 .pdf-pic.off { opacity: 0.55; }
 .pdf-pic-head { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 1rem; font-weight: 600; cursor: pointer; }
@@ -1197,7 +1199,7 @@ input[type="checkbox"]:focus-visible { box-shadow: 0 0 0 3px var(--primary-ring)
 .pdf-vec-row { display: flex; align-items: center; gap: 8px; font-size: 1rem; flex-wrap: wrap; }
 .pdf-vec-row i { width: 18px; height: 18px; border-radius: 4px; border: 1px solid rgba(0,0,0,0.2); display: inline-block; }
 .pdf-vec-row code { font-family: var(--font-mono); font-size: 1rem; }
-.pdf-wide .split-pane > .pane:first-child { flex: 0 0 340px; max-width: 360px; }
+.pdf-wide .split-pane > .pane:first-child { flex: 0 0 360px; max-width: 380px; }
 @media (max-width: 860px) { .pdf-wide .split-pane > .pane:first-child { flex: 1 1 auto; max-width: none; } }
 .pdf-compare { position: fixed; inset: 0; z-index: 50; background: rgba(10, 15, 26, 0.6); display: flex; align-items: center; justify-content: center; padding: 16px; }
 .pdf-compare.hidden { display: none; }

@@ -322,6 +322,12 @@
         }
     }
 
+    // Thumbnail size for a grid card: as wide as its half of the card allows.
+    function thumbBox(card) {
+        const w = card.before.parentElement ? card.before.parentElement.clientWidth : 0;
+        return Math.max(120, Math.min(480, (w || 150) - 8));
+    }
+
     function pagesLabel(info) {
         const p = [...info.pages].sort((a, b) => a - b).map(i => i + 1);
         return 'p. ' + (p.length > 4 ? p.slice(0, 3).join(', ') + ' …+' + (p.length - 3) : p.join(', '));
@@ -439,7 +445,7 @@
                 prog.set(1, 'Done in ' + ((performance.now() - t0) / 1000).toFixed(1) + 's — ' + C.fmtBytes(result.length));
                 for (const line of r.lines || []) o.summaryEl.append(el('div', { 'data-i18n-skip': true, text: line }));
                 o.dlBtn.disabled = false;
-                await C.renderThumbs(result, o.previewEl, { maxPages: o.maxPreview || 6, width: o.previewWidth || 220, labels: r.labels });
+                await C.renderThumbs(result, o.previewEl, { maxPages: o.maxPreview || 6, width: (typeof o.previewWidth === 'function' ? o.previewWidth() : o.previewWidth) || 220, labels: r.labels });
             } catch (e) {
                 console.warn(e);
                 prog.set(0, e.message);
@@ -453,5 +459,5 @@
     }
 
     window.PdfUi = { el, progress, fileList, imposeStep, itemsFor, saveDoc, outName, sideLabels, runner, tick,
-        imageGrid, originals, cloneImg, drawFit, pagesLabel, switchEl, toast };
+        imageGrid, originals, cloneImg, drawFit, thumbBox, pagesLabel, switchEl, toast };
 })();

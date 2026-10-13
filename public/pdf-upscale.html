@@ -42,7 +42,7 @@
 
             <div class="tools-container">
                 <section class="tool-section active">
-                    <div class="tool-shell pdf-wide">
+                    <div class="tool-shell wide pdf-wide">
                         <div class="split-pane">
                             <div class="pane">
                                 <div>
@@ -198,7 +198,7 @@
                 async function show(card) {
                     const img = await get(card.info);
                     if (!img) { card.status.textContent = 'Cannot read this picture'; return; }
-                    U.drawFit(card.before, img, 150);
+                    U.drawFit(card.before, img, U.thumbBox(card));
                     if (card.data.result) await drawResult(card);
                     else card.status.textContent = 'Not upscaled yet';
                 }
@@ -212,7 +212,7 @@
             async function drawResult(card) {
                 const r = card.data.result;
                 const bmp = await createImageBitmap(r.blob);
-                U.drawFit(card.after, bmp, 150);
+                U.drawFit(card.after, bmp, U.thumbBox(card));
                 bmp.close();
                 card.status.textContent = r.w + '×' + r.h + ' · ' + r.modelName + ' · ' + r.secs.toFixed(1) + 's' + (r.fixed ? ' · safety check adjusted' : '');
                 card.useLabel.classList.remove('hidden');

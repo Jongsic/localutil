@@ -42,7 +42,7 @@
 
             <div class="tools-container">
                 <section class="tool-section active">
-                    <div class="tool-shell">
+                    <div class="tool-shell wide">
                         <div class="split-pane">
                             <div class="pane">
                                 <div>
@@ -102,13 +102,15 @@
                 const { doc, plan } = await C.impose(sources(), Object.assign(impose.options(), { maxSides: 8 }));
                 const bytes = await doc.save();
                 if (my !== token) return;
-                await C.renderThumbs(bytes, previewEl, { maxPages: 8, width: 240, total: plan.sides.length,
+                // two sheet sides (front and back) per row, as wide as the pane allows
+                const width = Math.max(220, Math.min(560, Math.floor((previewEl.clientWidth - 14) / 2)));
+                await C.renderThumbs(bytes, previewEl, { maxPages: 8, width, total: plan.sides.length,
                     labels: U.sideLabels(plan, impose.options().mode), isStale: () => my !== token });
             }
             run = U.runner({
                 runBtn: document.getElementById('run-btn'), dlBtn: document.getElementById('dl-btn'),
                 progressEl: document.getElementById('run-progress'), summaryEl: document.getElementById('run-summary'),
-                previewEl, maxPreview: 8, previewWidth: 240,
+                previewEl, maxPreview: 8, previewWidth: () => Math.max(220, Math.min(560, Math.floor((previewEl.clientWidth - 14) / 2))),
                 getName: () => U.outName(files.files[0].name, '_print'),
                 task: async prog => {
                     prog(0.3, 'Laying out pages…');
