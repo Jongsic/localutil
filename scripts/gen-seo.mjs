@@ -148,6 +148,18 @@ const SEO = {
         title: 'Passport Photo Maker (3.5 x 4.5 cm)',
         desc: 'Fit a photo into a 3.5 x 4.5 cm passport frame and export 413 x 531 px at 300 DPI. Runs 100% in your browser — photos are never uploaded.',
     },
+    'pdf-imposition.html': {
+        title: 'PDF Booklet & Print Layout (2 pages per side)',
+        desc: `Lay out PDF pages two per side for double-sided printing — a saddle-stitch booklet (side or top binding), cut-and-stack sheets, or plain 2-up. Join several PDFs, pick pages, crop print-shop margins. ${LOCAL}`,
+    },
+    'pdf-recolor.html': {
+        title: 'PDF Background Color Remover',
+        desc: `Replace colored page and picture backgrounds in a PDF with white (or any color) to save ink and print cleaner. Fonts and vector art stay untouched. ${LOCAL}`,
+    },
+    'pdf-upscale.html': {
+        title: 'PDF Image Upscaler (AI, in-browser)',
+        desc: `Sharpen the low-resolution pictures inside a PDF with an AI super-resolution model that runs in your browser (WebGPU or CPU). Text and vector art stay untouched. ${LOCAL}`,
+    },
     'image-resize.html': {
         title: 'Image Resizer (cm / inch / px + DPI)',
         desc: 'Place an image on a custom-size canvas in cm, inches, or pixels at a chosen DPI, and export it. Runs 100% in your browser — images are never uploaded.',

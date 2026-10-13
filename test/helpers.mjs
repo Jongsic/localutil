@@ -11,6 +11,8 @@ export const PUBLIC_DIR = fileURLToPath(new URL('../public', import.meta.url));
 const MIME = {
     '.html': 'text/html; charset=utf-8',
     '.js': 'text/javascript; charset=utf-8',
+    '.mjs': 'text/javascript; charset=utf-8',
+    '.wasm': 'application/wasm',
     '.css': 'text/css; charset=utf-8',
     '.png': 'image/png',
     '.svg': 'image/svg+xml',

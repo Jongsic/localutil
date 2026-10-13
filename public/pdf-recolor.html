@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'none'">
+    <title>PDF Background Color Remover — LocalUtil</title>
+    <!-- social / favicon -->
+    <meta name="description" content="Replace colored page and picture backgrounds in a PDF with white (or any color) to save ink and print cleaner. Fonts and vector art stay untouched. Runs 100% in your browser — nothing is uploaded.">
+    <link rel="canonical" href="https://jongsic.github.io/localutil/pdf-recolor.html">
+    <link rel="icon" href="favicon.ico" sizes="any">
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="LocalUtil">
+    <meta property="og:title" content="PDF Background Color Remover — LocalUtil">
+    <meta property="og:description" content="Replace colored page and picture backgrounds in a PDF with white (or any color) to save ink and print cleaner. Fonts and vector art stay untouched. Runs 100% in your browser — nothing is uploaded.">
+    <meta property="og:image" content="https://jongsic.github.io/localutil/og.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:url" content="https://jongsic.github.io/localutil/pdf-recolor.html">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:image" content="https://jongsic.github.io/localutil/og.png">
+        <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebApplication","name":"PDF Background Color Remover","url":"https://jongsic.github.io/localutil/pdf-recolor.html","description":"Replace colored page and picture backgrounds in a PDF with white (or any color) to save ink and print cleaner. Fonts and vector art stay untouched. Runs 100% in your browser — nothing is uploaded.","applicationCategory":"DeveloperApplication","operatingSystem":"Any","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"isPartOf":{"@type":"WebSite","name":"LocalUtil","url":"https://jongsic.github.io/localutil/"}}</script>
+        <!-- /social -->
+    <script src="theme-init.js"></script>
+    <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+    <div class="app-container">
+        <aside class="sidebar" id="app-sidebar"></aside>
+
+        <main class="main-content">
+            <header class="topbar" id="app-topbar">
+                <div class="topbar-title">
+                    <h1 id="current-tool-title">PDF Background Color</h1>
+                    <p id="current-tool-desc" class="topbar-desc">Replace colored page and picture backgrounds with white for cleaner printing — text stays vector</p>
+                </div>
+            </header>
+
+            <div class="tools-container">
+                <section class="tool-section active">
+                    <div class="tool-shell pdf-wide">
+                        <div class="split-pane">
+                            <div class="pane">
+                                <div>
+                                    <div class="card-title" style="margin:0;">PDF file</div>
+                                </div>
+                                <div id="files"></div>
+
+                                <div class="pdf-step" id="vec-step">
+                                    <div class="card-title" style="margin:0;">Page background</div>
+                                    <div class="field-hint">Colors the PDF itself paints behind the pages. Tick the ones to change and pick the new color.</div>
+                                    <div id="vec" class="flex-col gap-1"><div class="field-hint">Add a PDF first.</div></div>
+                                </div>
+
+                                <div class="pdf-step">
+                                    <div class="card-title" style="margin:0;">Pictures</div>
+                                    <div class="field-hint">Every picture is listed on the right with a before / after preview. Untick pictures to leave them as they are (covers, photos). A picture can also get an extra color and its own tolerance.</div>
+                                    <div>
+                                        <div class="card-subtitle">Background colors to remove</div>
+                                        <div class="field-hint">Applied to every ticked picture. Click a "Before" picture on the right to add the color at that spot. Click a swatch to change its color, ✕ to remove it.</div>
+                                        <div class="pdf-chips" id="glob-colors" data-i18n-skip style="margin-top:6px;"></div>
+                                        <div class="pdf-row" style="margin-top:6px;">
+                                            <button class="btn btn-small" type="button" id="glob-add">+ Add color</button>
+                                            <button class="btn btn-small hidden" type="button" id="glob-dropper">Pick from screen</button>
+                                        </div>
+                                    </div>
+                                    <div class="pdf-row">
+                                        <label for="def-tol">Default tolerance</label>
+                                        <input type="range" id="def-tol" min="5" max="90" step="1" value="40">
+                                        <span class="pdf-val" id="def-tol-val">40</span>
+                                    </div>
+                                    <div class="pdf-row">
+                                        <label for="def-to">Repaint with</label>
+                                        <input type="color" id="def-to" value="#ffffff">
+                                    </div>
+                                    <div class="pdf-row">
+                                        <label class="switch"><input type="checkbox" id="def-interior"><span></span></label>
+                                        <label for="def-interior">Also clear enclosed areas</label>
+                                    </div>
+                                    <div class="field-hint">Normally only background connected to the picture edge is repainted. Turn this on to also repaint larger patches of the background color seen through gaps — parts with that same color would be repainted too.</div>
+                                </div>
+
+                                <div class="flex-row gap-1 wrap items-center">
+                                    <button id="make-btn" class="btn btn-primary" type="button" disabled>Make PDF</button>
+                                </div>
+                                <div id="run-progress"></div>
+                            </div>
+
+                            <div class="pane">
+                                <div>
+                                    <div class="card-title" style="margin:0;">Pictures in the PDF</div>
+                                </div>
+                                <div id="pics"><div class="field-hint">Add a PDF to list its pictures.</div></div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </div>
+
+    <div id="toast" class="toast">Copied to clipboard</div>
+
+    <script src="vendor/pdf-lib.min.js"></script>
+    <script src="pdf-core.js"></script>
+    <script src="pdf-ui.js"></script>
+    <script src="app.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const C = window.PdfCore, U = window.PdfUi, el = U.el;
+            const $ = id => document.getElementById(id);
+            const vecWrap = $('vec'), picWrap = $('pics'), makeBtn = $('make-btn');
+            const defTol = $('def-tol'), defTolVal = $('def-tol-val'), defTo = $('def-to'), defInterior = $('def-interior');
+            const prog = U.progress($('run-progress'));
+            let state = null;
+
+            const files = U.fileList($('files'), { multiple: false, crop: false, range: false, onChange: list => load(list).catch(e => U.toast(e.message, true)) });
+
+            const light = c => 0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2] > 150 && Math.min(...c) < 240;
+            const to = () => C.parseHex(defTo.value) || [255, 255, 255];
+
+            // Background colors applied to every picture: [{rgb}] (editable in place)
+            const globals = [];
+            function addGlobal(rgb, announce) {
+                if (globals.some(g => C.colorDist(g.rgb, rgb) < 3)) return;
+                globals.push({ rgb });
+                renderGlobals(); refresh();
+                if (announce) U.toast('Added ' + C.toHex(rgb));
+            }
+            function renderGlobals() {
+                const wrap = $('glob-colors');
+                wrap.innerHTML = '';
+                if (!globals.length) wrap.append(el('span', { class: 'field-hint', text: 'No color yet' }));
+                globals.forEach((g, i) => {
+                    const sw = el('input', { type: 'color', value: C.toHex(g.rgb).toLowerCase(), title: 'Change this color', 'aria-label': 'Change this color' });
+                    const hex = el('span', { text: C.toHex(g.rgb) });
+                    sw.addEventListener('input', () => { g.rgb = C.parseHex(sw.value); hex.textContent = C.toHex(g.rgb); clearTimeout(refresh.t); refresh.t = setTimeout(refresh, 150); });
+                    const rm = el('button', { class: 'btn btn-small btn-ghost', type: 'button', title: 'Remove', 'aria-label': 'Remove', text: '✕',
+                        onclick: () => { globals.splice(i, 1); renderGlobals(); refresh(); } });
+                    wrap.append(el('span', { class: 'pdf-chip selected pdf-chip-edit', 'data-testid': 'glob-chip' }, [sw, hex, rm]));
+                });
+            }
+            $('glob-add').addEventListener('click', () => {
+                globals.push({ rgb: [255, 255, 255] });
+                renderGlobals();
+                const inputs = $('glob-colors').querySelectorAll('input[type=color]');
+                inputs[inputs.length - 1].click();   // open the picker right away
+            });
+            if (window.EyeDropper) {
+                const btn = $('glob-dropper');
+                btn.classList.remove('hidden');
+                btn.addEventListener('click', async () => {
+                    try { const r = await new EyeDropper().open(); addGlobal(C.parseHex(r.sRGBHex), true); } catch (e) { /* cancelled */ }
+                });
+            }
+            renderGlobals();
+
+            // The colors and tolerance a picture uses: its own (or auto) color plus the shared ones.
+            function params(card, img) {
+                const color = card.data.color;
+                const colors = (color ? [color] : []).concat(globals.map(g => g.rgb));
+                return colors.length ? { color, colors, tol: card.data.tol != null ? card.data.tol : +defTol.value } : null;
+            }
+            function apply(img, p) {
+                const out = U.cloneImg(img);
+                C.recolorImage(out, p.colors, p.tol, to(), { interior: defInterior.checked });
+                return out;
+            }
+
+            async function load(list) {
+                if (state && state.grid) state.grid.destroy();
+                state = null;
+                makeBtn.disabled = true;
+                vecWrap.innerHTML = '';
+                picWrap.innerHTML = '';
+                if (!list.length) return;
+                const f = list[0];
+                const doc = f.doc;
+
+                // 1) Background fills painted by the PDF itself
+                const areas = C.fillAreas(doc);
+                const vec = [];
+                const row = (a, on) => {
+                    const cb = el('input', { type: 'checkbox', checked: on ? true : null, 'data-testid': 'vec-enable' });
+                    const toIn = el('input', { type: 'color', value: '#ffffff', 'aria-label': 'Replacement color' });
+                    vec.push({ a, cb, toIn });
+                    return el('label', { class: 'pdf-vec-row', 'data-testid': 'vec-row' }, [cb, el('i', { style: 'background:' + a.hex }), el('code', { 'data-i18n-skip': true, text: a.hex }),
+                        el('span', { class: 'field-hint', 'data-i18n-skip': true, text: a.share ? Math.round(a.share * 100) + '% · ' + a.pages + ' p' : '×' + a.uses }), '→', toIn]);
+                };
+                // light colors that fill a big part of several pages, or boxes repeated on many pages
+                const many = Math.min(2, doc.getPageCount());
+                const isBg = a => light(a.rgb) && ((a.share >= 0.15 && a.pages >= many) || (a.pages >= 5 && a.share >= 0.02));
+                const bgs = areas.filter(isBg);
+                const others = areas.filter(a => !isBg(a)).slice(0, 30);
+                if (bgs.length) bgs.forEach(a => vecWrap.append(row(a, true)));
+                else vecWrap.append(el('div', { class: 'field-hint', text: 'No large background fills in this PDF.' }));
+                if (others.length) {
+                    const det = el('details', {}, [el('summary', { class: 'field-hint', text: 'Other fill colors' })]);
+                    others.forEach(a => det.append(row(a, false)));
+                    vecWrap.append(det);
+                }
+                // start the picture colors with the page background colors
+                globals.length = 0;
+                for (const v of vec) if (v.cb.checked) globals.push({ rgb: v.a.rgb.slice() });
+                renderGlobals();
+
+                // 2) Pictures
+                const get = U.originals(doc);
+                const infos = C.listImages(doc).filter(C.canDecode);
+                const skipped = C.listImages(doc).length - infos.length;
+                const timers = new WeakMap();
+                const update = card => {
+                    clearTimeout(timers.get(card));
+                    timers.set(card, setTimeout(() => show(card).catch(e => { card.status.textContent = e.message; }), 120));
+                };
+                async function show(card) {
+                    const img = await get(card.info);
+                    if (!img) { card.status.textContent = 'Cannot read this picture'; return; }
+                    card.img = img;
+                    U.drawFit(card.before, img, 150);
+                    const p = params(card, img);
+                    card.tolVal.textContent = p ? p.tol : '–';
+                    if (!p) {
+                        U.drawFit(card.after, img, 150);
+                        card.status.textContent = 'No background color yet — click this picture on the background';
+                        return;
+                    }
+                    U.drawFit(card.after, card.enabled.checked ? apply(img, p) : img, 150);
+                    card.status.textContent = p.colors.length + ' colors ± ' + p.tol + (p.color ? ' (incl. its own ' + C.toHex(p.color) + ')' : '');
+                }
+                function build(card) {
+                    const colorIn = el('input', { type: 'color', value: '#ffffff', title: 'Extra background color for this picture only', 'aria-label': 'Extra color for this picture' });
+                    const tol = el('input', { type: 'range', min: '5', max: '90', step: '1', value: defTol.value, 'aria-label': 'Tolerance' });
+                    const tolVal = el('span', { class: 'pdf-val', text: '' });
+                    const auto = el('button', { class: 'btn btn-small btn-ghost', type: 'button', text: 'Reset', title: 'Drop this picture\'s own color and tolerance' });
+                    card.colorIn = colorIn; card.tolVal = tolVal; card.tolIn = tol;
+                    card.controls.append(colorIn, tol, tolVal, auto);
+                    card.before.classList.add('pick');
+                    card.before.title = 'Click the background to add its color';
+                    colorIn.addEventListener('input', () => { card.data.color = C.parseHex(colorIn.value); update(card); });
+                    tol.addEventListener('input', () => { card.data.tol = +tol.value; tolVal.textContent = tol.value; update(card); });
+                    auto.addEventListener('click', () => { card.data = {}; tol.value = defTol.value; colorIn.value = '#ffffff'; update(card); });
+                    card.before.addEventListener('click', e => {
+                        if (!card.img) return;
+                        const r = card.before.getBoundingClientRect();
+                        const x = Math.floor((e.clientX - r.left) / r.width * card.img.w), y = Math.floor((e.clientY - r.top) / r.height * card.img.h);
+                        const sum = [0, 0, 0];
+                        let n = 0;
+                        for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) {
+                            const xx = Math.min(card.img.w - 1, Math.max(0, x + dx)), yy = Math.min(card.img.h - 1, Math.max(0, y + dy));
+                            const i = (yy * card.img.w + xx) * 4;
+                            sum[0] += card.img.data[i]; sum[1] += card.img.data[i + 1]; sum[2] += card.img.data[i + 2]; n++;
+                        }
+                        addGlobal(sum.map(v => Math.round(v / n)), true);
+                    });
+                }
+                if (skipped) picWrap.append(el('div', { class: 'field-hint', 'data-i18n-skip': true, text: skipped + ' pictures use a format this tool cannot edit (CMYK, masks, JPEG 2000) and are kept as they are.' }));
+                const grid = U.imageGrid(picWrap, { infos, build, show, onToggle: card => { if (card.shown) update(card); } });
+                state = { file: f, vec, grid, get };
+                makeBtn.disabled = false;
+            }
+
+            const refresh = () => { if (state) state.grid.refresh(); };
+            defTol.addEventListener('input', () => {
+                defTolVal.textContent = defTol.value;
+                if (!state) return;
+                for (const c of state.grid.cards) if (c.data.tol == null) c.tolIn.value = defTol.value;
+                clearTimeout(refresh.t); refresh.t = setTimeout(refresh, 200);
+            });
+            defTo.addEventListener('input', () => { clearTimeout(refresh.t); refresh.t = setTimeout(refresh, 200); });
+            defInterior.addEventListener('change', refresh);
+
+            makeBtn.addEventListener('click', async () => {
+                if (!state) return;
+                makeBtn.disabled = true;
+                const t0 = performance.now();
+                try {
+                    const doc = await C.loadPdf(state.file.bytes);
+                    let fills = 0, pics = 0;
+                    for (const v of state.vec) {
+                        if (!v.cb.checked) continue;
+                        const r = await C.recolorVectors(doc, [v.a.rgb], 10, C.parseHex(v.toIn.value) || [255, 255, 255]);
+                        fills += r.count;
+                    }
+                    const infos = new Map(C.listImages(doc).map(i => [i.ref.tag, i]));
+                    const chosen = state.grid.selected();
+                    for (let i = 0; i < chosen.length; i++) {
+                        const card = chosen[i], info = infos.get(card.info.ref.tag);
+                        prog.set(i / chosen.length, 'Repainting pictures… ' + (i + 1) + ' / ' + chosen.length);
+                        const img = await C.decodeImage(doc, info);
+                        const p = img && params(card, img);
+                        if (!p) continue;
+                        if (C.recolorImage(img, p.colors, p.tol, to(), { interior: defInterior.checked })) {
+                            await C.writeImage(doc, info, img, 0.92);
+                            pics++;
+                        }
+                        if (i % 8 === 0) await U.tick();
+                    }
+                    prog.set(0.97, 'Saving…');
+                    const bytes = await U.saveDoc(doc);
+                    C.download(bytes, U.outName(state.file.name, '_recolored'));
+                    prog.set(1, 'Done in ' + ((performance.now() - t0) / 1000).toFixed(1) + 's — ' + C.fmtBytes(bytes.length) +
+                        ' · fills ' + fills + ' · pictures ' + pics);
+                } catch (e) {
+                    console.warn(e);
+                    prog.set(0, e.message);
+                    U.toast(e.message, true);
+                } finally {
+                    makeBtn.disabled = false;
+                }
+            });
+        });
+    </script>
+</body>
+
+</html>

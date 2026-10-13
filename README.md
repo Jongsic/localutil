@@ -12,11 +12,18 @@ A collection of small, self-contained developer utilities that run entirely in t
 - **Formatting** — JS Beautifier, JS Minify, Markdown Preview, JSON Formatter, CSV ⇄ Markdown
 - **Crypto & Auth** — JWT Encode/Decode, GPG Key Inspector, SSH Key Converter, Keystore Inspector, Key Pair Generator, Password Generator, Hash & HMAC, TOTP Generator, Passkey Debugger, Encrypt/Decrypt, Sign/Verify, mTLS Cert Issuer
 - **Web3** — Ethereum ABI, HD Wallet Deriver
+- **PDF** — PDF Print Layout (booklet / cut & stack), PDF Background Color, PDF Image Upscaler
 - **Utilities** — Paste Board, Epoch Converter, CIDR Calculator, IAM Policy Diff, IAM Normalize, QR Generator, QR Reader, ICO Converter, GIF Studio, Image Resizer, SVG to Image, Image to Base64, Diff/Compare, Regex Tester, Cron Parser, Telegram Bot Logger, SEO Checker
 
 ## How it works
 
 Every tool is a standalone HTML file under [`public/`](public/) with its logic inline. `index.html` is the navigation entry point, `app.js` holds shared shell logic, and `styles.css` is the shared stylesheet. No build step, no framework — just static files.
+
+## PDF tools and upscaler models
+
+The PDF tools share `pdf-core.js` (PDF logic on top of [pdf-lib](https://pdf-lib.js.org)) and `pdf-ui.js` (file list, print-layout step and the picture grid); previews are rendered with [pdf.js](https://mozilla.github.io/pdf.js/). Text and vector content are never rasterized — only the fill-color operators and image streams a tool is asked to change are rewritten.
+
+The upscaler runs ONNX super-resolution models with [onnxruntime-web](https://onnxruntime.ai) (WebGPU, falling back to WASM). The models in [`public/models/`](public/models/) are permissively licensed only (CC-BY-4.0 / BSD-3-Clause) and kept small (≤ 9 MB, fp16 weights); a model is fetched only when someone upscales with it and is then kept in the browser cache. Credits and license texts: [`public/models/LICENSES.md`](public/models/LICENSES.md). `models.json` lists them for the UI.
 
 ## Local development
 

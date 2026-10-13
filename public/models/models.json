@@ -1,0 +1,90 @@
+[
+  {
+    "id": "4x-Nomos8k-span-otf-medium",
+    "file": "4x-Nomos8k-span-otf-medium.onnx",
+    "name": "SPAN · Nomos8k",
+    "scale": 4,
+    "arch": "SPAN",
+    "license": "CC-BY-4.0",
+    "author": "Helaman (Philip Hofmann)",
+    "sourceUrl": "https://openmodeldb.info/models/4x-Nomos8k-span-otf-medium",
+    "sizeBytes": 872130,
+    "tier": "light",
+    "tags": [
+      "general-upscaler",
+      "photo",
+      "restoration"
+    ],
+    "recommendedFor": "general",
+    "note": "Best overall on LEGO instruction samples: keeps dense stud patterns, clean edges, very fast. Trained for photos with on-the-fly degradations. Full fp16 conversion verified on real images (fp32 vs fp16 max diff ~0.003); extreme noise input can push outputs out of range, so clamp to [0,1].",
+    "description": "Best for instructions and diagrams — keeps fine repeated detail, very fast.",
+    "default": true
+  },
+  {
+    "id": "4x-realesr-animevideo-v3",
+    "file": "4x-realesr-animevideo-v3.onnx",
+    "name": "Real-ESRGAN AnimeVideo v3",
+    "scale": 4,
+    "arch": "RealESRGAN Compact",
+    "license": "BSD-3-Clause",
+    "author": "Xintao Wang (xinntao)",
+    "sourceUrl": "https://openmodeldb.info/models/4x-realesr-animevideo-v3",
+    "sizeBytes": 1253129,
+    "tier": "light",
+    "tags": [
+      "anime",
+      "cartoon",
+      "compression-removal",
+      "general-upscaler",
+      "jpeg",
+      "photo",
+      "research",
+      "restoration"
+    ],
+    "recommendedFor": "illustration",
+    "note": "Smallest/fastest. Clean lines, keeps studs, slightly softer than SPAN. Good fast default for diagrams.",
+    "description": "Smallest and fastest; clean lines, a little softer."
+  },
+  {
+    "id": "4x-realesr-general-x4v3",
+    "file": "4x-realesr-general-x4v3.onnx",
+    "name": "Real-ESRGAN General v3",
+    "scale": 4,
+    "arch": "RealESRGAN Compact",
+    "license": "BSD-3-Clause",
+    "author": "Xintao Wang (xinntao)",
+    "sourceUrl": "https://openmodeldb.info/models/4x-realesr-general-x4v3",
+    "sizeBytes": 2445002,
+    "tier": "light",
+    "tags": [
+      "compression-removal",
+      "general-upscaler",
+      "jpeg",
+      "photo",
+      "research",
+      "restoration"
+    ],
+    "recommendedFor": "photo",
+    "note": "Keeps studs, bold clean lines with slight halos; good fast general/photo model.",
+    "description": "General purpose; bold lines and JPEG cleanup."
+  },
+  {
+    "id": "4x-Nomos2-hq-mosr",
+    "file": "4x-Nomos2-hq-mosr.onnx",
+    "name": "MoSR · Nomos2 HQ",
+    "scale": 4,
+    "arch": "MoSR",
+    "license": "CC-BY-4.0",
+    "author": "Helaman (Philip Hofmann)",
+    "sourceUrl": "https://openmodeldb.info/models/4x-Nomos2-hq-mosr",
+    "sizeBytes": 8738100,
+    "tier": "mid",
+    "tags": [
+      "general-upscaler",
+      "photo"
+    ],
+    "recommendedFor": "photo",
+    "note": "Most faithful on the red/brick sample, keeps studs; slight texture noise on flat red faces. Good quality option at mid size.",
+    "description": "Larger model for photos; the most faithful colors, slower."
+  }
+]

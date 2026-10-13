@@ -57,6 +57,9 @@ const ICONS = {
     star: '<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>',
     sidebar: '<rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="3" x2="9" y2="21"/>',
     copy: '<rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>',
+    pdfbook: '<path d="M12 6.5C10 5 7 4.5 3 5v13c4-.5 7 0 9 1.5 2-1.5 5-2 9-1.5V5c-4-.5-7 0-9 1.5z"/><path d="M12 6.5v13"/>',
+    pdfcolor: '<path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6"/><path d="M12 12.5c-1.4 1.6-2.2 2.8-2.2 3.7a2.2 2.2 0 0 0 4.4 0c0-.9-.8-2.1-2.2-3.7z"/>',
+    pdfup: '<path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6"/><path d="M12 18v-6"/><path d="m9 14.5 3-3 3 3"/>',
     spark: '<path d="M12 2v4M12 18v4M4.9 4.9l2.8 2.8M16.3 16.3l2.8 2.8M2 12h4M18 12h4M4.9 19.1l2.8-2.8M16.3 7.7l2.8-2.8"/>',
 };
 
@@ -68,7 +71,7 @@ function svg(name, size) {
 }
 
 // --- Tool registry (single source of truth) ---
-const CATEGORIES = ['Encoding', 'Text & Data', 'Crypto & Auth', 'Web3', 'QR Codes', 'Images', 'Utilities'];
+const CATEGORIES = ['Encoding', 'Text & Data', 'Crypto & Auth', 'Web3', 'QR Codes', 'Images', 'PDF', 'Utilities'];
 
 const TOOLS = [
     { file: 'base64.html', name: 'Base64', desc: 'Encode & decode Base64 text', icon: 'base64', cat: 'Encoding' },
@@ -103,6 +106,9 @@ const TOOLS = [
     { file: 'image-resize.html', name: 'Image Resizer', desc: 'Place an image on a custom-sized canvas (cm/inch/px + dpi) and export it', icon: 'resize', cat: 'Images' },
     { file: 'svg-to-image.html', name: 'SVG to Image', desc: 'Rasterize SVG markup or files to PNG / JPEG — copy or download', icon: 'svgimage', cat: 'Images' },
     { file: 'image-base64.html', name: 'Image to Base64', desc: 'Encode images as Base64 data URIs or decode one back — resize, cap the output, compare formats, copy the HTML / CSS / JSX snippet', icon: 'imgb64', cat: 'Images' },
+    { file: 'pdf-imposition.html', name: 'PDF Print Layout', desc: 'Lay out PDF pages two per side for double-sided printing — fold into a booklet or cut and stack', icon: 'pdfbook', cat: 'PDF' },
+    { file: 'pdf-recolor.html', name: 'PDF Background Color', desc: 'Replace colored page and picture backgrounds with white for cleaner printing — text stays vector', icon: 'pdfcolor', cat: 'PDF' },
+    { file: 'pdf-upscale.html', name: 'PDF Image Upscaler', desc: 'Sharpen low-resolution pictures inside a PDF with an AI upscaler that runs in your browser', icon: 'pdfup', cat: 'PDF' },
     { file: 'paste-board.html', name: 'Paste Board', desc: 'Paste screenshots, images and text into a list for this tab only — view, copy back or download each one', icon: 'pasteboard', cat: 'Utilities' },
     { file: 'epoch.html', name: 'Epoch Converter', desc: 'Convert Unix timestamps and dates', icon: 'clock', cat: 'Utilities' },
     { file: 'cron.html', name: 'Cron Parser', desc: 'Explain cron expressions and preview next runs', icon: 'cron', cat: 'Utilities' },

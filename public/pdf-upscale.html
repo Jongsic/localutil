@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'none'">
+    <title>PDF Image Upscaler (AI, in-browser) — LocalUtil</title>
+    <!-- social / favicon -->
+    <meta name="description" content="Sharpen the low-resolution pictures inside a PDF with an AI super-resolution model that runs in your browser (WebGPU or CPU). Text and vector art stay untouched. Runs 100% in your browser — nothing is uploaded.">
+    <link rel="canonical" href="https://jongsic.github.io/localutil/pdf-upscale.html">
+    <link rel="icon" href="favicon.ico" sizes="any">
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="LocalUtil">
+    <meta property="og:title" content="PDF Image Upscaler (AI, in-browser) — LocalUtil">
+    <meta property="og:description" content="Sharpen the low-resolution pictures inside a PDF with an AI super-resolution model that runs in your browser (WebGPU or CPU). Text and vector art stay untouched. Runs 100% in your browser — nothing is uploaded.">
+    <meta property="og:image" content="https://jongsic.github.io/localutil/og.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:url" content="https://jongsic.github.io/localutil/pdf-upscale.html">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:image" content="https://jongsic.github.io/localutil/og.png">
+        <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebApplication","name":"PDF Image Upscaler (AI, in-browser)","url":"https://jongsic.github.io/localutil/pdf-upscale.html","description":"Sharpen the low-resolution pictures inside a PDF with an AI super-resolution model that runs in your browser (WebGPU or CPU). Text and vector art stay untouched. Runs 100% in your browser — nothing is uploaded.","applicationCategory":"DeveloperApplication","operatingSystem":"Any","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"isPartOf":{"@type":"WebSite","name":"LocalUtil","url":"https://jongsic.github.io/localutil/"}}</script>
+        <!-- /social -->
+    <script src="theme-init.js"></script>
+    <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+    <div class="app-container">
+        <aside class="sidebar" id="app-sidebar"></aside>
+
+        <main class="main-content">
+            <header class="topbar" id="app-topbar">
+                <div class="topbar-title">
+                    <h1 id="current-tool-title">PDF Image Upscaler</h1>
+                    <p id="current-tool-desc" class="topbar-desc">Sharpen low-resolution pictures inside a PDF with an AI upscaler that runs in your browser</p>
+                </div>
+            </header>
+
+            <div class="tools-container">
+                <section class="tool-section active">
+                    <div class="tool-shell pdf-wide">
+                        <div class="split-pane">
+                            <div class="pane">
+                                <div>
+                                    <div class="card-title" style="margin:0;">PDF file</div>
+                                </div>
+                                <div id="files"></div>
+
+                                <div class="pdf-step">
+                                    <div class="card-title" style="margin:0;">Model</div>
+                                    <div class="field-hint">Used for every picture unless a picture picks its own. Models run in your browser and are downloaded only when used, then kept in the browser cache. <a href="models/LICENSES.md" target="_blank" rel="noopener">Model licenses &amp; credits</a></div>
+                                    <div id="models" class="pdf-models"><div class="field-hint">Loading models…</div></div>
+                                    <div class="pdf-row">
+                                        <label class="switch"><input type="checkbox" id="up-check" checked><span></span></label>
+                                        <label for="up-check">Safety check — keep the original detail where the model changed it</label>
+                                    </div>
+                                    <div class="pdf-row">
+                                        <label for="up-quality">JPEG quality</label>
+                                        <input type="number" id="up-quality" min="50" max="100" value="90">
+                                    </div>
+                                    <div class="pdf-row">
+                                        <label for="up-backend">Run on</label>
+                                        <select id="up-backend">
+                                            <option value="auto">Auto (GPU if available)</option>
+                                            <option value="wasm">CPU only</option>
+                                        </select>
+                                        <button id="up-clear" class="btn btn-small btn-ghost" type="button">Clear downloaded models</button>
+                                    </div>
+                                </div>
+
+                                <div class="flex-row gap-1 wrap items-center">
+                                    <button id="up-run" class="btn btn-primary" type="button" disabled>Upscale ticked pictures in the list</button>
+                                    <button id="up-stop" class="btn" type="button" disabled>Stop</button>
+                                    <button id="make-btn" class="btn" type="button" disabled>Make PDF</button>
+                                </div>
+                                <div id="run-progress"></div>
+                                <div class="field-hint">Pictures already upscaled with the same model are skipped. Results stay in this tab until you make the PDF; untick "Use" on a picture to keep its original.</div>
+                            </div>
+
+                            <div class="pane">
+                                <div>
+                                    <div class="card-title" style="margin:0;">Pictures in the PDF</div>
+                                </div>
+                                <div id="pics"><div class="field-hint">Add a PDF to list its pictures.</div></div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </div>
+
+    <div id="compare" class="pdf-compare hidden" role="dialog" aria-modal="true">
+        <div class="pdf-compare-box">
+            <div class="pdf-row">
+                <strong id="cmp-title" data-i18n-skip></strong>
+                <span id="cmp-state" class="pdf-cmp-state" data-testid="cmp-state"></span>
+                <button id="cmp-play" class="btn btn-small" type="button">Pause</button>
+                <button id="cmp-close" class="btn btn-small" type="button" style="margin-left:auto;">Close</button>
+            </div>
+            <div class="field-hint">Actual size of the upscaled picture. The original (pixels enlarged to the same size) and the result swap every second at the same spot — scroll to look around, Space to pause.</div>
+            <div class="pdf-compare-view"><canvas id="cmp-canvas"></canvas></div>
+        </div>
+    </div>
+
+    <div id="toast" class="toast">Copied to clipboard</div>
+
+    <script src="vendor/pdf-lib.min.js"></script>
+    <script src="vendor/ort/ort.webgpu.min.js"></script>
+    <script src="pdf-core.js"></script>
+    <script src="pdf-ui.js"></script>
+    <script src="app.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const C = window.PdfCore, U = window.PdfUi, el = U.el;
+            const $ = id => document.getElementById(id);
+            const picWrap = $('pics'), runBtn = $('up-run'), stopBtn = $('up-stop'), makeBtn = $('make-btn');
+            const prog = U.progress($('run-progress'));
+            let state = null, models = [], defaultId = null, stop = false;
+            const sessions = new Map(); // model id → upscaler
+
+            // ---- models ----
+            fetch('models/models.json').then(r => r.json()).then(list => {
+                models = list;
+                defaultId = (list.find(m => m.default) || list[0]).id;
+                const wrap = $('models');
+                wrap.innerHTML = '';
+                for (const m of list) {
+                    const id = 'model-' + m.id;
+                    const radio = el('input', { type: 'radio', name: 'model', id, value: m.id, checked: m.id === defaultId ? true : null });
+                    const row = el('label', { class: 'pdf-model' + (m.id === defaultId ? ' selected' : ''), for: id, 'data-testid': 'model' }, [
+                        radio,
+                        el('span', { class: 'pdf-model-name', 'data-i18n-skip': true, text: m.name }),
+                        el('span', { class: 'pdf-model-size', 'data-i18n-skip': true, text: C.fmtBytes(m.sizeBytes) }),
+                        el('span', { class: 'pdf-model-desc' }, [el('span', { text: m.description || '' }), el('span', { 'data-i18n-skip': true, text: ' · ' + m.license })]),
+                    ]);
+                    radio.addEventListener('change', () => {
+                        defaultId = m.id;
+                        wrap.querySelectorAll('.pdf-model').forEach(r => r.classList.toggle('selected', r === row));
+                        if (state) state.grid.cards.forEach(c => c.syncModel());
+                    });
+                    wrap.append(row);
+                }
+                if (state) state.grid.cards.forEach(c => c.syncModel());
+            }).catch(() => { $('models').innerHTML = ''; $('models').append(el('div', { class: 'error-text', text: 'Could not load the model list.' })); });
+            const modelById = id => models.find(m => m.id === id);
+            async function upscaler(m) {
+                const key = m.id + '|' + $('up-backend').value;
+                if (sessions.has(key)) return sessions.get(key);
+                const bytes = await C.fetchModel('models/' + m.file, (got, total, cached) =>
+                    prog.set(total ? got / total : 0, cached ? 'Model loaded from cache' : 'Downloading ' + m.name + '… ' + C.fmtBytes(got) + (total ? ' / ' + C.fmtBytes(total) : '')));
+                const up = await C.createUpscaler(bytes, { backend: $('up-backend').value, scale: m.scale });
+                sessions.set(key, up);
+                return up;
+            }
+            $('up-backend').addEventListener('change', () => { for (const s of sessions.values()) s.release(); sessions.clear(); });
+            $('up-clear').addEventListener('click', async () => { await C.clearModelCache(); U.toast('Downloaded models cleared'); });
+
+            // ---- file + grid ----
+            U.fileList($('files'), { multiple: false, crop: false, range: false, onChange: list => load(list) });
+
+            function load(list) {
+                if (state) state.grid.destroy();
+                state = null;
+                runBtn.disabled = makeBtn.disabled = true;
+                picWrap.innerHTML = '';
+                if (!list.length) return;
+                const f = list[0];
+                const get = U.originals(f.doc);
+                const infos = C.listImages(f.doc).filter(C.canDecode);
+                function build(card) {
+                    const sel = el('select', { 'aria-label': 'Model for this picture', 'data-testid': 'pic-model' });
+                    const go = el('button', { class: 'btn btn-small', type: 'button', text: 'Upscale' });
+                    const cmp = el('button', { class: 'btn btn-small btn-ghost', type: 'button', text: 'Compare', disabled: true });
+                    const use = el('input', { type: 'checkbox', checked: true, id: 'use-' + card.info.ref.tag.replace(/\W/g, '_') });
+                    const useLabel = el('label', { class: 'hidden', style: 'margin:0;display:flex;gap:4px;align-items:center;' }, [use, el('span', { text: 'Use' })]);
+                    card.controls.append(sel, go, cmp, useLabel);
+                    card.syncModel = () => {
+                        const v = sel.value;
+                        sel.innerHTML = '';
+                        sel.append(el('option', { value: '', text: 'Default model' }));
+                        for (const m of models) sel.append(el('option', { value: m.id, 'data-i18n-skip': true, text: m.name }));
+                        sel.value = v || '';
+                    };
+                    card.syncModel();
+                    card.model = () => modelById(sel.value || defaultId);
+                    card.use = use; card.useLabel = useLabel; card.cmp = cmp;
+                    go.addEventListener('click', () => runCards([card], true));
+                    cmp.addEventListener('click', () => openCompare(card));
+                    // clicking an upscaled picture opens the comparison too
+                    for (const c of [card.before, card.after]) c.addEventListener('click', () => { if (card.data.result) openCompare(card); });
+                    use.addEventListener('change', updateMake);
+                }
+                async function show(card) {
+                    const img = await get(card.info);
+                    if (!img) { card.status.textContent = 'Cannot read this picture'; return; }
+                    U.drawFit(card.before, img, 150);
+                    if (card.data.result) await drawResult(card);
+                    else card.status.textContent = 'Not upscaled yet';
+                }
+                const skipped = C.listImages(f.doc).length - infos.length;
+                if (skipped) picWrap.append(el('div', { class: 'field-hint', 'data-i18n-skip': true, text: skipped + ' pictures use a format this tool cannot edit (CMYK, masks, JPEG 2000) and are kept as they are.' }));
+                const grid = U.imageGrid(picWrap, { infos, build, show });
+                state = { file: f, grid, get };
+                runBtn.disabled = false;
+            }
+
+            async function drawResult(card) {
+                const r = card.data.result;
+                const bmp = await createImageBitmap(r.blob);
+                U.drawFit(card.after, bmp, 150);
+                bmp.close();
+                card.status.textContent = r.w + '×' + r.h + ' · ' + r.modelName + ' · ' + r.secs.toFixed(1) + 's' + (r.fixed ? ' · safety check adjusted' : '');
+                card.useLabel.classList.remove('hidden');
+                card.cmp.disabled = false;
+                card.root.classList.add('has-result');
+            }
+
+            async function upscaleCard(card) {
+                const m = card.model();
+                const up = await upscaler(m);
+                const img = await state.get(card.info);
+                if (!img) return;
+                const t0 = performance.now();
+                const { img: big, scale } = await up.upscale(img);
+                const fixed = $('up-check').checked && C.mismatchBlend(img, big, C.smoothUpscale(img, scale), scale);
+                C.cleanWhite(big);
+                const blob = await C.encodeJpeg(big, (+$('up-quality').value || 90) / 100);
+                card.data.result = { blob, w: big.w, h: big.h, model: m.id, modelName: m.name, fixed, secs: (performance.now() - t0) / 1000 };
+                card.use.checked = true;
+                if (card.shown) await drawResult(card);
+            }
+
+            async function runCards(cards, force) {
+                if (!state) return;
+                stop = false;
+                runBtn.disabled = true; stopBtn.disabled = false;
+                const todo = cards.filter(c => force || !c.data.result || c.data.result.model !== c.model().id);
+                const t0 = performance.now();
+                try {
+                    for (let i = 0; i < todo.length && !stop; i++) {
+                        await upscaleCard(todo[i]);
+                        const secs = (performance.now() - t0) / 1000;
+                        prog.set((i + 1) / todo.length, 'Upscaled ' + (i + 1) + ' / ' + todo.length + ' (' + Math.round(secs) + 's, ~' + Math.round(secs / (i + 1) * (todo.length - i - 1)) + 's left)');
+                        await U.tick();
+                    }
+                    if (!todo.length) prog.set(1, 'Nothing new to upscale.');
+                } catch (e) {
+                    console.warn(e);
+                    prog.set(0, e.message);
+                    U.toast(e.message, true);
+                } finally {
+                    runBtn.disabled = false; stopBtn.disabled = true;
+                    updateMake();
+                }
+            }
+            runBtn.addEventListener('click', () => runCards(state.grid.listedSelected(), false));
+            stopBtn.addEventListener('click', () => { stop = true; });
+            function updateMake() { makeBtn.disabled = !state || !state.grid.cards.some(c => c.data.result && c.use.checked); }
+
+            makeBtn.addEventListener('click', async () => {
+                makeBtn.disabled = true;
+                try {
+                    const doc = await C.loadPdf(state.file.bytes);
+                    const infos = new Map(C.listImages(doc).map(i => [i.ref.tag, i]));
+                    let n = 0;
+                    for (const c of state.grid.cards) {
+                        const r = c.data.result;
+                        if (!r || !c.use.checked || !c.enabled.checked) continue;
+                        C.writeJpeg(doc, infos.get(c.info.ref.tag), new Uint8Array(await r.blob.arrayBuffer()), r.w, r.h);
+                        n++;
+                    }
+                    prog.set(0.95, 'Saving…');
+                    const bytes = await U.saveDoc(doc);
+                    C.download(bytes, U.outName(state.file.name, '_upscaled'));
+                    prog.set(1, 'Done — ' + n + ' pictures replaced · ' + C.fmtBytes(bytes.length));
+                } catch (e) {
+                    console.warn(e);
+                    prog.set(0, e.message);
+                    U.toast(e.message, true);
+                } finally {
+                    updateMake();
+                }
+            });
+
+            // ---- compare dialog: actual size, original and result swap every second ----
+            const dlg = $('compare'), cv = $('cmp-canvas'), stateEl = $('cmp-state'), playBtn = $('cmp-play');
+            let cmp = null;
+            async function openCompare(card) {
+                const r = card.data.result;
+                if (!r) return;
+                const img = await state.get(card.info);
+                const bmp = await createImageBitmap(r.blob);
+                // original enlarged to the result size with hard pixel edges
+                const src = document.createElement('canvas');
+                src.width = img.w; src.height = img.h;
+                src.getContext('2d').putImageData(new ImageData(img.data, img.w, img.h), 0, 0);
+                const orig = document.createElement('canvas');
+                orig.width = r.w; orig.height = r.h;
+                const octx = orig.getContext('2d');
+                octx.imageSmoothingEnabled = false;
+                octx.drawImage(src, 0, 0, r.w, r.h);
+                cmp = { bmp, orig, showResult: true, playing: true, timer: null };
+                cv.width = r.w; cv.height = r.h;
+                $('cmp-title').textContent = U.pagesLabel(card.info) + ' · ' + r.modelName + ' · ' + r.w + '×' + r.h;
+                dlg.classList.remove('hidden');
+                drawCompare();
+                setPlaying(true);
+            }
+            function drawCompare() {
+                const ctx = cv.getContext('2d');
+                ctx.drawImage(cmp.showResult ? cmp.bmp : cmp.orig, 0, 0);
+                stateEl.textContent = cmp.showResult ? 'After (upscaled)' : 'Before (original)';
+                stateEl.classList.toggle('after', cmp.showResult);
+            }
+            function setPlaying(on) {
+                cmp.playing = on;
+                clearInterval(cmp.timer);
+                if (on) cmp.timer = setInterval(() => { cmp.showResult = !cmp.showResult; drawCompare(); }, 1000);
+                playBtn.textContent = on ? 'Pause' : 'Play';
+            }
+            playBtn.addEventListener('click', () => cmp && setPlaying(!cmp.playing));
+            // click the picture while paused to flip manually
+            cv.addEventListener('click', () => { if (cmp && !cmp.playing) { cmp.showResult = !cmp.showResult; drawCompare(); } });
+            const closeCompare = () => {
+                if (!cmp) return;
+                clearInterval(cmp.timer); cmp.bmp.close(); cmp = null;
+                dlg.classList.add('hidden');
+            };
+            $('cmp-close').addEventListener('click', closeCompare);
+            dlg.addEventListener('click', e => { if (e.target === dlg) closeCompare(); });
+            document.addEventListener('keydown', e => {
+                if (!cmp) return;
+                if (e.key === 'Escape') closeCompare();
+                else if (e.key === ' ') { e.preventDefault(); setPlaying(!cmp.playing); }
+            });
+        });
+    </script>
+</body>
+
+</html>

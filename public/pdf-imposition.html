@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'none'">
+    <title>PDF Booklet &amp; Print Layout (2 pages per side) — LocalUtil</title>
+    <!-- social / favicon -->
+    <meta name="description" content="Lay out PDF pages two per side for double-sided printing — a saddle-stitch booklet (side or top binding), cut-and-stack sheets, or plain 2-up. Join several PDFs, pick pages, crop print-shop margins. Runs 100% in your browser — nothing is uploaded.">
+    <link rel="canonical" href="https://jongsic.github.io/localutil/pdf-imposition.html">
+    <link rel="icon" href="favicon.ico" sizes="any">
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="LocalUtil">
+    <meta property="og:title" content="PDF Booklet &amp; Print Layout (2 pages per side) — LocalUtil">
+    <meta property="og:description" content="Lay out PDF pages two per side for double-sided printing — a saddle-stitch booklet (side or top binding), cut-and-stack sheets, or plain 2-up. Join several PDFs, pick pages, crop print-shop margins. Runs 100% in your browser — nothing is uploaded.">
+    <meta property="og:image" content="https://jongsic.github.io/localutil/og.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:url" content="https://jongsic.github.io/localutil/pdf-imposition.html">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:image" content="https://jongsic.github.io/localutil/og.png">
+        <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebApplication","name":"PDF Booklet & Print Layout (2 pages per side)","url":"https://jongsic.github.io/localutil/pdf-imposition.html","description":"Lay out PDF pages two per side for double-sided printing — a saddle-stitch booklet (side or top binding), cut-and-stack sheets, or plain 2-up. Join several PDFs, pick pages, crop print-shop margins. Runs 100% in your browser — nothing is uploaded.","applicationCategory":"DeveloperApplication","operatingSystem":"Any","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"isPartOf":{"@type":"WebSite","name":"LocalUtil","url":"https://jongsic.github.io/localutil/"}}</script>
+        <!-- /social -->
+    <script src="theme-init.js"></script>
+    <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+    <div class="app-container">
+        <aside class="sidebar" id="app-sidebar"></aside>
+
+        <main class="main-content">
+            <header class="topbar" id="app-topbar">
+                <div class="topbar-title">
+                    <h1 id="current-tool-title">PDF Print Layout</h1>
+                    <p id="current-tool-desc" class="topbar-desc">Lay out PDF pages two per side for double-sided printing — fold into a booklet or cut and stack</p>
+                </div>
+            </header>
+
+            <div class="tools-container">
+                <section class="tool-section active">
+                    <div class="tool-shell">
+                        <div class="split-pane">
+                            <div class="pane">
+                                <div>
+                                    <div class="card-title" style="margin:0;">PDF files</div>
+                                    <div class="field-hint">Add one or more PDFs — they are joined in this order. Pick pages and crop away print-shop margins per file.</div>
+                                </div>
+                                <div id="files"></div>
+                                <div id="steps"></div>
+                            </div>
+                            <div class="pane">
+                                <div>
+                                    <div class="card-title" style="margin:0;">Result</div>
+                                    <div class="field-hint">Preview of the first sheet sides updates as you change the settings. Make the PDF to get every sheet; text and vector art stay vector.</div>
+                                </div>
+                                <div class="flex-row gap-1 wrap items-center">
+                                    <button id="run-btn" class="btn btn-primary" type="button" disabled>Make print PDF</button>
+                                    <button id="dl-btn" class="btn" type="button" disabled>Download PDF</button>
+                                </div>
+                                <div id="run-progress"></div>
+                                <div id="run-summary" class="pdf-summary"></div>
+                                <div id="preview" class="pdf-thumbs"></div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </div>
+
+    <div id="toast" class="toast">Copied to clipboard</div>
+
+    <script src="vendor/pdf-lib.min.js"></script>
+    <script src="pdf-core.js"></script>
+    <script src="pdf-ui.js"></script>
+    <script type="module">
+        import * as pdfjsLib from './vendor/pdfjs/pdf.min.mjs';
+        pdfjsLib.GlobalWorkerOptions.workerSrc = './vendor/pdfjs/pdf.worker.min.mjs';
+        window.pdfjsLib = pdfjsLib;
+    </script>
+    <script src="app.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const C = window.PdfCore, U = window.PdfUi;
+            let run = null, impose = null;
+            const previewEl = document.getElementById('preview');
+            const files = U.fileList(document.getElementById('files'), {
+                onChange: () => { impose && impose.update(); run.setReady(files.files.length > 0); schedulePreview(); },
+            });
+            const sources = () => files.files.map(f => ({ doc: f.doc, indices: C.parseRange(f.range, f.pages), crop: f.crop }));
+
+            // Live preview of the first sheet sides whenever files or settings change
+            let token = 0, timer = null;
+            function schedulePreview() { clearTimeout(timer); timer = setTimeout(() => renderPreview().catch(e => console.warn(e)), 250); }
+            async function renderPreview() {
+                const my = ++token;
+                if (!files.files.length) { previewEl.innerHTML = ''; return; }
+                const { doc, plan } = await C.impose(sources(), Object.assign(impose.options(), { maxSides: 8 }));
+                const bytes = await doc.save();
+                if (my !== token) return;
+                await C.renderThumbs(bytes, previewEl, { maxPages: 8, width: 240, total: plan.sides.length,
+                    labels: U.sideLabels(plan, impose.options().mode), isStale: () => my !== token });
+            }
+            run = U.runner({
+                runBtn: document.getElementById('run-btn'), dlBtn: document.getElementById('dl-btn'),
+                progressEl: document.getElementById('run-progress'), summaryEl: document.getElementById('run-summary'),
+                previewEl, maxPreview: 8, previewWidth: 240,
+                getName: () => U.outName(files.files[0].name, '_print'),
+                task: async prog => {
+                    prog(0.3, 'Laying out pages…');
+                    token++; // a pending live preview must not overwrite the result
+                    const { doc, plan } = await impose.run(sources());
+                    prog(0.8, 'Saving…');
+                    return { bytes: await doc.save(), labels: U.sideLabels(plan, impose.options().mode) };
+                },
+            });
+            impose = U.imposeStep(document.getElementById('steps'), {
+                getItems: () => U.itemsFor(files.files), onChange: () => { run.invalidate(); schedulePreview(); },
+            });
+        });
+    </script>
+</body>
+
+</html>
