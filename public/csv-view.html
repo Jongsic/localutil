@@ -1,0 +1,617 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
+    <title>CSV Viewer (TSV, DIF, any delimiter) — LocalUtil</title>
+    <!-- social / favicon -->
+    <meta name="description" content="Open a CSV, TSV or DIF file — or paste a copied range — and view it as a table with every value kept exactly as written: no numbers, dates or leading zeros reinterpreted. Any delimiter, auto-detected encoding (UTF-8, EUC-KR / CP949 …), filter and sort. Runs 100% in your browser — nothing is uploaded.">
+    <link rel="canonical" href="https://jongsic.github.io/localutil/csv-view.html">
+    <link rel="icon" href="favicon.ico" sizes="any">
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="LocalUtil">
+    <meta property="og:title" content="CSV Viewer (TSV, DIF, any delimiter) — LocalUtil">
+    <meta property="og:description" content="Open a CSV, TSV or DIF file — or paste a copied range — and view it as a table with every value kept exactly as written: no numbers, dates or leading zeros reinterpreted. Any delimiter, auto-detected encoding (UTF-8, EUC-KR / CP949 …), filter and sort. Runs 100% in your browser — nothing is uploaded.">
+    <meta property="og:image" content="https://jongsic.github.io/localutil/og.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:url" content="https://jongsic.github.io/localutil/csv-view.html">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:image" content="https://jongsic.github.io/localutil/og.png">
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebApplication","name":"CSV Viewer (TSV, DIF, any delimiter)","url":"https://jongsic.github.io/localutil/csv-view.html","description":"Open a CSV, TSV or DIF file — or paste a copied range — and view it as a table with every value kept exactly as written: no numbers, dates or leading zeros reinterpreted. Any delimiter, auto-detected encoding (UTF-8, EUC-KR / CP949 …), filter and sort. Runs 100% in your browser — nothing is uploaded.","applicationCategory":"DeveloperApplication","operatingSystem":"Any","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"isPartOf":{"@type":"WebSite","name":"LocalUtil","url":"https://jongsic.github.io/localutil/"}}</script>
+    <!-- /social -->
+    <script src="theme-init.js"></script>
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        .cv-hidden { display: none !important; }
+
+        .cv-drop {
+            display: flex; flex-direction: column; justify-content: center; gap: 4px;
+            min-height: 110px; padding: 18px 20px;
+            border: 2px dashed var(--border-strong);
+            border-radius: var(--r-md);
+            background-color: var(--bg-subtle);
+            cursor: pointer; text-align: center;
+            transition: border-color 0.18s, background-color 0.18s;
+        }
+        .cv-drop:hover { border-color: var(--primary); background-color: var(--bg-hover); }
+        body.cv-dragging .cv-drop { border-color: var(--primary); background-color: var(--primary-soft); }
+        .cv-drop-main { font-weight: 600; }
+        .cv-drop-sub { color: var(--text-muted); }
+        .cv-err { color: var(--danger); font-weight: 600; white-space: pre-wrap; word-break: break-word; }
+        .cv-err:empty { display: none; }
+
+        .cv-options { display: flex; align-items: flex-end; gap: 14px 26px; flex-wrap: wrap; padding: 16px 18px; }
+        .cv-opt { display: flex; flex-direction: column; gap: 6px; }
+        .cv-opt label { margin: 0; }
+        .cv-opt-row { display: flex; align-items: center; gap: 8px; }
+        .cv-custom { width: 4.5em; font-family: var(--font-mono); text-align: center; }
+        .cv-options select { width: auto; padding-right: 30px; }
+        .cv-options .segmented { flex-wrap: wrap; }
+        .cv-options .segmented button { white-space: nowrap; }
+
+        .cv-status {
+            display: flex; align-items: center; gap: 6px 16px; flex-wrap: wrap;
+            padding: 12px 16px;
+            border: 1px solid var(--border-color); border-radius: var(--r-md); background: var(--bg-content);
+        }
+        .cv-name { font-weight: 650; word-break: break-all; }
+        .cv-meta { color: var(--text-muted); }
+        .cv-warn { color: var(--warning); flex-basis: 100%; order: 1; }
+        .cv-warn:empty { display: none; }
+        .cv-status .cv-spacer { flex: 1; }
+
+        .cv-view-head { display: flex; align-items: center; gap: 10px 16px; flex-wrap: wrap; margin-bottom: 12px; }
+        .cv-view-head input[type="search"] { width: min(320px, 100%); }
+        .cv-view-head .cv-spacer { flex: 1; }
+        .cv-pager { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+        .cv-pager select { width: auto; padding-right: 30px; }
+        .cv-pager-info { color: var(--text-muted); font-variant-numeric: tabular-nums; }
+
+        .cv-grid-wrap {
+            overflow: auto; max-height: 72vh;
+            border: 1px solid var(--border-color); border-radius: var(--r-sm);
+        }
+        .cv-grid { border-collapse: collapse; font-size: 1rem; min-width: 100%; }
+        .cv-grid th, .cv-grid td {
+            border-bottom: 1px solid var(--border-color); border-right: 1px solid var(--border-color);
+            padding: 6px 10px; text-align: left; vertical-align: top;
+            white-space: pre; max-width: 380px; overflow: hidden; text-overflow: ellipsis;
+        }
+        .cv-grid th {
+            position: sticky; top: 0; z-index: 1;
+            background: var(--bg-subtle); font-weight: 650; cursor: pointer; user-select: none;
+        }
+        .cv-grid th:hover { color: var(--primary); }
+        .cv-grid th .cv-col { display: block; font-weight: 400; color: var(--text-faint); }
+        .cv-grid td { font-family: var(--font-mono); }
+        .cv-grid td.rownum, .cv-grid th.rownum { color: var(--text-faint); text-align: right; background: var(--bg-subtle); cursor: default; }
+        .cv-grid tbody tr:hover td { background: var(--bg-hover); }
+        /* A row with fewer fields than the widest one: the cell is absent, not empty. */
+        .cv-grid td.missing {
+            background-image: repeating-linear-gradient(135deg, transparent 0 6px, var(--border-color) 6px 7px);
+        }
+        .cv-note { color: var(--text-muted); margin-top: 8px; }
+        .cv-mark { background: var(--primary-soft); color: var(--primary); border-radius: 3px; }
+
+        dialog.cv-cell {
+            width: min(1400px, calc(100vw - 48px)); max-width: none;
+            max-height: calc(100vh - 48px); max-height: calc(100dvh - 48px);
+            margin: auto; padding: 0; border: 1px solid var(--border-strong); border-radius: var(--r-lg);
+            background: var(--bg-content); color: var(--text-main); box-shadow: var(--shadow-lg);
+        }
+        dialog.cv-cell[open] { display: flex; flex-direction: column; }
+        dialog.cv-cell::backdrop { background: rgba(4, 8, 16, 0.6); }
+        .cv-cell-head {
+            flex: none; display: flex; align-items: center; gap: 8px 12px; flex-wrap: wrap;
+            padding: 14px 18px; border-bottom: 1px solid var(--border-color);
+        }
+        .cv-cell-title { font-family: var(--font-mono); font-weight: 650; word-break: break-all; }
+        .cv-cell-meta { color: var(--text-muted); }
+        .cv-cell-head .cv-spacer { flex: 1; }
+        /* Starts at its content height and only shrinks (then scrolls) once the dialog reaches its max height. */
+        .cv-cell-body { flex: 0 1 auto; min-height: 0; overflow: auto; padding: 16px 18px; }
+        .cv-cell-body pre {
+            margin: 0; font-family: var(--font-mono); font-size: 1rem; line-height: 1.5;
+            white-space: pre-wrap; word-break: break-word;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="app-container">
+        <aside class="sidebar" id="app-sidebar"></aside>
+
+        <main class="main-content">
+            <header class="topbar" id="app-topbar">
+                <div class="topbar-title">
+                    <h1 id="current-tool-title">CSV Viewer</h1>
+                    <p id="current-tool-desc" class="topbar-desc">View CSV, TSV and DIF files as a table with every value kept as text — any delimiter or encoding, filter and sort</p>
+                </div>
+            </header>
+
+            <div class="tools-container">
+                <section id="tool-csv-view" class="tool-section active">
+                    <div class="tool-shell wide">
+                        <div id="cv-drop" class="cv-drop" tabindex="0" role="button">
+                            <div class="cv-drop-main">Drop a CSV, TSV or DIF file, click to choose, or paste text anywhere on the page <span id="cv-shortcut" data-i18n-skip>(Ctrl+V)</span></div>
+                            <div class="cv-drop-sub">Every value is shown exactly as written — no numbers, dates or leading zeros reinterpreted. Files stay in your browser; nothing is uploaded.</div>
+                        </div>
+                        <input type="file" id="cv-file" class="cv-hidden" accept=".csv,.tsv,.tab,.txt,.dif,.psv,text/csv,text/plain">
+                        <div id="cv-error" class="cv-err"></div>
+
+                        <div id="cv-loaded" class="cv-hidden" style="display:flex; flex-direction:column; gap:16px;">
+                            <div class="cv-status">
+                                <span class="cv-name" id="cv-name" data-i18n-skip></span>
+                                <span class="cv-meta" id="cv-meta"></span>
+                                <span class="cv-warn" id="cv-warn"></span>
+                                <span class="cv-spacer"></span>
+                                <button id="cv-close" class="btn btn-small btn-ghost" type="button">Close</button>
+                            </div>
+                            <div class="card cv-options">
+                                <div class="cv-opt" id="cv-delim-opt">
+                                    <label>Delimiter</label>
+                                    <div class="cv-opt-row">
+                                        <div class="segmented" id="cv-delim">
+                                            <button type="button" data-delim="auto" class="active">Auto</button>
+                                            <button type="button" data-delim=",">Comma ,</button>
+                                            <button type="button" data-delim=";">Semicolon ;</button>
+                                            <button type="button" data-delim="&#9;">Tab</button>
+                                            <button type="button" data-delim="|">Pipe |</button>
+                                            <button type="button" data-delim="custom">Other</button>
+                                        </div>
+                                        <input type="text" id="cv-custom" class="cv-custom cv-hidden" maxlength="1" aria-label="Delimiter character" placeholder="^">
+                                    </div>
+                                </div>
+                                <div class="cv-opt" id="cv-quote-opt">
+                                    <label>Quote</label>
+                                    <div class="segmented" id="cv-quote">
+                                        <button type="button" data-quote="&quot;" class="active" data-i18n-skip>"</button>
+                                        <button type="button" data-quote="'" data-i18n-skip>'</button>
+                                        <button type="button" data-quote="">None</button>
+                                    </div>
+                                </div>
+                                <div class="cv-opt" id="cv-encoding-opt">
+                                    <label for="cv-encoding">Encoding</label>
+                                    <select id="cv-encoding" class="select-small">
+                                        <option value="auto">Auto</option>
+                                        <option value="utf-8">UTF-8</option>
+                                        <option value="euc-kr">EUC-KR (CP949)</option>
+                                        <option value="shift_jis">Shift_JIS</option>
+                                        <option value="gbk">GBK</option>
+                                        <option value="utf-16le">UTF-16 LE</option>
+                                        <option value="windows-1252">Windows-1252 (Latin)</option>
+                                    </select>
+                                </div>
+                                <div class="cv-opt">
+                                    <label>First row</label>
+                                    <div class="segmented" id="cv-header">
+                                        <button type="button" data-header="1" class="active">Header</button>
+                                        <button type="button" data-header="0">Data</button>
+                                    </div>
+                                </div>
+                            </div>
+
+
+                            <div class="card">
+                                <div class="cv-view-head">
+                                    <input type="search" id="cv-filter" placeholder="Filter rows…" aria-label="Filter rows">
+                                    <span class="cv-spacer"></span>
+                                    <div class="cv-pager">
+                                        <button id="cv-prev" class="btn btn-small" type="button">‹ Prev</button>
+                                        <span class="cv-pager-info" id="cv-pager-info"></span>
+                                        <button id="cv-next" class="btn btn-small" type="button">Next ›</button>
+                                        <select id="cv-page-size" class="select-small" aria-label="Rows per page">
+                                            <option value="100">100 / page</option>
+                                            <option value="500">500 / page</option>
+                                            <option value="1000">1000 / page</option>
+                                            <option value="5000">5000 / page</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div id="cv-grid"></div>
+                                <div class="cv-note">Click a column header to sort, double-click a cell to see its whole value and copy it.</div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </div>
+
+    <dialog id="cv-cell" class="cv-cell" aria-labelledby="cv-cell-title">
+        <div class="cv-cell-head">
+            <span class="cv-cell-title" id="cv-cell-title" data-i18n-skip></span>
+            <span class="cv-cell-meta" id="cv-cell-meta"></span>
+            <span class="cv-spacer"></span>
+            <button id="cv-cell-copy" class="btn btn-small" type="button">Copy</button>
+            <button id="cv-cell-close" class="btn btn-small btn-ghost" type="button">Close</button>
+        </div>
+        <div class="cv-cell-body"><pre id="cv-cell-text" data-i18n-skip></pre></div>
+    </dialog>
+
+    <div id="toast" class="toast">Copied to clipboard</div>
+
+    <script src="app.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const $ = id => document.getElementById(id);
+            const dropEl = $('cv-drop'), fileInput = $('cv-file'), errEl = $('cv-error');
+            const DELIM_NAMES = { ',': 'comma', ';': 'semicolon', '\t': 'tab', '|': 'pipe' };
+
+            if (/Mac|iPhone|iPad/.test(navigator.platform)) $('cv-shortcut').textContent = '(⌘V)';
+
+            const opts = { delim: 'auto', custom: '', quote: '"', encoding: 'auto', header: true };
+            let source = null;     // { name, bytes } for files, { name, text } for pasted text
+            let table = null;      // { columns, rows: [{ cells, n }], format, delim, encoding, widest, short, long, unclosed }
+            let view = { filter: '', sort: null, page: 0, pageSize: 100 };
+            let shown = [];        // rows after filter + sort
+
+            const fmtNum = n => n.toLocaleString('en-US');
+            const collator = new Intl.Collator(undefined, { numeric: true });
+            function el(tag, attrs, children) {
+                const e = document.createElement(tag);
+                for (const [k, v] of Object.entries(attrs || {})) {
+                    if (k === 'text') e.textContent = v;
+                    else if (k === 'class') e.className = v;
+                    else e.setAttribute(k, v);
+                }
+                for (const c of [].concat(children || [])) if (c != null) e.append(c);
+                return e;
+            }
+            // Spreadsheet-style column names: A … Z, AA …
+            function colLetter(i) {
+                let s = '';
+                for (i++; i > 0; i = Math.floor((i - 1) / 26)) s = String.fromCharCode(65 + (i - 1) % 26) + s;
+                return s;
+            }
+
+            // ---------- decoding ----------
+            const ENCODING_LABELS = { 'utf-8': 'UTF-8', 'euc-kr': 'EUC-KR', 'shift_jis': 'Shift_JIS', 'gbk': 'GBK', 'utf-16le': 'UTF-16 LE', 'utf-16be': 'UTF-16 BE', 'windows-1252': 'Windows-1252' };
+            function decode(bytes, enc) {
+                if (enc === 'auto') {
+                    if (bytes[0] === 0xff && bytes[1] === 0xfe) enc = 'utf-16le';
+                    else if (bytes[0] === 0xfe && bytes[1] === 0xff) enc = 'utf-16be';
+                    else {
+                        try { return { text: new TextDecoder('utf-8', { fatal: true }).decode(bytes), encoding: 'utf-8' }; }
+                        // Not valid UTF-8: most likely a legacy Excel export, which on a Korean system is CP949.
+                        catch { enc = 'euc-kr'; }
+                    }
+                }
+                return { text: new TextDecoder(enc).decode(bytes), encoding: enc };
+            }
+
+            // ---------- parsing ----------
+            // RFC 4180 with a configurable delimiter and quote, read leniently: a quote only opens a quoted
+            // field at its start, "" inside one is a literal quote, and \n, \r\n or \r end a record.
+            function parseDelimited(text, d, q, limit = Infinity) {
+                const rows = [];
+                let row = [], field = '', i = 0, inQ = false, quoted = false;
+                const n = text.length;
+                while (i < n) {
+                    const ch = text[i];
+                    if (inQ) {
+                        const end = text.indexOf(q, i);
+                        if (end < 0) { field += text.slice(i); i = n; break; }
+                        field += text.slice(i, end);
+                        if (text[end + 1] === q) { field += q; i = end + 2; }
+                        else { inQ = false; i = end + 1; }
+                        continue;
+                    }
+                    if (q && ch === q && field === '' && !quoted) { inQ = quoted = true; i++; continue; }
+                    if (ch === d) { row.push(field); field = ''; quoted = false; i++; continue; }
+                    if (ch === '\n' || ch === '\r') {
+                        row.push(field);
+                        // a blank line is not a record
+                        if (!(row.length === 1 && row[0] === '' && !quoted)) rows.push(row);
+                        row = []; field = ''; quoted = false;
+                        i += ch === '\r' && text[i + 1] === '\n' ? 2 : 1;
+                        if (rows.length >= limit) return { rows, unclosed: false };
+                        continue;
+                    }
+                    field += ch; i++;
+                }
+                if (field !== '' || row.length || quoted) { row.push(field); rows.push(row); }
+                return { rows, unclosed: inQ };
+            }
+
+            // The candidate that splits the first records into the same number of fields most consistently.
+            function detectDelimiter(text, q, name) {
+                if (/\.(tsv|tab)$/i.test(name)) return '\t';
+                if (/\.psv$/i.test(name)) return '|';
+                const sample = text.slice(0, 64 * 1024);
+                let best = ',', bestScore = -1;
+                for (const d of [',', '\t', ';', '|']) {
+                    const { rows } = parseDelimited(sample, d, q, 50);
+                    if (!rows.length) continue;
+                    const counts = new Map();
+                    for (const r of rows) counts.set(r.length, (counts.get(r.length) || 0) + 1);
+                    const [fields, times] = [...counts].sort((a, b) => b[1] - a[1] || b[0] - a[0])[0];
+                    if (fields < 2) continue;
+                    const score = times / rows.length + fields / 1000;
+                    if (score > bestScore) { best = d; bestScore = score; }
+                }
+                return best;
+            }
+
+            // DIF (Data Interchange Format): header items are three lines each up to DATA; then each value is
+            // a "type,number" line plus a string line. -1 is BOT / EOD, 0 a number, 1 a string.
+            const isDif = (text, name) => /\.dif$/i.test(name) || /^TABLE\r?\n0,1\r?\n/.test(text);
+            function parseDif(text) {
+                const lines = text.split(/\r\n|\n|\r/);
+                let i = 0;
+                while (i < lines.length && lines[i].trim() !== 'DATA') i += 3;
+                if (i >= lines.length) throw new Error('This DIF file has no DATA section.');
+                i += 3;
+                const rows = [];
+                let row = null;
+                const unquote = s => { s = s.trim(); return s.length > 1 && s[0] === '"' && s.endsWith('"') ? s.slice(1, -1).replace(/""/g, '"') : s; };
+                while (i < lines.length) {
+                    const head = lines[i], value = lines[i + 1] ?? '';
+                    i += 2;
+                    const comma = head.indexOf(',');
+                    const type = head.slice(0, comma).trim(), num = head.slice(comma + 1).trim();
+                    if (type === '-1') {
+                        if (value.trim() === 'BOT') rows.push(row = []);
+                        else if (value.trim() === 'EOD') break;
+                    } else if (row && type === '0') {
+                        const ind = value.trim();
+                        // V: the number as written; NA: no value; TRUE / FALSE / ERROR are their own values.
+                        row.push(ind === 'V' ? num : ind === 'NA' ? '' : ind);
+                    } else if (row && type === '1') {
+                        row.push(unquote(value));
+                    }
+                }
+                return { rows, unclosed: false };
+            }
+
+            function parse() {
+                errEl.textContent = '';
+                let text = source.text, encoding = null;
+                if (source.bytes) ({ text, encoding } = decode(source.bytes, opts.encoding));
+                const dif = isDif(text, source.name);
+                const q = opts.quote;
+                const delim = dif ? null
+                    : opts.delim === 'auto' ? detectDelimiter(text, q, source.name)
+                    : opts.delim === 'custom' ? (opts.custom || ',') : opts.delim;
+                let res;
+                try { res = dif ? parseDif(text) : parseDelimited(text, delim, q); }
+                catch (e) { errEl.textContent = e.message; return; }
+
+                const all = res.rows;
+                const widest = all.reduce((m, r) => Math.max(m, r.length), 0);
+                const head = opts.header && all.length ? all[0] : null;
+                const body = head ? all.slice(1) : all;
+                const columns = Array.from({ length: widest }, (_, i) => ({
+                    name: head && head[i] !== undefined && head[i] !== '' ? head[i] : colLetter(i),
+                    letter: colLetter(i),
+                }));
+                const rows = body.map((cells, i) => ({ cells, n: i + 1 }));
+                const fieldCounts = all.map(r => r.length);
+                const mode = [...fieldCounts.reduce((m, c) => m.set(c, (m.get(c) || 0) + 1), new Map())]
+                    .sort((a, b) => b[1] - a[1])[0]?.[0] ?? 0;
+                table = {
+                    columns, rows, widest, encoding, delim, unclosed: res.unclosed,
+                    format: dif ? 'DIF' : 'CSV',
+                    odd: rows.filter(r => r.cells.length !== mode).map(r => r.n),
+                    mode,
+                };
+                renderStatus();
+                applyView();
+            }
+
+            // ---------- status ----------
+            function renderStatus() {
+                const t = table;
+                $('cv-name').textContent = source.name;
+                const parts = [];
+                if (t.format === 'DIF') parts.push('DIF');
+                else parts.push('Delimiter: ' + (DELIM_NAMES[t.delim] || '"' + t.delim + '"') + (opts.delim === 'auto' ? ' (detected)' : ''));
+                if (t.encoding) parts.push(ENCODING_LABELS[t.encoding] + (opts.encoding === 'auto' ? ' (detected)' : ''));
+                parts.push(fmtNum(t.rows.length) + (t.rows.length === 1 ? ' row' : ' rows') + ' × ' + fmtNum(t.widest) + (t.widest === 1 ? ' column' : ' columns'));
+                $('cv-meta').textContent = parts.join(' · ');
+
+                const warn = [];
+                if (t.odd.length) {
+                    const list = t.odd.slice(0, 5).join(', ') + (t.odd.length > 5 ? ', …' : '');
+                    warn.push(fmtNum(t.odd.length) + (t.odd.length === 1 ? ' row has' : ' rows have') + ' a different number of fields than the usual ' + t.mode + ' (row ' + list + ')');
+                }
+                if (t.unclosed) warn.push('a quote is never closed, so the rest of the file was read as one value');
+                $('cv-warn').textContent = warn.length ? '⚠ ' + warn.join('; ') : '';
+
+                const delimited = t.format !== 'DIF';
+                $('cv-delim-opt').classList.toggle('cv-hidden', !delimited);
+                $('cv-quote-opt').classList.toggle('cv-hidden', !delimited);
+                $('cv-encoding-opt').classList.toggle('cv-hidden', !source.bytes);
+            }
+
+            // ---------- filter / sort / page ----------
+            function applyView() {
+                const q = view.filter.toLowerCase();
+                shown = q ? table.rows.filter(r => r.cells.some(c => c.toLowerCase().includes(q))) : table.rows.slice();
+                if (view.sort) {
+                    const { col, dir } = view.sort;
+                    const sign = dir === 'asc' ? 1 : -1;
+                    shown.sort((a, b) => sign * collator.compare(a.cells[col] ?? '', b.cells[col] ?? '') || a.n - b.n);
+                }
+                renderGrid();
+            }
+
+            function renderGrid() {
+                const t = table, total = shown.length;
+                const pages = Math.max(1, Math.ceil(total / view.pageSize));
+                if (view.page >= pages) view.page = pages - 1;
+                const start = view.page * view.pageSize;
+                const slice = shown.slice(start, start + view.pageSize);
+
+                $('cv-pager-info').textContent = (total ? fmtNum(start + 1) + '–' + fmtNum(start + slice.length) : '0') +
+                    ' of ' + fmtNum(total) + (view.filter ? ' (filtered from ' + fmtNum(t.rows.length) + ')' : '');
+                $('cv-prev').disabled = view.page === 0;
+                $('cv-next').disabled = view.page >= pages - 1;
+
+                const head = el('tr', null, [el('th', { class: 'rownum', text: '#' })]);
+                t.columns.forEach((c, i) => {
+                    const arrow = view.sort && view.sort.col === i ? (view.sort.dir === 'asc' ? ' ▲' : ' ▼') : '';
+                    const th = el('th', { 'data-col': i, title: 'Sort by this column' }, [c.name + arrow]);
+                    if (c.name !== c.letter) th.append(el('span', { class: 'cv-col', text: c.letter }));
+                    head.append(th);
+                });
+                const body = el('tbody');
+                for (const r of slice) {
+                    const tr = el('tr', null, [el('td', { class: 'rownum', text: String(r.n) })]);
+                    for (let i = 0; i < t.widest; i++) {
+                        const v = r.cells[i];
+                        const td = el('td', { 'data-col': i, 'data-row': r.n });
+                        if (v === undefined) { td.className = 'missing'; td.title = 'No field here — this row is shorter'; }
+                        else td.textContent = v.length > 500 ? v.slice(0, 500) + '…' : v;
+                        tr.append(td);
+                    }
+                    body.append(tr);
+                }
+                const grid = el('div', { class: 'cv-grid-wrap', 'data-i18n-skip': '' },
+                    [el('table', { class: 'cv-grid' }, [el('thead', null, [head]), body])]);
+                $('cv-grid').replaceChildren(grid);
+            }
+
+            // ---------- cell dialog ----------
+            const cellDlg = $('cv-cell');
+            let cellValue = '';
+            function openCell(rowNum, col) {
+                const r = table.rows[rowNum - 1];
+                const v = r.cells[col];
+                if (v === undefined) return;
+                cellValue = v;
+                const c = table.columns[col];
+                $('cv-cell-title').textContent = c.name + (c.name !== c.letter ? ' (' + c.letter + ')' : '') + ' · row ' + rowNum;
+                const lines = v.split('\n').length;
+                $('cv-cell-meta').textContent = fmtNum(v.length) + (v.length === 1 ? ' char' : ' chars') + (lines > 1 ? ' · ' + fmtNum(lines) + ' lines' : '');
+                $('cv-cell-text').textContent = v;
+                cellDlg.showModal();
+                cellDlg.querySelector('.cv-cell-body').scrollTop = 0;
+            }
+
+            // ---------- loading ----------
+            function load(src) {
+                source = src;
+                view = { filter: '', sort: null, page: 0, pageSize: view.pageSize };
+                $('cv-filter').value = '';
+                parse();
+                if (!table) return;
+                dropEl.classList.add('cv-hidden');
+                $('cv-loaded').classList.remove('cv-hidden');
+            }
+            async function loadFile(file) {
+                if (!file) return;
+                table = null;
+                load({ name: file.name, bytes: new Uint8Array(await file.arrayBuffer()) });
+            }
+            function close() {
+                source = table = null;
+                $('cv-loaded').classList.add('cv-hidden');
+                dropEl.classList.remove('cv-hidden');
+                $('cv-grid').replaceChildren();
+                errEl.textContent = '';
+            }
+
+            function setActive(group, attr, val) {
+                group.querySelectorAll('button').forEach(b => b.classList.toggle('active', b.dataset[attr] === val));
+            }
+
+            // ---------- wiring ----------
+            dropEl.addEventListener('click', () => fileInput.click());
+            dropEl.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInput.click(); } });
+            fileInput.addEventListener('change', () => { loadFile(fileInput.files[0]); fileInput.value = ''; });
+
+            let dragDepth = 0;
+            const hasFiles = e => Array.from(e.dataTransfer?.types || []).includes('Files');
+            window.addEventListener('dragenter', e => { if (hasFiles(e)) { dragDepth++; document.body.classList.add('cv-dragging'); } });
+            window.addEventListener('dragleave', e => { if (hasFiles(e) && --dragDepth <= 0) { dragDepth = 0; document.body.classList.remove('cv-dragging'); } });
+            window.addEventListener('dragover', e => { if (hasFiles(e)) e.preventDefault(); });
+            window.addEventListener('drop', e => {
+                if (!hasFiles(e)) return;
+                e.preventDefault();
+                dragDepth = 0;
+                document.body.classList.remove('cv-dragging');
+                loadFile(e.dataTransfer.files[0]);
+            });
+
+            // Paste anywhere except into a text field: a copied file, or text (e.g. a range copied from a sheet).
+            document.addEventListener('paste', e => {
+                if (e.target.closest && e.target.closest('input, textarea, [contenteditable]')) return;
+                const file = Array.from(e.clipboardData?.files || [])[0];
+                const text = e.clipboardData?.getData('text/plain');
+                if (!file && !text) return;
+                e.preventDefault();
+                if (file) loadFile(file);
+                else { table = null; load({ name: 'Pasted text', text }); }
+            });
+
+            $('cv-delim').addEventListener('click', e => {
+                const b = e.target.closest('button');
+                if (!b) return;
+                opts.delim = b.dataset.delim;
+                setActive($('cv-delim'), 'delim', opts.delim);
+                $('cv-custom').classList.toggle('cv-hidden', opts.delim !== 'custom');
+                if (opts.delim === 'custom') $('cv-custom').focus();
+                if (opts.delim !== 'custom' || opts.custom) parse();
+            });
+            $('cv-custom').addEventListener('input', () => { opts.custom = $('cv-custom').value; if (opts.custom) parse(); });
+            $('cv-quote').addEventListener('click', e => {
+                const b = e.target.closest('button');
+                if (!b) return;
+                opts.quote = b.dataset.quote;
+                setActive($('cv-quote'), 'quote', opts.quote);
+                parse();
+            });
+            $('cv-encoding').addEventListener('change', () => { opts.encoding = $('cv-encoding').value; parse(); });
+            $('cv-header').addEventListener('click', e => {
+                const b = e.target.closest('button');
+                if (!b) return;
+                opts.header = b.dataset.header === '1';
+                setActive($('cv-header'), 'header', b.dataset.header);
+                view.sort = null;
+                parse();
+            });
+            $('cv-close').addEventListener('click', close);
+
+            let filterTimer;
+            $('cv-filter').addEventListener('input', () => {
+                clearTimeout(filterTimer);
+                filterTimer = setTimeout(() => { view.filter = $('cv-filter').value; view.page = 0; applyView(); }, 120);
+            });
+            $('cv-prev').addEventListener('click', () => { view.page--; renderGrid(); });
+            $('cv-next').addEventListener('click', () => { view.page++; renderGrid(); });
+            $('cv-page-size').addEventListener('change', () => { view.pageSize = +$('cv-page-size').value; view.page = 0; renderGrid(); });
+
+            $('cv-grid').addEventListener('click', e => {
+                const th = e.target.closest('th[data-col]');
+                if (!th) return;
+                const col = +th.dataset.col;
+                // ascending → descending → file order
+                if (!view.sort || view.sort.col !== col) view.sort = { col, dir: 'asc' };
+                else if (view.sort.dir === 'asc') view.sort.dir = 'desc';
+                else view.sort = null;
+                view.page = 0;
+                applyView();
+            });
+            $('cv-grid').addEventListener('dblclick', e => {
+                const td = e.target.closest('td[data-col]');
+                if (!td) return;
+                window.getSelection().removeAllRanges();
+                openCell(+td.dataset.row, +td.dataset.col);
+            });
+
+            $('cv-cell-copy').addEventListener('click', () => navigator.clipboard.writeText(cellValue)
+                .then(() => showToast('Copied to clipboard'))
+                .catch(() => showToast('Copy failed', true)));
+            $('cv-cell-close').addEventListener('click', () => cellDlg.close());
+            cellDlg.addEventListener('click', e => { if (e.target === cellDlg) cellDlg.close(); });
+        });
+    </script>
+</body>
+
+</html>

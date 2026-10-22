@@ -148,6 +148,10 @@ const SEO = {
         title: 'Passport Photo Maker (3.5 x 4.5 cm)',
         desc: 'Fit a photo into a 3.5 x 4.5 cm passport frame and export 413 x 531 px at 300 DPI. Runs 100% in your browser — photos are never uploaded.',
     },
+    'csv-view.html': {
+        title: 'CSV Viewer (TSV, DIF, any delimiter)',
+        desc: `Open a CSV, TSV or DIF file — or paste a copied range — and view it as a table with every value kept exactly as written: no numbers, dates or leading zeros reinterpreted. Any delimiter, auto-detected encoding (UTF-8, EUC-KR / CP949 …), filter and sort. ${LOCAL}`,
+    },
     'sqlite.html': {
         title: 'SQLite Viewer & SQL Runner',
         desc: `Open a .sqlite / .db file to browse its tables, views and indexes — rows with paging and sorting, CREATE statements and columns — and run SQL against it, then download the changed database. ${LOCAL}`,

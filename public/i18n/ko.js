@@ -2232,6 +2232,20 @@ window.LOCALUTIL_I18N = Object.assign(window.LOCALUTIL_I18N || {}, {
         "Formatted JSON": "JSON 정렬",
         "Copy as hex": "hex로 복사",
         "Copy as Base64": "Base64로 복사",
-        "Showing the first 64 KB. Copy or download to get all of it.": "앞 64 KB만 표시합니다. 전체는 복사하거나 다운로드하세요."
+        "Showing the first 64 KB. Copy or download to get all of it.": "앞 64 KB만 표시합니다. 전체는 복사하거나 다운로드하세요.",
+        "CSV Viewer": "CSV 뷰어",
+        "View CSV, TSV and DIF files as a table with every value kept as text — any delimiter or encoding, filter and sort": "CSV, TSV, DIF 파일을 모든 값을 텍스트 그대로 둔 표로 봅니다 — 구분자·인코딩 지정, 필터, 정렬",
+        "Drop a CSV, TSV or DIF file, click to choose, or paste text anywhere on the page": "CSV, TSV, DIF 파일을 끌어다 놓거나 클릭해서 선택하거나, 페이지 아무 곳에나 텍스트를 붙여넣으세요",
+        "Every value is shown exactly as written — no numbers, dates or leading zeros reinterpreted. Files stay in your browser; nothing is uploaded.": "모든 값을 쓰인 그대로 보여줍니다 — 숫자, 날짜, 앞자리 0을 바꾸지 않습니다. 파일은 브라우저 안에만 있고 어디에도 업로드되지 않습니다.",
+        "Delimiter": "구분자",
+        "Pipe |": "파이프 |",
+        "Other": "직접 입력",
+        "Delimiter character": "구분자 문자",
+        "Quote": "따옴표",
+        "First row": "첫 행",
+        "Filter rows…": "행 필터…",
+        "Filter rows": "행 필터",
+        "Click a column header to sort, double-click a cell to see its whole value and copy it.": "컬럼 헤더를 클릭하면 정렬하고, 셀을 더블클릭하면 전체 값을 보고 복사할 수 있습니다.",
+        "No field here — this row is shorter": "필드 없음 — 이 행은 필드 수가 더 적습니다"
     },
 });

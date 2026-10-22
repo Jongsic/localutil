@@ -26,6 +26,11 @@
     <priority>0.8</priority>
   </url>
   <url>
+    <loc>https://jongsic.github.io/localutil/csv-view.html</loc>
+    <lastmod>2026-10-22</lastmod>
+    <priority>0.8</priority>
+  </url>
+  <url>
     <loc>https://jongsic.github.io/localutil/deeplink.html</loc>
     <lastmod>2026-10-13</lastmod>
     <priority>0.8</priority>
