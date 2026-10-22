@@ -1,0 +1,984 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
+    <title>SQLite Viewer &amp; SQL Runner — LocalUtil</title>
+    <!-- social / favicon -->
+    <meta name="description" content="Open a .sqlite / .db file to browse its tables, views and indexes — rows with paging and sorting, CREATE statements and columns — and run SQL against it, then download the changed database. Runs 100% in your browser — nothing is uploaded.">
+    <link rel="canonical" href="https://jongsic.github.io/localutil/sqlite.html">
+    <link rel="icon" href="favicon.ico" sizes="any">
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="LocalUtil">
+    <meta property="og:title" content="SQLite Viewer &amp; SQL Runner — LocalUtil">
+    <meta property="og:description" content="Open a .sqlite / .db file to browse its tables, views and indexes — rows with paging and sorting, CREATE statements and columns — and run SQL against it, then download the changed database. Runs 100% in your browser — nothing is uploaded.">
+    <meta property="og:image" content="https://jongsic.github.io/localutil/og.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:url" content="https://jongsic.github.io/localutil/sqlite.html">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:image" content="https://jongsic.github.io/localutil/og.png">
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebApplication","name":"SQLite Viewer & SQL Runner","url":"https://jongsic.github.io/localutil/sqlite.html","description":"Open a .sqlite / .db file to browse its tables, views and indexes — rows with paging and sorting, CREATE statements and columns — and run SQL against it, then download the changed database. Runs 100% in your browser — nothing is uploaded.","applicationCategory":"DeveloperApplication","operatingSystem":"Any","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"isPartOf":{"@type":"WebSite","name":"LocalUtil","url":"https://jongsic.github.io/localutil/"}}</script>
+    <!-- /social -->
+    <script src="theme-init.js"></script>
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        .sq-hidden { display: none !important; }
+
+        .sq-drop {
+            display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;
+            padding: 18px 20px;
+            border: 2px dashed var(--border-strong);
+            border-radius: var(--r-md);
+            background-color: var(--bg-subtle);
+            cursor: pointer;
+            transition: border-color 0.18s, background-color 0.18s;
+        }
+        .sq-drop:hover { border-color: var(--primary); background-color: var(--bg-hover); }
+        .sq-drop.dragover, body.sq-dragging .sq-drop { border-color: var(--primary); background-color: var(--primary-soft); }
+        .sq-drop-main { font-weight: 600; }
+        .sq-drop-sub { color: var(--text-muted); }
+        .sq-drop-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+        .sq-dbbar {
+            display: flex; align-items: center; gap: 10px 16px; flex-wrap: wrap;
+            padding: 12px 16px;
+            border: 1px solid var(--border-color);
+            border-radius: var(--r-md);
+            background: var(--bg-content);
+        }
+        .sq-dbname { font-weight: 650; word-break: break-all; }
+        .sq-dbmeta { color: var(--text-muted); }
+        .sq-dirty { color: var(--warning); font-weight: 600; }
+        .sq-dbbar .sq-spacer { flex: 1; }
+
+        .sq-layout { display: grid; grid-template-columns: minmax(220px, 300px) minmax(0, 1fr); gap: 16px; align-items: start; }
+        @media (max-width: 860px) { .sq-layout { grid-template-columns: minmax(0, 1fr); } }
+        .sq-main { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+
+        .sq-side { padding: 14px; position: sticky; top: 12px; max-height: calc(100vh - 120px); overflow: auto; }
+        @media (max-width: 860px) { .sq-side { position: static; max-height: 360px; } }
+        .sq-side input[type="search"] { width: 100%; margin-bottom: 10px; }
+        .sq-group-title {
+            font-size: 1rem; font-weight: 650; color: var(--text-muted);
+            margin: 12px 4px 4px; display: flex; justify-content: space-between;
+        }
+        .sq-group-title:first-of-type { margin-top: 0; }
+        .sq-objects { list-style: none; margin: 0; padding: 0; }
+        .sq-obj {
+            width: 100%; display: flex; justify-content: space-between; align-items: baseline; gap: 8px;
+            padding: 6px 8px; border: none; border-radius: var(--r-xs);
+            background: transparent; color: var(--text-main); font: inherit; text-align: left; cursor: pointer;
+        }
+        .sq-obj:hover { background: var(--bg-hover); }
+        .sq-obj.active { background: var(--active-item); color: var(--active-text); font-weight: 600; }
+        .sq-obj-name { font-family: var(--font-mono); word-break: break-all; }
+        .sq-obj-count { color: var(--text-faint); font-variant-numeric: tabular-nums; white-space: nowrap; }
+        .sq-side-empty { color: var(--text-faint); padding: 4px 8px; }
+
+        .sq-editor-head { display: flex; align-items: center; gap: 8px 12px; flex-wrap: wrap; margin-bottom: 8px; }
+        .sq-editor-head label { margin: 0; }
+        .sq-examples { display: flex; gap: 6px; flex-wrap: wrap; }
+        .sq-examples button { font-family: var(--font-mono); }
+        .sq-notice { color: var(--text-muted); margin-top: -6px; }
+        .sq-notice:empty { display: none; }
+        .sq-notice strong { color: var(--warning); }
+        .sq-editor textarea {
+            width: 100%; min-height: 140px; resize: vertical;
+            font-family: var(--font-mono); font-size: 1rem; line-height: 1.5;
+        }
+        .sq-run-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 10px; }
+        .sq-run-row .field-hint { margin: 0; }
+        .sq-kbd {
+            font-family: var(--font-mono); padding: 1px 6px;
+            border: 1px solid var(--border-strong); border-radius: var(--r-xs); background: var(--bg-subtle);
+        }
+
+        .sq-view-head { display: flex; align-items: center; gap: 10px 16px; flex-wrap: wrap; margin-bottom: 12px; }
+        .sq-view-title { font-weight: 650; font-family: var(--font-mono); word-break: break-all; }
+        .sq-view-head .sq-spacer { flex: 1; }
+        .sq-pager { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+        .sq-pager select { width: auto; padding-right: 30px; }
+        .sq-pager-info { color: var(--text-muted); font-variant-numeric: tabular-nums; }
+
+        .sq-grid-wrap {
+            overflow: auto; max-height: 70vh;
+            border: 1px solid var(--border-color); border-radius: var(--r-sm);
+        }
+        .sq-grid { border-collapse: collapse; font-size: 1rem; min-width: 100%; }
+        .sq-grid th, .sq-grid td {
+            border-bottom: 1px solid var(--border-color); border-right: 1px solid var(--border-color);
+            padding: 6px 10px; text-align: left; vertical-align: top;
+            white-space: nowrap; max-width: 380px; overflow: hidden; text-overflow: ellipsis;
+        }
+        .sq-grid th {
+            position: sticky; top: 0; z-index: 1;
+            background: var(--bg-subtle); font-weight: 650;
+        }
+        .sq-grid th.sortable { cursor: pointer; user-select: none; }
+        .sq-grid th.sortable:hover { color: var(--primary); }
+        .sq-grid th .sq-type { display: block; font-weight: 400; color: var(--text-faint); }
+        .sq-grid td { font-family: var(--font-mono); }
+        .sq-grid td.num { text-align: right; font-variant-numeric: tabular-nums; }
+        .sq-grid td.rownum { color: var(--text-faint); text-align: right; background: var(--bg-subtle); }
+        .sq-grid tbody tr:hover td { background: var(--bg-hover); }
+        .sq-null { color: var(--text-faint); font-style: italic; }
+        .sq-blob { color: var(--warning); }
+
+        .sq-grid tbody td:not(.rownum) { cursor: default; }
+
+        dialog.sq-cell {
+            width: min(1400px, calc(100vw - 48px)); max-width: none;
+            max-height: calc(100vh - 48px); max-height: calc(100dvh - 48px);
+            margin: auto; padding: 0; border: 1px solid var(--border-strong); border-radius: var(--r-lg);
+            background: var(--bg-content); color: var(--text-main); box-shadow: var(--shadow-lg);
+        }
+        dialog.sq-cell[open] { display: flex; flex-direction: column; }
+        dialog.sq-cell::backdrop { background: rgba(4, 8, 16, 0.6); }
+        .sq-cell-head {
+            display: flex; align-items: center; gap: 8px 12px; flex-wrap: wrap;
+            padding: 14px 18px; border-bottom: 1px solid var(--border-color);
+        }
+        .sq-cell-title { font-family: var(--font-mono); font-weight: 650; word-break: break-all; }
+        .sq-cell-meta { color: var(--text-muted); }
+        .sq-cell-head .sq-spacer { flex: 1; }
+        .sq-cell-head a.btn { text-decoration: none; }
+        .sq-cell-head { flex: none; }
+        /* Starts at its content height and only shrinks (then scrolls) once the dialog reaches its max height. */
+        .sq-cell-body { flex: 0 1 auto; min-height: 0; overflow: auto; padding: 16px 18px; }
+        .sq-cell-body pre {
+            margin: 0; font-family: var(--font-mono); font-size: 1rem; line-height: 1.5;
+            white-space: pre-wrap; word-break: break-word;
+        }
+        .sq-cell-body pre.sq-hexdump { white-space: pre; word-break: normal; }
+        .sq-cell-body img {
+            display: block; max-width: 100%; max-height: 50vh; margin-bottom: 16px;
+            background-image: conic-gradient(#ccc 25%, #fff 0 50%, #ccc 0 75%, #fff 0);
+            background-size: 16px 16px;
+        }
+
+        .sq-ddl { min-height: 0; resize: none; }
+        .sq-section-label { font-weight: 650; margin: 16px 0 8px; }
+        .sq-section-label:first-child { margin-top: 0; }
+
+        .sq-result + .sq-result { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border-color); }
+        .sq-result-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+        .sq-result-sql {
+            font-family: var(--font-mono); color: var(--text-muted);
+            flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        }
+        .sq-ok { color: var(--success); font-weight: 600; }
+        .sq-err:empty { display: none; }
+        .sq-err { color: var(--danger); font-weight: 600; white-space: pre-wrap; word-break: break-word; }
+        .sq-note { color: var(--text-muted); margin-top: 8px; }
+        .sq-placeholder { color: var(--text-faint); padding: 24px 8px; text-align: center; }
+    </style>
+</head>
+
+<body>
+    <div class="app-container">
+        <aside class="sidebar" id="app-sidebar"></aside>
+
+        <main class="main-content">
+            <header class="topbar" id="app-topbar">
+                <div class="topbar-title">
+                    <h1 id="current-tool-title">SQLite Viewer</h1>
+                    <p id="current-tool-desc" class="topbar-desc">Open a SQLite file to browse its tables, schema and rows, and run SQL against it</p>
+                </div>
+            </header>
+
+            <div class="tools-container">
+                <section id="tool-sqlite" class="tool-section active">
+                    <div class="tool-shell wide">
+                        <div id="sq-drop" class="sq-drop" tabindex="0" role="button">
+                            <div>
+                                <div class="sq-drop-main">Drop a SQLite file, or click to choose</div>
+                                <div class="sq-drop-sub">.sqlite, .db, .sqlite3 … — drop its -wal file along with it to include changes not yet written back. Files stay in your browser; nothing is uploaded.</div>
+                            </div>
+                            <div class="sq-drop-actions">
+                                <button id="sq-new" class="btn btn-small" type="button">New empty database</button>
+                            </div>
+                        </div>
+                        <input type="file" id="sq-file" class="sq-hidden" multiple>
+                        <div id="sq-load-error" class="sq-err"></div>
+
+                        <div id="sq-dbbar" class="sq-dbbar sq-hidden">
+                            <span class="sq-dbname" id="sq-dbname" data-i18n-skip></span>
+                            <span class="sq-dbmeta" id="sq-dbmeta"></span>
+                            <span class="sq-dirty sq-hidden" id="sq-dirty">Modified — download to keep the changes</span>
+                            <span class="sq-spacer"></span>
+                            <button id="sq-download" class="btn btn-small" type="button">Download .sqlite</button>
+                            <button id="sq-close" class="btn btn-small btn-ghost" type="button">Close</button>
+                        </div>
+                        <div id="sq-notice" class="sq-notice"></div>
+
+                        <div id="sq-layout" class="sq-layout sq-hidden">
+                            <aside class="card sq-side">
+                                <input type="search" id="sq-filter" placeholder="Filter tables…" aria-label="Filter tables">
+                                <div id="sq-objects"></div>
+                            </aside>
+
+                            <div class="sq-main">
+                                <div class="card sq-editor">
+                                    <div class="sq-editor-head">
+                                        <label for="sq-sql">SQL</label>
+                                        <div class="sq-examples" id="sq-examples" data-i18n-skip>
+                                            <button class="btn btn-small" type="button" data-ex="select">SELECT</button>
+                                            <button class="btn btn-small" type="button" data-ex="insert">INSERT</button>
+                                            <button class="btn btn-small" type="button" data-ex="update">UPDATE</button>
+                                            <button class="btn btn-small" type="button" data-ex="delete">DELETE</button>
+                                            <button class="btn btn-small" type="button" data-ex="join">JOIN</button>
+                                            <button class="btn btn-small" type="button" data-ex="group">GROUP BY</button>
+                                            <button class="btn btn-small" type="button" data-ex="create">CREATE TABLE</button>
+                                            <button class="btn btn-small" type="button" data-ex="alter">ALTER TABLE</button>
+                                            <button class="btn btn-small" type="button" data-ex="index">CREATE INDEX</button>
+                                            <button class="btn btn-small" type="button" data-ex="drop">DROP TABLE</button>
+                                        </div>
+                                    </div>
+                                    <textarea id="sq-sql" spellcheck="false" placeholder="SELECT * FROM my_table WHERE id > 10;"></textarea>
+                                    <div class="sq-run-row">
+                                        <button id="sq-run" class="btn btn-primary" type="button">Run</button>
+                                        <span class="field-hint"><span class="sq-kbd" id="sq-shortcut" data-i18n-skip>Ctrl+Enter</span> runs the query. With text selected, only the selection runs. Several statements separated by ; run in order. The example buttons fill in the selected table and its columns.</span>
+                                    </div>
+                                </div>
+
+                                <div class="card" id="sq-view">
+                                    <div class="sq-placeholder">Pick a table on the left, or run a query.</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </div>
+
+    <dialog id="sq-cell" class="sq-cell" aria-labelledby="sq-cell-title">
+        <div class="sq-cell-head">
+            <span class="sq-cell-title" id="sq-cell-title" data-i18n-skip></span>
+            <span class="sq-cell-meta" id="sq-cell-meta"></span>
+            <span class="sq-spacer"></span>
+            <div class="segmented sq-hidden" id="sq-cell-json">
+                <button type="button" data-json="raw" class="active">Raw</button>
+                <button type="button" data-json="pretty">Formatted JSON</button>
+            </div>
+            <span id="sq-cell-actions" class="flex-row wrap" style="gap:8px"></span>
+            <button id="sq-cell-close" class="btn btn-small btn-ghost" type="button">Close</button>
+        </div>
+        <div class="sq-cell-body" id="sq-cell-body"></div>
+    </dialog>
+
+    <div id="toast" class="toast">Copied to clipboard</div>
+
+    <script src="app.js"></script>
+    <script src="vendor/sqljs/sql-wasm.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const $ = id => document.getElementById(id);
+            const dropEl = $('sq-drop'), fileInput = $('sq-file'), loadErr = $('sq-load-error');
+            const dbbar = $('sq-dbbar'), layout = $('sq-layout'), view = $('sq-view');
+            const objectsEl = $('sq-objects'), filterEl = $('sq-filter'), sqlEl = $('sq-sql');
+
+            const PAGE_SIZES = [50, 100, 500, 1000];
+            const RESULT_LIMIT = 1000;   // rows rendered per query result set
+
+            let SQL = null;              // sql.js module, loaded on first use
+            let db = null;
+            let dbName = '';
+            let dirty = false;
+            let walMode = false;         // the opened file was in WAL mode; downloads keep that mode
+            let current = null;          // { name, type, tab, page, pageSize, sort: { col, dir } }
+
+            if (/Mac|iPhone|iPad/.test(navigator.platform)) $('sq-shortcut').textContent = '⌘+Enter';
+
+            function loadSql() {
+                if (!SQL) SQL = initSqlJs({ locateFile: f => 'vendor/sqljs/' + f });
+                return SQL;
+            }
+
+            // ---------- helpers ----------
+            const qid = name => '"' + String(name).replace(/"/g, '""') + '"';
+            const fmtNum = n => n.toLocaleString('en-US');
+            function fmtBytes(n) {
+                if (n < 1024) return n + ' B';
+                if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB';
+                return (n / 1024 / 1024).toFixed(1) + ' MB';
+            }
+            function el(tag, attrs, children) {
+                const e = document.createElement(tag);
+                for (const [k, v] of Object.entries(attrs || {})) {
+                    if (k === 'text') e.textContent = v;
+                    else if (k === 'class') e.className = v;
+                    else if (k.startsWith('on')) e.addEventListener(k.slice(2), v);
+                    else e.setAttribute(k, v);
+                }
+                for (const c of [].concat(children || [])) if (c != null) e.append(c);
+                return e;
+            }
+            function query(sql, params) {
+                const stmt = db.prepare(sql);
+                try {
+                    if (params) stmt.bind(params);
+                    const rows = [];
+                    while (stmt.step()) rows.push(stmt.get());
+                    return { columns: stmt.getColumnNames(), rows };
+                } finally { stmt.free(); }
+            }
+
+            function cell(v) {
+                const td = el('td');
+                if (v === null || v === undefined) {
+                    td.append(el('span', { class: 'sq-null', text: 'NULL' }));
+                } else if (v instanceof Uint8Array) {
+                    const hex = Array.from(v.subarray(0, 16), b => b.toString(16).padStart(2, '0')).join(' ');
+                    td.append(el('span', { class: 'sq-blob', text: 'BLOB · ' + fmtBytes(v.length) }), ' ' + hex + (v.length > 16 ? ' …' : ''));
+                } else if (typeof v === 'number' || typeof v === 'bigint') {
+                    td.className = 'num';
+                    td.textContent = String(v);
+                } else {
+                    const s = String(v);
+                    td.textContent = s.length > 500 ? s.slice(0, 500) + '…' : s;
+                }
+                return td;
+            }
+
+            // columns: [{ name, type?, sortDir?, onclick? }]
+            function grid(columns, rows, firstRowNum) {
+                const head = el('tr', null, [el('th', { text: '#' })]);
+                for (const c of columns) {
+                    const th = el('th', { text: c.name });
+                    if (c.type) th.append(el('span', { class: 'sq-type', text: c.type }));
+                    if (c.onclick) {
+                        th.classList.add('sortable');
+                        th.title = 'Sort by this column';
+                        th.addEventListener('click', c.onclick);
+                        if (c.sortDir) th.firstChild.textContent += c.sortDir === 'ASC' ? ' ▲' : ' ▼';
+                    }
+                    head.append(th);
+                }
+                const body = el('tbody');
+                rows.forEach((r, i) => {
+                    const tr = el('tr', null, [el('td', { class: 'rownum', text: String(firstRowNum + i) })]);
+                    r.forEach((v, j) => {
+                        const td = cell(v);
+                        cellValues.set(td, { value: v, column: columns[j].name, row: firstRowNum + i });
+                        tr.append(td);
+                    });
+                    body.append(tr);
+                });
+                const wrap = el('div', { class: 'sq-grid-wrap', 'data-i18n-skip': '' },
+                    [el('table', { class: 'sq-grid' }, [el('thead', null, [head]), body])]);
+                wrap.addEventListener('dblclick', e => {
+                    const info = cellValues.get(e.target.closest('td'));
+                    if (!info) return;
+                    window.getSelection().removeAllRanges();
+                    openCell(info);
+                });
+                return wrap;
+            }
+
+            // ---------- cell viewer ----------
+            const cellValues = new WeakMap();   // <td> → { value, column, row }
+            const cellDlg = $('sq-cell'), cellBody = $('sq-cell-body'), cellActions = $('sq-cell-actions'), jsonToggle = $('sq-cell-json');
+            const HEXDUMP_LIMIT = 64 * 1024;
+            let cellUrl = null;
+
+            const toHex = b => Array.from(b, x => x.toString(16).padStart(2, '0')).join('');
+            function toBase64(b) {
+                let s = '';
+                for (let i = 0; i < b.length; i += 0x8000) s += String.fromCharCode.apply(null, b.subarray(i, i + 0x8000));
+                return btoa(s);
+            }
+            function hexdump(b) {
+                const lines = [];
+                for (let off = 0; off < b.length; off += 16) {
+                    const row = b.subarray(off, off + 16);
+                    const hex = Array.from(row, x => x.toString(16).padStart(2, '0')).join(' ');
+                    const ascii = Array.from(row, x => x >= 0x20 && x < 0x7f ? String.fromCharCode(x) : '.').join('');
+                    lines.push(off.toString(16).padStart(8, '0') + '  ' + hex.padEnd(47) + '  ' + ascii);
+                }
+                return lines.join('\n');
+            }
+            function imageType(b) {
+                if (b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47) return ['image/png', 'png', 'PNG'];
+                if (b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return ['image/jpeg', 'jpg', 'JPEG'];
+                if (b[0] === 0x47 && b[1] === 0x49 && b[2] === 0x46) return ['image/gif', 'gif', 'GIF'];
+                if (String.fromCharCode(...b.subarray(0, 4)) === 'RIFF' && String.fromCharCode(...b.subarray(8, 12)) === 'WEBP') return ['image/webp', 'webp', 'WebP'];
+                return null;
+            }
+            function copyText(text) {
+                navigator.clipboard.writeText(text)
+                    .then(() => showToast('Copied to clipboard'))
+                    .catch(() => showToast('Copy failed', true));
+            }
+            const actionBtn = (text, onclick, id) => el('button', { class: 'btn btn-small', type: 'button', text, onclick, id });
+
+            function openCell({ value: v, column, row }) {
+                if (cellUrl) { URL.revokeObjectURL(cellUrl); cellUrl = null; }
+                $('sq-cell-title').textContent = column;
+                cellBody.replaceChildren();
+                cellActions.replaceChildren();
+                jsonToggle.classList.add('sq-hidden');
+                let meta;
+
+                if (v === null || v === undefined) {
+                    meta = 'NULL';
+                    cellBody.append(el('pre', { class: 'sq-null', text: 'NULL' }));
+                } else if (v instanceof Uint8Array) {
+                    const img = imageType(v);
+                    meta = 'BLOB · ' + fmtBytes(v.length) + (img ? ' · ' + img[2] + ' image' : '');
+                    const blob = new Blob([v], { type: img ? img[0] : 'application/octet-stream' });
+                    cellUrl = URL.createObjectURL(blob);
+                    // Looks like an image by its first bytes; dropped again if it does not decode.
+                    if (img) cellBody.append(el('img', { src: cellUrl, alt: column, onerror: e => e.target.remove() }));
+                    cellBody.append(el('pre', { class: 'sq-hexdump', id: 'sq-cell-text', text: hexdump(v.subarray(0, HEXDUMP_LIMIT)), 'data-i18n-skip': '' }));
+                    if (v.length > HEXDUMP_LIMIT) cellBody.append(el('div', { class: 'sq-note', text: 'Showing the first 64 KB. Copy or download to get all of it.' }));
+                    const name = (column.replace(/[^\w.-]+/g, '_') || 'blob') + '-' + row + '.' + (img ? img[1] : 'bin');
+                    cellActions.append(
+                        actionBtn('Copy as hex', () => copyText(toHex(v)), 'sq-cell-copy-hex'),
+                        actionBtn('Copy as Base64', () => copyText(toBase64(v)), 'sq-cell-copy-b64'),
+                        el('a', { class: 'btn btn-small', href: cellUrl, download: name, text: 'Download', id: 'sq-cell-download' }),
+                    );
+                } else {
+                    const text = String(v);
+                    if (typeof v === 'string') {
+                        const lines = text.split('\n').length;
+                        meta = 'TEXT · ' + fmtNum(text.length) + (text.length === 1 ? ' char' : ' chars') + (lines > 1 ? ' · ' + fmtNum(lines) + ' lines' : '');
+                    } else meta = Number.isInteger(v) ? 'INTEGER' : 'REAL';
+                    const pre = el('pre', { id: 'sq-cell-text', text, 'data-i18n-skip': '' });
+                    cellBody.append(pre);
+                    let shown = text;
+                    // JSON stored as text is common enough to offer it formatted.
+                    let pretty = null;
+                    if (/^\s*[[{]/.test(text)) { try { pretty = JSON.stringify(JSON.parse(text), null, 2); } catch { } }
+                    if (pretty) {
+                        jsonToggle.classList.remove('sq-hidden');
+                        jsonToggle.querySelectorAll('button').forEach(b => {
+                            b.classList.toggle('active', b.dataset.json === 'raw');
+                            b.onclick = () => {
+                                shown = b.dataset.json === 'pretty' ? pretty : text;
+                                pre.textContent = shown;
+                                jsonToggle.querySelectorAll('button').forEach(x => x.classList.toggle('active', x === b));
+                            };
+                        });
+                    }
+                    cellActions.append(actionBtn('Copy', () => copyText(shown), 'sq-cell-copy'));
+                }
+                $('sq-cell-meta').textContent = meta;
+                cellBody.scrollTop = 0;
+                cellDlg.showModal();
+            }
+            $('sq-cell-close').addEventListener('click', () => cellDlg.close());
+            // A click on the backdrop lands on the <dialog> itself.
+            cellDlg.addEventListener('click', e => { if (e.target === cellDlg) cellDlg.close(); });
+            cellDlg.addEventListener('close', () => { if (cellUrl) { URL.revokeObjectURL(cellUrl); cellUrl = null; } });
+
+            function toCsv(columns, rows) {
+                const esc = v => {
+                    if (v === null || v === undefined) return '';
+                    if (v instanceof Uint8Array) v = Array.from(v, b => b.toString(16).padStart(2, '0')).join('');
+                    v = String(v);
+                    return /[",\n\r]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
+                };
+                return [columns.map(esc).join(','), ...rows.map(r => r.map(esc).join(','))].join('\n');
+            }
+            function copyCsvButton(columns, rows) {
+                return el('button', {
+                    class: 'btn btn-small', type: 'button', text: 'Copy as CSV',
+                    onclick: () => navigator.clipboard.writeText(toCsv(columns, rows))
+                        .then(() => showToast('Copied to clipboard'))
+                        .catch(() => showToast('Copy failed', true)),
+                });
+            }
+
+            // ---------- WAL ----------
+            const isSqlite = b => new TextDecoder().decode(b.subarray(0, 15)) === 'SQLite format 3';
+            const walMagic = b => b.length >= 32 && (new DataView(b.buffer, b.byteOffset).getUint32(0) & 0xfffffffe) === 0x377f0682;
+
+            // The WAL running checksum: pairs of 32-bit words, in the byte order the magic number names.
+            function walChecksum(dv, off, len, s, le) {
+                let [s0, s1] = s;
+                for (let i = off; i < off + len; i += 8) {
+                    s0 = (s0 + dv.getUint32(i, le) + s1) >>> 0;
+                    s1 = (s1 + dv.getUint32(i + 4, le) + s0) >>> 0;
+                }
+                return [s0, s1];
+            }
+
+            // Writes the committed frames of a -wal file into the database image, the way a checkpoint does.
+            // Frames are valid while their salts match the header and the running checksum holds; frames after
+            // the last commit frame belong to an unfinished transaction and are dropped.
+            function mergeWal(dbBytes, wal, walName) {
+                const dv = new DataView(wal.buffer, wal.byteOffset, wal.byteLength);
+                const le = (dv.getUint32(0) & 1) === 0;
+                const pageSize = dv.getUint32(8) === 1 ? 65536 : dv.getUint32(8);
+                const salt1 = dv.getUint32(16), salt2 = dv.getUint32(20);
+                let sum = walChecksum(dv, 0, 24, [0, 0], le);
+                if (sum[0] !== dv.getUint32(24) || sum[1] !== dv.getUint32(28)) throw new Error(walName + ' has a damaged header.');
+                if (dbBytes.length >= 100) {
+                    const dbPage = new DataView(dbBytes.buffer, dbBytes.byteOffset).getUint16(16);
+                    if ((dbPage === 1 ? 65536 : dbPage) !== pageSize) throw new Error(walName + ' does not belong to this database (different page size).');
+                }
+                const pending = new Map(), committed = new Map();
+                let dbPages = 0, commits = 0;
+                for (let off = 32; off + 24 + pageSize <= wal.length; off += 24 + pageSize) {
+                    if (dv.getUint32(off + 8) !== salt1 || dv.getUint32(off + 12) !== salt2) break;
+                    sum = walChecksum(dv, off, 8, sum, le);
+                    sum = walChecksum(dv, off + 24, pageSize, sum, le);
+                    if (sum[0] !== dv.getUint32(off + 16) || sum[1] !== dv.getUint32(off + 20)) break;
+                    pending.set(dv.getUint32(off), off + 24);
+                    const size = dv.getUint32(off + 4);
+                    if (size) {
+                        for (const [pg, at] of pending) committed.set(pg, at);
+                        pending.clear();
+                        dbPages = size;
+                        commits++;
+                    }
+                }
+                if (!commits) return { bytes: dbBytes, commits: 0 };
+                const out = new Uint8Array(dbPages * pageSize);
+                out.set(dbBytes.subarray(0, Math.min(dbBytes.length, out.length)));
+                for (const [pg, at] of committed) {
+                    if (pg <= dbPages) out.set(wal.subarray(at, at + pageSize), (pg - 1) * pageSize);
+                }
+                return { bytes: out, commits };
+            }
+
+            // ---------- open / close ----------
+            async function openFiles(files) {
+                loadErr.textContent = '';
+                const read = await Promise.all(Array.from(files, async f => ({ name: f.name, bytes: new Uint8Array(await f.arrayBuffer()) })));
+                const wal = read.find(f => walMagic(f.bytes));
+                const rest = read.filter(f => f !== wal && !/-shm$/.test(f.name));
+                // An empty main file is legal when everything still sits in the WAL.
+                const main = rest.find(f => isSqlite(f.bytes)) || (wal && rest.find(f => !f.bytes.length));
+                if (!main) {
+                    loadErr.textContent = wal && !rest.length
+                        ? wal.name + ' is a write-ahead log, not a database — drop it together with its database file.'
+                        : (rest[0] || read[0]).name + ' is not a SQLite database (the file does not start with the SQLite header).';
+                    return;
+                }
+                let bytes = main.bytes, merged = null;
+                if (wal) {
+                    try { merged = mergeWal(bytes, wal.bytes, wal.name); } catch (e) { loadErr.textContent = e.message; return; }
+                    bytes = merged.bytes;
+                }
+                openBytes(bytes, main.name, { wal: wal && wal.name, commits: merged && merged.commits });
+            }
+
+            async function openBytes(bytes, name, opts = {}) {
+                loadErr.textContent = '';
+                if (bytes.length && !isSqlite(bytes)) {
+                    loadErr.textContent = name + ' is not a SQLite database (the file does not start with the SQLite header).';
+                    return;
+                }
+                // The in-memory engine has no -wal or -shm file to work with, so a WAL-mode image is opened as a
+                // rollback-journal one; download() puts the WAL flag back.
+                const wasWal = !!opts.wal || (bytes.length > 19 && bytes[18] === 2 && bytes[19] === 2);
+                if (bytes.length > 19 && bytes[18] === 2) {
+                    bytes = bytes.slice();
+                    bytes[18] = bytes[19] = 1;
+                }
+                let next;
+                try {
+                    const S = await loadSql();
+                    next = new S.Database(bytes.length ? bytes : undefined);
+                    next.exec('SELECT count(*) FROM sqlite_schema');
+                } catch (e) {
+                    if (next) next.close();
+                    loadErr.textContent = 'Could not open ' + name + ': ' + (e.message || e);
+                    return;
+                }
+                if (db) db.close();
+                db = next;
+                dbName = name;
+                walMode = wasWal;
+                current = null;
+                setDirty(false);
+                $('sq-dbname').textContent = name;
+                $('sq-dbmeta').textContent = bytes.length ? fmtBytes(bytes.length) : 'empty, in memory';
+                const notice = $('sq-notice');
+                notice.replaceChildren();
+                if (opts.wal) {
+                    notice.append(opts.commits
+                        ? 'Merged ' + fmtNum(opts.commits) + (opts.commits === 1 ? ' committed transaction' : ' committed transactions') + ' from ' + opts.wal + '. '
+                        : opts.wal + ' holds no committed changes. ',
+                        'Downloads are a single file with these changes included. If it replaces the original, delete the old ' + name + '-wal and ' + name + '-shm next to it (with the app closed) — SQLite would otherwise replay that old log on top of it.');
+                } else if (wasWal) {
+                    notice.append(el('strong', { text: 'WAL mode: ' }),
+                        'changes still in ' + name + '-wal are not shown. Drop the database and its -wal file together to include them.');
+                }
+                dropEl.classList.add('sq-hidden');
+                dbbar.classList.remove('sq-hidden');
+                layout.classList.remove('sq-hidden');
+                refreshObjects();
+                const first = objectsEl.querySelector('.sq-obj[data-kind="table"], .sq-obj[data-kind="view"]');
+                if (first) first.click();
+                else showPlaceholder('No tables yet — create one with SQL above.');
+            }
+
+            function closeDb() {
+                if (dirty && !confirm('Discard the changes made to ' + dbName + '?')) return;
+                if (db) db.close();
+                db = null;
+                current = null;
+                dropEl.classList.remove('sq-hidden');
+                dbbar.classList.add('sq-hidden');
+                $('sq-notice').replaceChildren();
+                layout.classList.add('sq-hidden');
+                showPlaceholder('Pick a table on the left, or run a query.');
+            }
+
+            function setDirty(v) {
+                dirty = v;
+                $('sq-dirty').classList.toggle('sq-hidden', !v);
+                $('sq-download').classList.toggle('btn-primary', v);
+            }
+
+            // ---------- object list ----------
+            function refreshObjects() {
+                const objs = query("SELECT type, name, tbl_name FROM sqlite_schema WHERE name NOT LIKE 'sqlite_autoindex_%' ORDER BY type, name").rows;
+                const groups = [
+                    ['table', 'Tables'], ['view', 'Views'], ['index', 'Indexes'], ['trigger', 'Triggers'],
+                ];
+                objectsEl.replaceChildren();
+                let tables = 0;
+                for (const [kind, title] of groups) {
+                    const items = objs.filter(o => o[0] === kind);
+                    if (kind === 'table') tables = items.length;
+                    if (!items.length && kind !== 'table') continue;
+                    objectsEl.append(el('div', { class: 'sq-group-title' }, [el('span', { text: title }), el('span', { text: String(items.length) })]));
+                    const ul = el('ul', { class: 'sq-objects', 'data-i18n-skip': '' });
+                    if (!items.length) ul.append(el('li', { class: 'sq-side-empty', text: 'none' }));
+                    for (const [, name, tbl] of items) {
+                        let count = '';
+                        if (kind === 'table') {
+                            try { count = fmtNum(query('SELECT count(*) FROM ' + qid(name)).rows[0][0]); } catch { count = '?'; }
+                        } else if (kind === 'index' || kind === 'trigger') count = tbl;
+                        const btn = el('button', { class: 'sq-obj', type: 'button', 'data-kind': kind, 'data-name': name }, [
+                            el('span', { class: 'sq-obj-name', text: name }),
+                            el('span', { class: 'sq-obj-count', text: count }),
+                        ]);
+                        btn.addEventListener('click', () => selectObject(name, kind));
+                        if (current && current.name === name) btn.classList.add('active');
+                        ul.append(el('li', null, [btn]));
+                    }
+                    objectsEl.append(ul);
+                }
+                $('sq-dbmeta').textContent = $('sq-dbmeta').textContent.replace(/ · .*$/, '') +
+                    ' · ' + tables + (tables === 1 ? ' table' : ' tables');
+                applyFilter();
+            }
+
+            function applyFilter() {
+                const q = filterEl.value.trim().toLowerCase();
+                objectsEl.querySelectorAll('.sq-obj').forEach(b => {
+                    b.parentElement.style.display = !q || b.dataset.name.toLowerCase().includes(q) ? '' : 'none';
+                });
+            }
+
+            function markActive() {
+                objectsEl.querySelectorAll('.sq-obj').forEach(b =>
+                    b.classList.toggle('active', !!current && b.dataset.name === current.name));
+            }
+
+            function selectObject(name, kind) {
+                const hasData = kind === 'table' || kind === 'view';
+                current = { name, kind, tab: hasData ? 'data' : 'schema', page: 0, pageSize: 100, sort: null };
+                markActive();
+                renderObject();
+            }
+
+            function showPlaceholder(text) {
+                view.replaceChildren(el('div', { class: 'sq-placeholder', text }));
+            }
+
+            // ---------- table / view viewer ----------
+            function renderObject() {
+                const c = current;
+                const hasData = c.kind === 'table' || c.kind === 'view';
+                const head = el('div', { class: 'sq-view-head' }, [
+                    el('span', { class: 'sq-view-title', text: c.name, 'data-i18n-skip': '' }),
+                ]);
+                if (hasData) {
+                    const seg = el('div', { class: 'segmented' });
+                    for (const [tab, label] of [['data', 'Data'], ['schema', 'Schema']]) {
+                        seg.append(el('button', {
+                            type: 'button', text: label, class: c.tab === tab ? 'active' : '', 'data-tab': tab,
+                            onclick: () => { c.tab = tab; renderObject(); },
+                        }));
+                    }
+                    head.append(seg);
+                }
+                head.append(el('span', { class: 'sq-spacer' }));
+                const body = el('div');
+                try {
+                    if (c.tab === 'data') renderData(head, body);
+                    else renderSchema(body);
+                } catch (e) {
+                    body.replaceChildren(el('div', { class: 'sq-err', text: e.message || String(e) }));
+                }
+                view.replaceChildren(head, body);
+            }
+
+            function renderData(head, body) {
+                const c = current;
+                const total = query('SELECT count(*) FROM ' + qid(c.name)).rows[0][0];
+                const pages = Math.max(1, Math.ceil(total / c.pageSize));
+                if (c.page >= pages) c.page = pages - 1;
+                const order = c.sort ? ' ORDER BY ' + qid(c.sort.col) + ' ' + c.sort.dir : '';
+                const res = query('SELECT * FROM ' + qid(c.name) + order + ' LIMIT ? OFFSET ?', [c.pageSize, c.page * c.pageSize]);
+
+                let types = {};
+                try { for (const r of query('SELECT name, type FROM pragma_table_info(?)', [c.name]).rows) types[r[0]] = r[1]; } catch { }
+
+                const from = total ? c.page * c.pageSize + 1 : 0;
+                const to = Math.min(total, (c.page + 1) * c.pageSize);
+                const size = el('select', { class: 'select-small', 'aria-label': 'Rows per page' });
+                for (const n of PAGE_SIZES) size.append(el('option', { value: n, text: n + ' / page' }));
+                size.value = c.pageSize;
+                size.addEventListener('change', () => { c.pageSize = +size.value; c.page = 0; renderObject(); });
+                head.append(el('div', { class: 'sq-pager' }, [
+                    el('button', { class: 'btn btn-small', type: 'button', text: '‹ Prev', id: 'sq-prev', onclick: () => { c.page--; renderObject(); } }),
+                    el('span', { class: 'sq-pager-info', id: 'sq-pager-info', text: fmtNum(from) + '–' + fmtNum(to) + ' of ' + fmtNum(total) }),
+                    el('button', { class: 'btn btn-small', type: 'button', text: 'Next ›', id: 'sq-next', onclick: () => { c.page++; renderObject(); } }),
+                    size,
+                    copyCsvButton(res.columns, res.rows),
+                ]));
+                head.querySelector('#sq-prev').disabled = c.page === 0;
+                head.querySelector('#sq-next').disabled = c.page >= pages - 1;
+
+                const cols = res.columns.map(name => ({
+                    name, type: types[name] || '',
+                    sortDir: c.sort && c.sort.col === name ? c.sort.dir : null,
+                    onclick: () => {
+                        // asc → desc → unsorted
+                        if (!c.sort || c.sort.col !== name) c.sort = { col: name, dir: 'ASC' };
+                        else if (c.sort.dir === 'ASC') c.sort.dir = 'DESC';
+                        else c.sort = null;
+                        c.page = 0;
+                        renderObject();
+                    },
+                }));
+                body.append(res.columns.length ? grid(cols, res.rows, from)
+                    : el('div', { class: 'sq-placeholder', text: 'No columns.' }));
+                body.append(el('div', { class: 'sq-note', text: total ? 'Double-click a cell to see its whole value and copy it.' : 'This table is empty.' }));
+            }
+
+            function renderSchema(body) {
+                const c = current;
+                const ddl = query("SELECT sql FROM sqlite_schema WHERE name = ?", [c.name]).rows.map(r => r[0]).filter(Boolean);
+                if (c.kind === 'table' || c.kind === 'view') {
+                    for (const r of query("SELECT sql FROM sqlite_schema WHERE type IN ('index','trigger') AND tbl_name = ? AND sql IS NOT NULL ORDER BY type, name", [c.name]).rows) ddl.push(r[0]);
+                }
+                const text = ddl.map(s => s.trim().replace(/;?$/, ';')).join('\n\n') || '-- no SQL stored (internal object)';
+                body.append(
+                    el('div', { class: 'sq-view-head' }, [
+                        el('div', { class: 'sq-section-label', text: 'DDL', style: 'margin:0' }),
+                        el('span', { class: 'sq-spacer' }),
+                        el('button', {
+                            class: 'btn btn-small', type: 'button', text: 'Copy',
+                            onclick: () => navigator.clipboard.writeText(text)
+                                .then(() => showToast('Copied to clipboard'))
+                                .catch(() => showToast('Copy failed', true)),
+                        }),
+                    ]),
+                    el('pre', { class: 'code-view sq-ddl', id: 'sq-ddl', text, 'data-i18n-skip': '' }),
+                );
+
+                if (c.kind !== 'table' && c.kind !== 'view') return;
+                const info = query('SELECT cid, name, type, "notnull", dflt_value, pk FROM pragma_table_info(?)', [c.name]);
+                body.append(el('div', { class: 'sq-section-label', text: 'Columns' }),
+                    grid(['name', 'type', 'not null', 'default', 'primary key'].map(name => ({ name })),
+                        info.rows.map(r => [r[1], r[2], r[3] ? 'yes' : '', r[4], r[5] ? String(r[5]) : '']), 1));
+
+                if (c.kind !== 'table') return;
+                const fks = query('SELECT "from", "table", "to", on_update, on_delete FROM pragma_foreign_key_list(?)', [c.name]);
+                if (fks.rows.length) {
+                    body.append(el('div', { class: 'sq-section-label', text: 'Foreign keys' }),
+                        grid(['column', 'references', 'on update', 'on delete'].map(name => ({ name })),
+                            fks.rows.map(r => [r[0], r[1] + '(' + (r[2] ?? '') + ')', r[3], r[4]]), 1));
+                }
+            }
+
+            // ---------- SQL runner ----------
+            function runSql() {
+                if (!db) return;
+                const sel = sqlEl.value.slice(sqlEl.selectionStart, sqlEl.selectionEnd);
+                const sql = sel.trim() ? sel : sqlEl.value;
+                if (!sql.trim()) return;
+
+                const out = el('div');
+                const head = el('div', { class: 'sq-view-head' }, [el('span', { class: 'sq-view-title', text: 'Query result' })]);
+                let changed = false, at = 0;   // number of the statement being prepared or run
+                const t0 = performance.now();
+                try {
+                    const it = db.iterateStatements(sql);
+                    for (;;) {
+                        at++;
+                        const next = it.next();    // throws when statement `at` does not prepare
+                        if (next.done) break;
+                        const stmt = next.value;
+                        try {
+                            const text = stmt.getSQL().trim();
+                            const columns = stmt.getColumnNames();
+                            const rows = [];
+                            let total = 0;
+                            while (stmt.step()) {
+                                if (total < RESULT_LIMIT) rows.push(stmt.get());
+                                total++;
+                            }
+                            const block = el('div', { class: 'sq-result' });
+                            const rhead = el('div', { class: 'sq-result-head' }, [
+                                el('span', { class: 'sq-result-sql', text: text, title: text, 'data-i18n-skip': '' }),
+                            ]);
+                            block.append(rhead);
+                            if (columns.length) {
+                                rhead.append(el('span', { class: 'sq-ok', text: fmtNum(total) + (total === 1 ? ' row' : ' rows') }), copyCsvButton(columns, rows));
+                                block.append(grid(columns.map(name => ({ name })), rows, 1));
+                                if (total > rows.length) block.append(el('div', { class: 'sq-note', text: 'Showing the first ' + fmtNum(rows.length) + ' rows. Add a LIMIT / OFFSET to see others.' }));
+                            } else {
+                                const mod = db.getRowsModified();
+                                changed = true;
+                                rhead.append(el('span', { class: 'sq-ok', text: 'OK' + (/^\s*(insert|update|delete|replace|with)/i.test(text) ? ' · ' + fmtNum(mod) + (mod === 1 ? ' row changed' : ' rows changed') : '') }));
+                            }
+                            out.append(block);
+                        } finally { stmt.free(); }
+                    }
+                } catch (e) {
+                    out.append(el('div', { class: 'sq-result' }, [
+                        el('div', { class: 'sq-err', id: 'sq-error', text: 'Error in statement ' + at + ': ' + (e.message || e) }),
+                        at > 1 ? el('div', { class: 'sq-note', text: 'Statements before it have already been applied.' }) : null,
+                    ]));
+                }
+                head.append(el('span', { class: 'sq-spacer' }), el('span', { class: 'sq-pager-info', text: (performance.now() - t0).toFixed(1) + ' ms' }));
+                if (!out.childElementCount) out.append(el('div', { class: 'sq-placeholder', text: 'Nothing to run.' }));
+                else if (out.querySelector('.sq-grid')) out.append(el('div', { class: 'sq-note', text: 'Double-click a cell to see its whole value and copy it.' }));
+
+                if (changed) {
+                    setDirty(true);
+                    // The selected object may have been dropped or renamed.
+                    if (current && !query('SELECT 1 FROM sqlite_schema WHERE name = ?', [current.name]).rows.length) current = null;
+                    refreshObjects();
+                }
+                markActive();
+                view.replaceChildren(head, out);
+            }
+
+            // ---------- example statements ----------
+            const KEYWORDS = /^(add|all|alter|and|as|between|by|case|check|create|default|delete|distinct|drop|else|end|exists|from|group|having|in|index|insert|into|is|join|key|like|limit|not|null|offset|on|or|order|primary|references|select|set|table|then|to|transaction|union|unique|update|values|when|where)$/i;
+            const ident = n => /^[A-Za-z_][A-Za-z0-9_]*$/.test(n) && !KEYWORDS.test(n) ? n : qid(n);
+            function sampleValue(type) {
+                const t = (type || '').toUpperCase();
+                if (t.includes('INT')) return '0';
+                if (/REAL|FLOA|DOUB|NUM|DEC/.test(t)) return '0.0';
+                if (t.includes('BLOB')) return "X''";
+                return "'text'";
+            }
+
+            // Built from the selected table when there is one, so most examples run as they are.
+            function example(kind) {
+                let t = 'my_table', cols = [], fk = null;
+                if (current && current.kind === 'table') {
+                    t = current.name;
+                    cols = query('SELECT name, type, pk FROM pragma_table_info(?)', [t]).rows.map(([name, type, pk]) => ({ name, type, pk }));
+                    fk = query('SELECT "table", "from", "to" FROM pragma_foreign_key_list(?)', [t]).rows[0] || null;
+                }
+                if (!cols.length) cols = [{ name: 'id', type: 'INTEGER', pk: 1 }, { name: 'name', type: 'TEXT', pk: 0 }];
+                const T = ident(t);
+                const pks = cols.filter(c => c.pk);
+                const key = pks.length ? ident(pks[0].name) : 'rowid';
+                // An INTEGER PRIMARY KEY fills itself in.
+                const rowidAlias = pks.length === 1 && pks[0].type.toUpperCase() === 'INTEGER';
+                const data = cols.filter(c => !(rowidAlias && c.pk));
+                const col = data[0] || cols[0];
+                const C = ident(col.name);
+                switch (kind) {
+                    case 'select': return 'SELECT *\nFROM ' + T + '\nWHERE ' + C + ' = ' + sampleValue(col.type) + '\nORDER BY ' + key + ' DESC\nLIMIT 100;';
+                    case 'insert': return 'INSERT INTO ' + T + ' (' + data.map(c => ident(c.name)).join(', ') + ')\nVALUES (' + data.map(c => sampleValue(c.type)).join(', ') + ');';
+                    case 'update': return 'UPDATE ' + T + '\nSET ' + C + ' = ' + sampleValue(col.type) + '\nWHERE ' + key + ' = 1;';
+                    case 'delete': return 'DELETE FROM ' + T + '\nWHERE ' + key + ' = 1;';
+                    case 'join':
+                        if (fk) return 'SELECT a.*, b.*\nFROM ' + T + ' AS a\nJOIN ' + ident(fk[0]) + ' AS b ON b.' + (fk[2] ? ident(fk[2]) : 'rowid') + ' = a.' + ident(fk[1]) + '\nLIMIT 100;';
+                        return 'SELECT a.*, b.*\nFROM ' + T + ' AS a\nJOIN other_table AS b ON b.' + T + '_id = a.' + key + '\nLIMIT 100;';
+                    case 'group': return 'SELECT ' + C + ', count(*) AS n\nFROM ' + T + '\nGROUP BY ' + C + '\nORDER BY n DESC;';
+                    case 'create': return 'CREATE TABLE IF NOT EXISTS new_table (\n    id INTEGER PRIMARY KEY,\n    name TEXT NOT NULL,\n    created_at TEXT DEFAULT CURRENT_TIMESTAMP\n);';
+                    case 'alter': return 'ALTER TABLE ' + T + ' ADD COLUMN new_column TEXT;';
+                    case 'index': return 'CREATE INDEX IF NOT EXISTS ' + ident(t + '_' + col.name + '_idx') + '\nON ' + T + ' (' + C + ');';
+                    case 'drop': return 'DROP TABLE IF EXISTS new_table;';
+                }
+                return '';
+            }
+
+            // Replaces the selection (or inserts at the caret) and selects the example, so Run executes just it.
+            function insertExample(text) {
+                const v = sqlEl.value, a = sqlEl.selectionStart, b = sqlEl.selectionEnd;
+                const before = a > 0 && v[a - 1] !== '\n' ? '\n\n' : '';
+                const after = b < v.length && v[b] !== '\n' ? '\n' : '';
+                sqlEl.focus();
+                sqlEl.setRangeText(before + text + after, a, b, 'end');
+                sqlEl.setSelectionRange(a + before.length, a + before.length + text.length);
+            }
+
+            function download() {
+                if (!db) return;
+                const bytes = db.export();
+                // Same journal mode as the file that was opened; with no -wal beside it, a WAL-mode file simply
+                // starts with an empty log.
+                if (walMode) bytes[18] = bytes[19] = 2;
+                const a = el('a', { href: URL.createObjectURL(new Blob([bytes], { type: 'application/vnd.sqlite3' })), download: dbName || 'database.sqlite' });
+                a.click();
+                setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+                setDirty(false);
+            }
+
+            // ---------- wiring ----------
+            dropEl.addEventListener('click', e => { if (!e.target.closest('button')) fileInput.click(); });
+            dropEl.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInput.click(); } });
+            fileInput.addEventListener('change', () => { if (fileInput.files.length) openFiles(fileInput.files); fileInput.value = ''; });
+            $('sq-new').addEventListener('click', e => {
+                e.stopPropagation();
+                if (dirty && !confirm('Discard the changes made to ' + dbName + '?')) return;
+                openBytes(new Uint8Array(0), 'untitled.sqlite');
+            });
+
+            // Drop anywhere on the page.
+            let dragDepth = 0;
+            const hasFiles = e => Array.from(e.dataTransfer?.types || []).includes('Files');
+            window.addEventListener('dragenter', e => { if (hasFiles(e)) { dragDepth++; document.body.classList.add('sq-dragging'); } });
+            window.addEventListener('dragleave', e => { if (hasFiles(e) && --dragDepth <= 0) { dragDepth = 0; document.body.classList.remove('sq-dragging'); } });
+            window.addEventListener('dragover', e => { if (hasFiles(e)) e.preventDefault(); });
+            window.addEventListener('drop', e => {
+                if (!hasFiles(e)) return;
+                e.preventDefault();
+                dragDepth = 0;
+                document.body.classList.remove('sq-dragging');
+                if (!e.dataTransfer.files.length) return;
+                if (dirty && !confirm('Discard the changes made to ' + dbName + '?')) return;
+                openFiles(e.dataTransfer.files);
+            });
+
+            $('sq-examples').addEventListener('click', e => {
+                const b = e.target.closest('[data-ex]');
+                if (b) insertExample(example(b.dataset.ex));
+            });
+            $('sq-run').addEventListener('click', runSql);
+            sqlEl.addEventListener('keydown', e => {
+                if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); runSql(); }
+            });
+            $('sq-download').addEventListener('click', download);
+            $('sq-close').addEventListener('click', closeDb);
+            filterEl.addEventListener('input', applyFilter);
+            window.addEventListener('beforeunload', e => { if (dirty) e.preventDefault(); });
+
+            // Warm the engine so the first file opens instantly.
+            loadSql().catch(e => { loadErr.textContent = 'Could not load the SQLite engine: ' + (e.message || e); });
+        });
+    </script>
+</body>
+
+</html>

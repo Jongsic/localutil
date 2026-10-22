@@ -9,7 +9,7 @@ A collection of small, self-contained developer utilities that run entirely in t
 ## Tools
 
 - **Encoding** — Base64, URL Encode/Decode, Hex/ASCII
-- **Formatting** — JS Beautifier, JS Minify, Markdown Preview, JSON Formatter, CSV ⇄ Markdown
+- **Formatting** — JS Beautifier, JS Minify, Markdown Preview, JSON Formatter, CSV ⇄ Markdown, SQLite Viewer
 - **Crypto & Auth** — JWT Encode/Decode, GPG Key Inspector, SSH Key Converter, Keystore Inspector, Key Pair Generator, Password Generator, Hash & HMAC, TOTP Generator, Passkey Debugger, Encrypt/Decrypt, Sign/Verify, mTLS Cert Issuer
 - **Web3** — Ethereum ABI, HD Wallet Deriver
 - **PDF** — PDF Print Layout (booklet / cut & stack), PDF Background Color, PDF Image Upscaler
