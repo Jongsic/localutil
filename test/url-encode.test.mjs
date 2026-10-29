@@ -85,6 +85,32 @@ test('breakdown stays hidden for plain text', async () => {
     assert.ok(await env.page.$eval('#url-breakdown', e => e.style.display === 'none'));
 });
 
+test('a PHP serialized value unfolds as a tree inside its cell', async () => {
+    await env.goto('url-encode.html');
+    const ser = 'a:2:{s:4:"name";s:10:"홍 길동";s:2:"id";i:7;}';
+    await env.page.fill('#url-input', 'sess=' + encodeURIComponent(ser) + '; plain=1');
+    const buttons = await env.page.$$('#breakdown-body .bd-php-toggle');
+    assert.equal(buttons.length, 1);
+    await buttons[0].click();
+    const tree = await env.page.textContent('#breakdown-body .php-tree');
+    assert.ok(tree.includes('array(2)') && tree.includes('"홍 길동"') && tree.includes('"id" => 7'), tree);
+    await buttons[0].click();
+    assert.equal(await env.page.$$eval('#breakdown-body .php-tree', e => e.length), 0);
+
+    await env.page.fill('#url-input', 'https://x.test/?d=' + encodeURIComponent('a:1:{i:0;b:1;}') + '&n=a:1:{');
+    assert.equal(await env.page.$$eval('#breakdown-body .bd-php-toggle', e => e.length), 1);
+});
+
+test('a CodeIgniter session cookie unfolds with its signature shown apart', async () => {
+    await env.goto('url-encode.html');
+    const ser = 'a:2:{s:10:"session_id";s:4:"5f3c";s:10:"ip_address";s:9:"127.0.0.1";}';
+    const sig = 'a94a8fe5ccb19ba61c4c0873d391e987982fbbd3';
+    await env.page.fill('#url-input', 'ci_session=' + encodeURIComponent(ser) + sig + '; other=1');
+    await env.page.click('#breakdown-body .bd-php-toggle');
+    const tree = await env.page.textContent('#breakdown-body .php-tree');
+    assert.ok(tree.includes('"127.0.0.1"') && tree.includes('followed by ' + sig) && tree.includes('SHA-1'), tree);
+});
+
 test('no page errors', () => {
     assert.deepEqual(env.errors, []);
 });
