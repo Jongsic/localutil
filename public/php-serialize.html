@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
+    <title>PHP Unserialize / Serialize Online — LocalUtil</title>
+    <!-- social / favicon -->
+    <meta name="description" content="Unserialize PHP serialize() strings — a:2:{s:4:&quot;name&quot;;…} — into a collapsible tree and JSON, or serialize JSON back to PHP. Objects, protected and private properties, references and nested serialized strings included; lengths counted in UTF-8 bytes. Runs 100% in your browser — nothing is uploaded.">
+    <link rel="canonical" href="https://jongsic.github.io/localutil/php-serialize.html">
+    <link rel="icon" href="favicon.ico" sizes="any">
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="LocalUtil">
+    <meta property="og:title" content="PHP Unserialize / Serialize Online — LocalUtil">
+    <meta property="og:description" content="Unserialize PHP serialize() strings — a:2:{s:4:&quot;name&quot;;…} — into a collapsible tree and JSON, or serialize JSON back to PHP. Objects, protected and private properties, references and nested serialized strings included; lengths counted in UTF-8 bytes. Runs 100% in your browser — nothing is uploaded.">
+    <meta property="og:image" content="https://jongsic.github.io/localutil/og.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:url" content="https://jongsic.github.io/localutil/php-serialize.html">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:image" content="https://jongsic.github.io/localutil/og.png">
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebApplication","name":"PHP Unserialize / Serialize Online","url":"https://jongsic.github.io/localutil/php-serialize.html","description":"Unserialize PHP serialize() strings — a:2:{s:4:\"name\";…} — into a collapsible tree and JSON, or serialize JSON back to PHP. Objects, protected and private properties, references and nested serialized strings included; lengths counted in UTF-8 bytes. Runs 100% in your browser — nothing is uploaded.","applicationCategory":"DeveloperApplication","operatingSystem":"Any","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"isPartOf":{"@type":"WebSite","name":"LocalUtil","url":"https://jongsic.github.io/localutil/"}}</script>
+    <!-- /social -->
+    <script src="theme-init.js"></script>
+    <link rel="stylesheet" href="styles.css">
+    <script src="php-serialize.js"></script>
+    <style>
+        .php-toolbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            flex-wrap: wrap;
+            padding: 14px 18px;
+        }
+        .php-toolbar-actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+
+        #tool-php .pane textarea,
+        #tool-php .php-tree-box {
+            flex: none;
+            height: 460px;
+            min-height: 240px;
+            resize: vertical;
+        }
+        @media (min-width: 861px) {
+            #tool-php .pane textarea,
+            #tool-php .php-tree-box { height: max(460px, calc(100vh - 330px)); }
+        }
+        .php-tree-box {
+            overflow: auto;
+            padding: 14px 16px;
+            background-color: var(--bg-input);
+            border: 1px solid var(--border-color);
+            border-radius: var(--r-sm);
+        }
+        .php-status {
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--text-muted);
+        }
+        .php-status:empty, .php-status:has(> span:last-child:empty) { display: none; }
+        .seg { align-self: flex-start; }
+        .php-status .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--text-faint); flex: none; }
+        .php-status.ok { color: var(--success); }
+        .php-status.ok .dot { background: var(--success); }
+        .php-status.warn { color: var(--warning); }
+        .php-status.warn .dot { background: var(--warning); }
+        .php-status.err { color: var(--danger); }
+        .php-status.err .dot { background: var(--danger); }
+
+        .seg { display: inline-flex; border: 1px solid var(--border-color); border-radius: var(--r-sm); overflow: hidden; }
+        .seg button {
+            border: none;
+            background: var(--bg-input);
+            color: var(--text-muted);
+            padding: 7px 14px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .seg button.active { background: var(--primary); color: #fff; }
+    </style>
+</head>
+
+<body>
+    <div class="app-container">
+        <aside class="sidebar" id="app-sidebar"></aside>
+
+        <main class="main-content">
+            <header class="topbar" id="app-topbar">
+                <div class="topbar-title">
+                    <h1 id="current-tool-title">PHP Serialize</h1>
+                    <p id="current-tool-desc" class="topbar-desc">Unserialize PHP serialize() data into a tree and JSON, or serialize JSON back</p>
+                </div>
+            </header>
+
+            <div class="tools-container">
+                <section id="tool-php" class="tool-section active">
+                    <div class="tool-shell wide">
+                        <div class="php-toolbar card">
+                            <div class="field-hint">Edit either side — the other follows. Lengths are counted in UTF-8 bytes, as PHP does.</div>
+                            <div class="php-toolbar-actions">
+                                <button id="btn-php-sample" class="btn">Sample</button>
+                                <button id="btn-php-clear" class="btn">Clear</button>
+                            </div>
+                        </div>
+
+                        <div class="split-pane">
+                            <div class="pane">
+                                <label for="php-input">PHP serialized</label>
+                                <textarea id="php-input" spellcheck="false" placeholder='a:2:{s:4:"name";s:5:"Alice";s:3:"age";i:30;}'></textarea>
+                                <span class="php-status" id="php-status"><span class="dot"></span><span id="php-status-text">Waiting for input…</span></span>
+                                <button class="btn btn-small copy-btn" data-clipboard-target="#php-input">Copy</button>
+                            </div>
+                            <div class="pane">
+                                <div class="seg" id="php-view-toggle">
+                                    <button data-view="tree" class="active">Tree</button>
+                                    <button data-view="json">JSON</button>
+                                </div>
+                                <div id="php-tree" class="php-tree-box"></div>
+                                <textarea id="php-json" spellcheck="false" style="display:none;" placeholder='{ "name": "Alice", "age": 30 }'></textarea>
+                                <span class="php-status" id="json-status"><span class="dot"></span><span id="json-status-text"></span></span>
+                                <div class="field-hint" id="php-json-hint" style="display:none;">An object is written as {"__class": "Name", …}; a protected or private property keeps PHP's "\u0000*\u0000name" / "\u0000Class\u0000name" key. A whole-number float comes back as an int.</div>
+                                <button class="btn btn-small copy-btn" id="btn-php-copy-json" data-clipboard-target="#php-json">Copy JSON</button>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </div>
+
+    <div id="toast" class="toast">Copied to clipboard!</div>
+
+    <script src="app.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const P = window.LocalUtilPHP;
+            const input = document.getElementById('php-input');
+            const jsonBox = document.getElementById('php-json');
+            const treeBox = document.getElementById('php-tree');
+            const jsonHint = document.getElementById('php-json-hint');
+            const viewToggle = document.getElementById('php-view-toggle');
+
+            function setStatus(id, kind, text) {
+                document.getElementById(id).className = 'php-status' + (kind ? ' ' + kind : '');
+                document.getElementById(id + '-text').textContent = text;
+            }
+
+            function showTree(node, rest) {
+                treeBox.innerHTML = '';
+                if (node) treeBox.appendChild(P.renderTree(node, { openDepth: 3, rest }));
+            }
+
+            // PHP → tree + JSON
+            function fromPhp() {
+                const raw = input.value;
+                setStatus('json-status', '', '');
+                if (!raw.trim()) {
+                    setStatus('php-status', '', 'Waiting for input…');
+                    showTree(null);
+                    jsonBox.value = '';
+                    return;
+                }
+                try {
+                    const res = P.unserialize(raw, { trailing: true });
+                    const notes = res.rest ? [...res.warnings, 'Followed by ' + P.describeRest(res.rest)] : res.warnings;
+                    if (notes.length) setStatus('php-status', 'warn', notes.join(' · '));
+                    else setStatus('php-status', 'ok', 'Valid');
+                    showTree(res.value, res.rest);
+                    jsonBox.value = JSON.stringify(P.toJSON(res.value), null, 2);
+                } catch (e) {
+                    setStatus('php-status', 'err', 'Invalid — ' + e.message);
+                    showTree(null);
+                }
+            }
+
+            // JSON → PHP + tree
+            function fromJson() {
+                const raw = jsonBox.value;
+                if (!raw.trim()) { setStatus('json-status', '', ''); return; }
+                let node;
+                try {
+                    node = P.fromJSON(JSON.parse(raw));
+                } catch (e) {
+                    setStatus('json-status', 'err', 'Invalid JSON — ' + e.message);
+                    return;
+                }
+                setStatus('json-status', 'ok', 'Serialized');
+                input.value = P.serialize(node);
+                setStatus('php-status', 'ok', 'Valid');
+                showTree(node);
+            }
+
+            function switchView(view) {
+                viewToggle.querySelectorAll('button').forEach(b =>
+                    b.classList.toggle('active', b.dataset.view === view));
+                const json = view === 'json';
+                treeBox.style.display = json ? 'none' : '';
+                jsonBox.style.display = json ? '' : 'none';
+                jsonHint.style.display = json ? '' : 'none';
+            }
+
+            input.addEventListener('input', fromPhp);
+            jsonBox.addEventListener('input', fromJson);
+            viewToggle.querySelectorAll('button').forEach(b =>
+                b.addEventListener('click', () => switchView(b.dataset.view)));
+
+            document.getElementById('btn-php-clear').addEventListener('click', () => {
+                input.value = '';
+                fromPhp();
+                input.focus();
+            });
+            document.getElementById('btn-php-sample').addEventListener('click', () => {
+                input.value = 'a:5:{s:4:"name";s:9:"홍길동";s:3:"age";i:30;s:5:"admin";b:1;' +
+                    's:4:"tags";a:2:{i:0;s:3:"php";i:1;s:4:"json";}' +
+                    's:4:"user";O:4:"User":3:{s:2:"id";i:7;s:8:"\0*\0email";s:13:"a@example.com";s:10:"\0User\0pass";N;}}';
+                fromPhp();
+            });
+
+            fromPhp();
+        });
+    </script>
+</body>
+
+</html>

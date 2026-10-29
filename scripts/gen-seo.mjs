@@ -152,6 +152,10 @@ const SEO = {
         title: 'CSV Viewer (TSV, DIF, any delimiter)',
         desc: `Open a CSV, TSV or DIF file — or paste a copied range — and view it as a table with every value kept exactly as written: no numbers, dates or leading zeros reinterpreted. Any delimiter, auto-detected encoding (UTF-8, EUC-KR / CP949 …), filter and sort. ${LOCAL}`,
     },
+    'php-serialize.html': {
+        title: 'PHP Unserialize / Serialize Online',
+        desc: `Unserialize PHP serialize() strings — a:2:{s:4:"name";…} — into a collapsible tree and JSON, or serialize JSON back to PHP. Objects, protected and private properties, references and nested serialized strings included; lengths counted in UTF-8 bytes. ${LOCAL}`,
+    },
     'sqlite.html': {
         title: 'SQLite Viewer & SQL Runner',
         desc: `Open a .sqlite / .db file to browse its tables, views and indexes — rows with paging and sorting, CREATE statements and columns — and run SQL against it, then download the changed database. ${LOCAL}`,

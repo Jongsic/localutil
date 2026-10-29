@@ -1213,3 +1213,43 @@ input[type="checkbox"]:focus-visible { box-shadow: 0 0 0 3px var(--primary-ring)
 .pdf-cmp-state { font-weight: 700; padding: 2px 10px; border-radius: var(--r-pill); background: var(--bg-subtle); color: var(--text-muted); min-width: 140px; text-align: center; }
 .pdf-cmp-state.after { background: var(--primary-soft); color: var(--primary); }
 .pdf-pic.has-result .pdf-pic-canvas { cursor: zoom-in; }
+
+/* ---------- PHP serialized value tree (php-serialize.js) ---------- */
+.php-tree {
+    font-family: var(--font-mono);
+    font-size: 1rem;
+    line-height: 1.6;
+    word-break: break-all;
+}
+.php-tree details { padding-left: 16px; }
+.php-tree > details { padding-left: 0; }
+.php-tree summary {
+    cursor: pointer;
+    list-style: none;
+    position: relative;
+    padding-left: 14px;
+    margin-left: -14px;
+}
+.php-tree > details > summary { margin-left: 0; }
+.php-tree summary::-webkit-details-marker { display: none; }
+.php-tree summary::before {
+    content: '▸';
+    position: absolute;
+    left: 0;
+    color: var(--text-faint);
+    transition: transform 0.12s;
+}
+.php-tree details[open] > summary::before { transform: rotate(90deg); }
+.php-tree .pt-leaf { padding-left: 2px; }
+.php-tree .pt-key { color: var(--primary); }
+.php-tree .pt-class { color: var(--warning); font-weight: 600; }
+.php-tree .pt-string { color: var(--success); }
+.php-tree .pt-number { color: var(--warning); }
+.php-tree .pt-bool { color: #c678dd; }
+.php-tree .pt-null,
+.php-tree .pt-meta { color: var(--text-faint); }
+.php-tree .pt-rest {
+    margin-top: 6px;
+    padding-top: 6px;
+    border-top: 1px dashed var(--border-color);
+}

@@ -61,6 +61,7 @@ const ICONS = {
     pdfcolor: '<path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6"/><path d="M12 12.5c-1.4 1.6-2.2 2.8-2.2 3.7a2.2 2.2 0 0 0 4.4 0c0-.9-.8-2.1-2.2-3.7z"/>',
     pdfup: '<path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6"/><path d="M12 18v-6"/><path d="m9 14.5 3-3 3 3"/>',
     csvview: '<path d="M21 11V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h6"/><path d="M3 9h18M9 3v18"/><circle cx="17.5" cy="17.5" r="3"/><path d="m22 22-2.1-2.1"/>',
+    phpser: '<path d="M7 4H6a2 2 0 0 0-2 2v4a2 2 0 0 1-2 2 2 2 0 0 1 2 2v4a2 2 0 0 0 2 2h1"/><path d="M17 4h1a2 2 0 0 1 2 2v4a2 2 0 0 0 2 2 2 2 0 0 0-2 2v4a2 2 0 0 1-2 2h-1"/><line x1="12" y1="9" x2="12" y2="9.01"/><line x1="12" y1="15" x2="12" y2="15.01"/>',
     sqlite: '<ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/><path d="M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/>',
     spark: '<path d="M12 2v4M12 18v4M4.9 4.9l2.8 2.8M16.3 16.3l2.8 2.8M2 12h4M18 12h4M4.9 19.1l2.8-2.8M16.3 7.7l2.8-2.8"/>',
 };
@@ -84,6 +85,7 @@ const TOOLS = [
     { file: 'json.html', name: 'JSON Formatter', desc: 'Format, validate & explore JSON as a tree', icon: 'json', cat: 'Text & Data' },
     { file: 'csv-md.html', name: 'CSV ⇄ Markdown', desc: 'Convert between CSV and Markdown tables', icon: 'tablecsv', cat: 'Text & Data' },
     { file: 'csv-view.html', name: 'CSV Viewer', desc: 'View CSV, TSV and DIF files as a table with every value kept as text — any delimiter or encoding, filter and sort', icon: 'csvview', cat: 'Text & Data' },
+    { file: 'php-serialize.html', name: 'PHP Serialize', desc: 'Unserialize PHP serialize() data into a tree and JSON, or serialize JSON back', icon: 'phpser', cat: 'Text & Data' },
     { file: 'sqlite.html', name: 'SQLite Viewer', desc: 'Open a SQLite file to browse its tables, schema and rows, and run SQL against it', icon: 'sqlite', cat: 'Text & Data' },
     { file: 'diff.html', name: 'Diff / Compare', desc: 'Compare two texts side by side', icon: 'diff', cat: 'Text & Data' },
     { file: 'regex.html', name: 'Regex Tester', desc: 'Test regular expressions with live match highlighting', icon: 'regex', cat: 'Text & Data' },

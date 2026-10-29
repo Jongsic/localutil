@@ -2246,6 +2246,11 @@ window.LOCALUTIL_I18N = Object.assign(window.LOCALUTIL_I18N || {}, {
         "Filter rows…": "행 필터…",
         "Filter rows": "행 필터",
         "Click a column header to sort, double-click a cell to see its whole value and copy it.": "컬럼 헤더를 클릭하면 정렬하고, 셀을 더블클릭하면 전체 값을 보고 복사할 수 있습니다.",
-        "No field here — this row is shorter": "필드 없음 — 이 행은 필드 수가 더 적습니다"
+        "No field here — this row is shorter": "필드 없음 — 이 행은 필드 수가 더 적습니다",
+        "Unserialize PHP serialize() data into a tree and JSON, or serialize JSON back": "PHP serialize() 데이터를 트리와 JSON으로 unserialize하거나, JSON을 다시 serialize합니다",
+        "Edit either side — the other follows. Lengths are counted in UTF-8 bytes, as PHP does.": "어느 쪽을 고쳐도 반대쪽이 따라 바뀝니다. 길이는 PHP처럼 UTF-8 바이트로 셉니다.",
+        "PHP serialized": "PHP serialized 값",
+        "Serialized": "Serialize 완료",
+        "An object is written as {\"__class\": \"Name\", …}; a protected or private property keeps PHP's \"\\u0000*\\u0000name\" / \"\\u0000Class\\u0000name\" key. A whole-number float comes back as an int.": "객체는 {\"__class\": \"Name\", …}로 쓰고, protected / private 프로퍼티는 PHP의 \"\\u0000*\\u0000name\" / \"\\u0000Class\\u0000name\" 키를 그대로 씁니다. 정수 값인 float는 int로 돌아옵니다."
     },
 });

@@ -176,6 +176,11 @@
     <priority>0.8</priority>
   </url>
   <url>
+    <loc>https://jongsic.github.io/localutil/php-serialize.html</loc>
+    <lastmod>2026-10-29</lastmod>
+    <priority>0.8</priority>
+  </url>
+  <url>
     <loc>https://jongsic.github.io/localutil/pwa-check.html</loc>
     <lastmod>2026-10-13</lastmod>
     <priority>0.8</priority>
