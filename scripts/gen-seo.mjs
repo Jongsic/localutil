@@ -156,6 +156,10 @@ const SEO = {
         title: 'PHP Unserialize / Serialize Online',
         desc: `Unserialize PHP serialize() strings — a:2:{s:4:"name";…} — into a collapsible tree and JSON, or serialize JSON back to PHP. Objects, protected and private properties, references and nested serialized strings included; lengths counted in UTF-8 bytes. ${LOCAL}`,
     },
+    'unicode-hygiene.html': {
+        title: 'Invisible Unicode Character Detector & Remover',
+        desc: `Find zero-width spaces, direction overrides (Trojan Source), tag characters and other invisible Unicode in text, decode hidden messages, and remove them with a list of every change. Hide your own message or a per-recipient watermark without changing how the text looks. ${LOCAL}`,
+    },
     'sqlite.html': {
         title: 'SQLite Viewer & SQL Runner',
         desc: `Open a .sqlite / .db file to browse its tables, views and indexes — rows with paging and sorting, CREATE statements and columns — and run SQL against it, then download the changed database. ${LOCAL}`,

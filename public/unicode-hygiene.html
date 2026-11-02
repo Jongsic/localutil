@@ -1,0 +1,845 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
+    <title>Invisible Unicode Character Detector &amp; Remover — LocalUtil</title>
+    <!-- social / favicon -->
+    <meta name="description" content="Find zero-width spaces, direction overrides (Trojan Source), tag characters and other invisible Unicode in text, decode hidden messages, and remove them with a list of every change. Hide your own message or a per-recipient watermark without changing how the text looks. Runs 100% in your browser — nothing is uploaded.">
+    <link rel="canonical" href="https://jongsic.github.io/localutil/unicode-hygiene.html">
+    <link rel="icon" href="favicon.ico" sizes="any">
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="LocalUtil">
+    <meta property="og:title" content="Invisible Unicode Character Detector &amp; Remover — LocalUtil">
+    <meta property="og:description" content="Find zero-width spaces, direction overrides (Trojan Source), tag characters and other invisible Unicode in text, decode hidden messages, and remove them with a list of every change. Hide your own message or a per-recipient watermark without changing how the text looks. Runs 100% in your browser — nothing is uploaded.">
+    <meta property="og:image" content="https://jongsic.github.io/localutil/og.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:url" content="https://jongsic.github.io/localutil/unicode-hygiene.html">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:image" content="https://jongsic.github.io/localutil/og.png">
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebApplication","name":"Invisible Unicode Character Detector & Remover","url":"https://jongsic.github.io/localutil/unicode-hygiene.html","description":"Find zero-width spaces, direction overrides (Trojan Source), tag characters and other invisible Unicode in text, decode hidden messages, and remove them with a list of every change. Hide your own message or a per-recipient watermark without changing how the text looks. Runs 100% in your browser — nothing is uploaded.","applicationCategory":"DeveloperApplication","operatingSystem":"Any","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"isPartOf":{"@type":"WebSite","name":"LocalUtil","url":"https://jongsic.github.io/localutil/"}}</script>
+    <!-- /social -->
+    <script src="theme-init.js"></script>
+    <link rel="stylesheet" href="styles.css">
+    <script src="unicode-core.js"></script>
+    <style>
+        /* panes, cards and forms set display: flex, which would beat [hidden] */
+        #tool-uh [hidden] { display: none !important; }
+        .uh-tabs-card { display: flex; flex-direction: column; gap: 10px; padding: 14px 18px; }
+        .uh-tab { display: none; flex-direction: column; gap: 16px; }
+        .uh-tab.active { display: flex; }
+        .uh-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+        .uh-input { min-height: 180px; height: 220px; }
+        .uh-output { min-height: 180px; height: 220px; }
+
+        .uh-verdict { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-weight: 600; }
+        .uh-verdict .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--text-faint); flex: none; }
+        .uh-verdict.ok { color: var(--success); }
+        .uh-verdict.ok .dot { background: var(--success); }
+        .uh-verdict.warn { color: var(--warning); }
+        .uh-verdict.warn .dot { background: var(--warning); }
+        .uh-verdict.err { color: var(--danger); }
+        .uh-verdict.err .dot { background: var(--danger); }
+        .uh-verdict .sep { color: var(--text-faint); font-weight: 400; }
+        .uh-verdict .muted { color: var(--text-muted); font-weight: 500; }
+
+        .uh-preview {
+            font-family: var(--font-mono);
+            white-space: pre-wrap;
+            overflow-wrap: anywhere;
+            line-height: 1.9;
+            max-height: 420px;
+            overflow: auto;
+            padding: 12px 14px;
+            background: var(--bg-input);
+            border: 1px solid var(--border-color);
+            border-radius: var(--r-sm);
+        }
+        .uh-chip {
+            display: inline-block;
+            padding: 0 5px;
+            margin: 0 1px;
+            border-radius: var(--r-xs);
+            font-size: 0.8em;
+            line-height: 1.5;
+            font-weight: 600;
+            vertical-align: 1px;
+            color: var(--warning);
+            background: color-mix(in srgb, var(--warning) 16%, transparent);
+            border: 1px solid color-mix(in srgb, var(--warning) 40%, transparent);
+            cursor: pointer;
+        }
+        .uh-chip.danger { color: var(--danger); background: color-mix(in srgb, var(--danger) 14%, transparent); border-color: color-mix(in srgb, var(--danger) 40%, transparent); }
+        .uh-chip.payload { color: var(--primary); background: var(--primary-soft); border-color: color-mix(in srgb, var(--primary) 45%, transparent); }
+        .uh-styled { text-decoration: underline dotted var(--warning); text-underline-offset: 3px; cursor: pointer; }
+        .uh-other { text-decoration: underline wavy var(--warning); text-underline-offset: 3px; color: var(--warning); cursor: pointer; }
+        .uh-chip.legit { color: var(--text-faint); background: transparent; border-color: var(--border-color); font-weight: 500; }
+
+        .uh-table-wrap { overflow-x: auto; }
+        .uh-table { width: 100%; border-collapse: collapse; }
+        .uh-table th, .uh-table td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--border-color); vertical-align: top; }
+        .uh-table th { color: var(--text-muted); font-weight: 600; white-space: nowrap; }
+        .uh-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
+        .uh-table code { font-family: var(--font-mono); white-space: nowrap; }
+        .uh-note { color: var(--text-muted); }
+        .uh-note.warn { color: var(--warning); }
+        .uh-note.danger { color: var(--danger); }
+
+        .uh-payload { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border: 1px solid var(--border-color); border-radius: var(--r-sm); background: var(--bg-subtle); }
+        .uh-payload + .uh-payload { margin-top: 10px; }
+        .uh-payload-head { display: flex; gap: 8px; flex-wrap: wrap; align-items: baseline; font-weight: 600; }
+        .uh-payload-head .where { color: var(--text-muted); font-weight: 400; }
+        .uh-payload pre {
+            margin: 0;
+            font-family: var(--font-mono);
+            white-space: pre-wrap;
+            overflow-wrap: anywhere;
+            padding: 8px 10px;
+            background: var(--bg-input);
+            border: 1px solid var(--border-color);
+            border-radius: var(--r-xs);
+        }
+        .uh-payload .input-group input { min-width: 0; }
+        .uh-found { color: var(--success); font-weight: 600; }
+
+        .uh-rules-card > summary { cursor: pointer; margin: 0; }
+        .uh-rules { display: flex; flex-direction: column; }
+        .uh-rule {
+            display: grid;
+            grid-template-columns: 24px minmax(170px, 1fr) minmax(0, 2.2fr) minmax(0, 1.3fr);
+            gap: 4px 14px;
+            align-items: start;
+            margin: 0;
+            padding: 9px 8px;
+            border-bottom: 1px solid var(--border-color);
+            font-weight: 400;
+            cursor: pointer;
+        }
+        .uh-rule:hover { background: var(--bg-hover); }
+        .uh-rule input { margin-top: 2px; }
+        .uh-rule-head { color: var(--text-muted); font-weight: 600; cursor: default; padding-top: 0; }
+        .uh-rule-head:hover { background: none; }
+        .uh-rule-name { font-weight: 600; }
+        .uh-rule-what { display: flex; flex-direction: column; gap: 4px; color: var(--text-muted); }
+        .uh-rule-codes { display: flex; flex-wrap: wrap; gap: 4px; }
+        .uh-rule-codes code { font-family: var(--font-mono); font-size: 0.85em; padding: 0 5px; border: 1px solid var(--border-color); border-radius: var(--r-xs); background: var(--bg-subtle); color: var(--text-main); white-space: nowrap; }
+        .uh-rule-does { color: var(--text-main); }
+        .uh-rule-exception { background: color-mix(in srgb, var(--primary) 6%, transparent); }
+        .uh-rules-group { font-weight: 650; padding: 16px 8px 6px; border-bottom: 1px solid var(--border-strong); }
+
+        .uh-summary-chips { display: flex; flex-wrap: wrap; gap: 6px 8px; }
+        .uh-summary-chips > span { padding: 3px 9px; border-radius: var(--r-pill); background: var(--bg-subtle); border: 1px solid var(--border-color); }
+        .uh-edits { list-style: none; margin: 0; padding: 0; max-height: 360px; overflow: auto; }
+        .uh-edits li { display: flex; gap: 12px; padding: 6px 4px; border-bottom: 1px solid var(--border-color); cursor: pointer; flex-wrap: wrap; }
+        .uh-edits li:hover { background: var(--bg-hover); }
+        .uh-edits .where { color: var(--text-muted); min-width: 120px; font-variant-numeric: tabular-nums; }
+        .uh-edits code { font-family: var(--font-mono); }
+
+        .uh-form { display: flex; flex-direction: column; gap: 14px; }
+        .uh-form .form-grid { align-items: start; }
+        .uh-check { display: flex; flex-direction: column; gap: 4px; }
+        .uh-check .ok { color: var(--success); }
+        .uh-check .bad { color: var(--danger); }
+        .uh-limits { border-left: 3px solid var(--warning); padding: 8px 12px; background: color-mix(in srgb, var(--warning) 8%, transparent); border-radius: 0 var(--r-xs) var(--r-xs) 0; }
+        .uh-copies { display: flex; flex-direction: column; }
+        .uh-copy { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; padding: 8px 0; border-bottom: 1px solid var(--border-color); }
+        .uh-copy .name { font-weight: 600; min-width: 100px; overflow-wrap: anywhere; }
+        .uh-copy code { font-family: var(--font-mono); color: var(--text-muted); }
+        .uh-copy .actions { margin-left: auto; display: flex; gap: 8px; }
+        @media (max-width: 860px) {
+            .uh-rule { grid-template-columns: 24px minmax(0, 1fr); }
+            .uh-rule-what, .uh-rule-does { grid-column: 2; }
+            .uh-rule-head { display: none; }
+            .uh-form .form-grid { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="app-container">
+        <aside class="sidebar" id="app-sidebar"></aside>
+
+        <main class="main-content">
+            <header class="topbar" id="app-topbar">
+                <div class="topbar-title">
+                    <h1 id="current-tool-title">Hidden Characters</h1>
+                    <p id="current-tool-desc" class="topbar-desc">Find invisible Unicode characters, remove them with a list of every change, or hide a message or recipient watermark in your own text</p>
+                </div>
+            </header>
+
+            <div class="tools-container">
+                <section id="tool-uh" class="tool-section active">
+                    <div class="tool-shell wide">
+                        <div class="card uh-tabs-card">
+                            <div class="segmented" id="uh-tabs" role="tablist">
+                                <button type="button" data-tab="scan" class="active">Scan</button>
+                                <button type="button" data-tab="clean">Clean</button>
+                                <button type="button" data-tab="mark">Mark</button>
+                            </div>
+                            <div class="field-hint" id="uh-tab-hint"></div>
+                        </div>
+
+                        <!-- Scan -->
+                        <div class="uh-tab active" id="tab-scan">
+                            <div class="pane">
+                                <label for="sc-input">Text to check</label>
+                                <textarea id="sc-input" class="uh-input" spellcheck="false" placeholder="Paste text you received…"></textarea>
+                                <div class="uh-row" style="justify-content:space-between;">
+                                    <div class="uh-verdict" id="sc-verdict"><span class="dot"></span><span>Waiting for input…</span></div>
+                                    <div class="uh-row">
+                                        <button class="btn" id="sc-sample">Sample</button>
+                                        <button class="btn btn-primary" id="sc-to-clean" disabled>Clean this text →</button>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="card uh-form" id="sc-notes" hidden></div>
+                            <div class="card" id="sc-preview-card" hidden>
+                                <div class="card-title">Where they are</div>
+                                <div class="card-subtitle">Each hidden character is shown as a tag; click one to select it in the text. Dimmed tags look like normal use — an emoji sequence, Persian ZWNJ, a mark in right-to-left text.</div>
+                                <div class="uh-preview" id="sc-preview" data-i18n-skip></div>
+                            </div>
+                            <div class="card" id="sc-payloads-card" hidden>
+                                <div class="card-title">Hidden payloads</div>
+                                <div class="card-subtitle">Data written in invisible characters, decoded.</div>
+                                <div id="sc-payloads"></div>
+                            </div>
+                            <div class="card" id="sc-others-card" hidden>
+                                <div class="card-title">Letters outside Latin, Hangul, Han and kana</div>
+                                <div class="card-subtitle">Normal in a text written in those languages. Anywhere else, a Cyrillic, Greek or Armenian letter that looks Latin is a way to dodge filters and fool readers. Clean turns a letter with a Latin twin into that twin and removes the rest.</div>
+                                <div class="uh-row" id="sc-scripts" style="margin-bottom:10px;"></div>
+                                <div class="uh-table-wrap">
+                                    <table class="uh-table">
+                                        <thead><tr><th>Code</th><th>Letter</th><th>Count</th><th>Clean makes it</th><th></th></tr></thead>
+                                        <tbody id="sc-others"></tbody>
+                                    </table>
+                                </div>
+                            </div>
+                            <div class="card" id="sc-chars-card" hidden>
+                                <div class="card-title">Characters</div>
+                                <div class="uh-table-wrap">
+                                    <table class="uh-table">
+                                        <thead><tr><th>Code</th><th>Name</th><th>Kind</th><th>Count</th><th></th></tr></thead>
+                                        <tbody id="sc-chars"></tbody>
+                                    </table>
+                                </div>
+                            </div>
+                            <div class="field-hint">This finds characters, not authorship: nothing in the characters can tell whether a person or an AI wrote a text.</div>
+                        </div>
+
+                        <!-- Clean -->
+                        <div class="uh-tab" id="tab-clean">
+                            <details class="card uh-rules-card" open>
+                                <summary class="card-title">Rules</summary>
+                                <div class="uh-row" style="justify-content:space-between;margin:6px 0;">
+                                    <span class="field-hint">Click a row to turn its rule on or off; the cleaned text follows.</span>
+                                    <button class="btn btn-small" id="cl-reset">Defaults</button>
+                                </div>
+                                <div class="uh-rules">
+                                    <div class="uh-rule uh-rule-head"><span></span><span>Rule</span><span>What it covers</span><span>What Clean does</span></div>
+                                    <div class="uh-rules-group">Hidden characters</div>
+                                    <label class="uh-rule" for="cl-payloads"><input type="checkbox" id="cl-payloads"><span class="uh-rule-name">Hidden payloads, whole</span><span class="uh-rule-what"><span>Messages written in invisible characters: this page's own, the zero-width binary format, text in variation selectors or in tag characters.</span></span><span class="uh-rule-does">Each one removed as a single piece; the list shows what it said.</span></label>
+                                    <label class="uh-rule" for="cl-invisible"><input type="checkbox" id="cl-invisible"><span class="uh-rule-name">Zero-width and invisible</span><span class="uh-rule-what"><span>Characters that take no space. They break search and exact matching and leave phantom diffs.</span><span class="uh-rule-codes"><code>U+200B ZWSP</code> <code>U+200C ZWNJ</code> <code>U+200D ZWJ</code> <code>U+2060 WJ</code> <code>U+FEFF BOM</code> <code>U+00AD SHY</code> <code>U+2061–2064</code> <code>U+FFFC</code></span></span><span class="uh-rule-does">Removed.</span></label>
+                                    <label class="uh-rule" for="cl-bidi"><input type="checkbox" id="cl-bidi"><span class="uh-rule-name">Direction controls</span><span class="uh-rule-what"><span>Change the order text is shown in: code that reads differently than it runs (Trojan Source), a file name shown as txt.exe.</span><span class="uh-rule-codes"><code>U+202A–202E</code> <code>U+2066–2069</code> <code>U+200E LRM</code> <code>U+200F RLM</code> <code>U+061C ALM</code></span></span><span class="uh-rule-does">Removed.</span></label>
+                                    <label class="uh-rule" for="cl-space"><input type="checkbox" id="cl-space"><span class="uh-rule-name">Unusual spaces</span><span class="uh-rule-what"><span>Spaces that look ordinary but are other characters, so search, CSV and shell commands treat them as letters.</span><span class="uh-rule-codes"><code>U+00A0 NBSP</code> <code>U+202F NNBSP</code> <code>U+2000–200A</code> <code>U+3000</code> <code>U+2028 LSEP</code> <code>U+2029 PSEP</code></span></span><span class="uh-rule-does">Replaced with a plain space; a line or paragraph separator with a line break.</span></label>
+                                    <label class="uh-rule" for="cl-control"><input type="checkbox" id="cl-control"><span class="uh-rule-name">Control characters</span><span class="uh-rule-what"><span>Old terminal and printer codes, apart from tab and line breaks.</span><span class="uh-rule-codes"><code>U+0000 NUL</code> <code>U+001B ESC</code> <code>U+007F DEL</code> <code>U+0080–009F</code></span></span><span class="uh-rule-does">Removed; NEL (U+0085) becomes a line break.</span></label>
+                                    <label class="uh-rule" for="cl-tag"><input type="checkbox" id="cl-tag"><span class="uh-rule-name">Tag characters</span><span class="uh-rule-what"><span>An invisible copy of ASCII text. People cannot see it, but AI tools read it — a way to slip in instructions.</span><span class="uh-rule-codes"><code>U+E0000–E007F</code></span></span><span class="uh-rule-does">Removed.</span></label>
+                                    <label class="uh-rule" for="cl-variation"><input type="checkbox" id="cl-variation"><span class="uh-rule-name">Variation selectors</span><span class="uh-rule-what"><span>Pick a glyph form for the letter before them. Stray or repeated ones have no visible purpose and can carry data.</span><span class="uh-rule-codes"><code>U+FE00–FE0F</code> <code>U+E0100–E01EF</code> <code>U+180B–180F</code></span></span><span class="uh-rule-does">Removed.</span></label>
+                                    <label class="uh-rule" for="cl-filler"><input type="checkbox" id="cl-filler"><span class="uh-rule-name">Hangul and Braille fillers</span><span class="uh-rule-what"><span>Look like blank space but count as letters, so trim() and space filters let them through — used for blank nicknames. U+115F and U+1160 inside an Old Hangul syllable are normal use.</span><span class="uh-rule-codes"><code>U+3164</code> <code>U+FFA0</code> <code>U+115F</code> <code>U+1160</code> <code>U+2800</code></span></span><span class="uh-rule-does">Removed.</span></label>
+                                    <label class="uh-rule uh-rule-exception" for="cl-keepLegit"><input type="checkbox" id="cl-keepLegit"><span class="uh-rule-name">Keep normal uses</span><span class="uh-rule-what"><span>An exception to the rules above: characters that are part of ordinary writing where they stand — ZWJ inside an emoji, ZWNJ in Persian or Hindi, VS16 after an emoji, an ideographic variation selector after a Han character, the England, Scotland and Wales flags, marks in right-to-left text, French no-break spaces, an ideographic space next to CJK.</span></span><span class="uh-rule-does">Kept even when their category is checked.</span></label>
+                                    <div class="uh-rules-group">Letters</div>
+                                    <label class="uh-rule" for="cl-otherScripts"><input type="checkbox" id="cl-otherScripts"><span class="uh-rule-name">Letters outside Latin, Hangul, Han and kana</span><span class="uh-rule-what"><span>Cyrillic, Greek, Armenian, Hebrew, Arabic and every other script. Each character is judged on its own, by the same rule everywhere. Turn it off for text in another language or with Greek symbols such as μ.</span></span><span class="uh-rule-does">A letter with a Latin twin becomes that twin (a Cyrillic a becomes a); any other is removed.</span></label>
+                                    <label class="uh-rule" for="cl-styled"><input type="checkbox" id="cl-styled"><span class="uh-rule-name">Math bold, italic and script letters</span><span class="uh-rule-what"><span>Mathematical alphanumerics that "fancy text" generators use to slip past filters.</span><span class="uh-rule-codes"><code>U+1D400–1D7FF</code> <code>U+2100–214F</code></span></span><span class="uh-rule-does">Replaced with the plain letter. Symbols such as ℃ and ™ stay.</span></label>
+                                    <label class="uh-rule" for="cl-fullwidth"><input type="checkbox" id="cl-fullwidth"><span class="uh-rule-name">Fullwidth letters and digits</span><span class="uh-rule-what"><span>The wide Latin letters and digits of CJK fonts.</span><span class="uh-rule-codes"><code>U+FF10–FF19</code> <code>U+FF21–FF3A</code> <code>U+FF41–FF5A</code></span></span><span class="uh-rule-does">Replaced with ASCII. Fullwidth punctuation such as （ ） stays.</span></label>
+                                    <div class="uh-rules-group">Lines and normalization</div>
+                                    <label class="uh-rule" for="cl-trailing"><input type="checkbox" id="cl-trailing"><span class="uh-rule-name">Spaces at line ends</span><span class="uh-rule-what"><span>Spaces and tabs before a line break.</span></span><span class="uh-rule-does">Removed.</span></label>
+                                    <label class="uh-rule" for="cl-blankLines"><input type="checkbox" id="cl-blankLines"><span class="uh-rule-name">Runs of blank lines</span><span class="uh-rule-what"><span>Three or more line breaks in a row, blank-looking lines included.</span></span><span class="uh-rule-does">Collapsed to one blank line.</span></label>
+                                    <label class="uh-rule" for="cl-nfc"><input type="checkbox" id="cl-nfc"><span class="uh-rule-name">Normalize to NFC</span><span class="uh-rule-what"><span>Letters stored decomposed, such as Hangul split into jamo — same look, different characters.</span></span><span class="uh-rule-does">Composed into single characters.</span></label>
+                                    <div class="uh-rules-group">Punctuation</div>
+                                    <label class="uh-rule" for="cl-ascii"><input type="checkbox" id="cl-ascii"><span class="uh-rule-name">Curly quotes, dashes and ellipsis</span><span class="uh-rule-what"><span>Typography that breaks code, configuration files and shell commands.</span><span class="uh-rule-codes"><code>U+2018/2019</code> <code>U+201C/201D</code> <code>U+2013 –</code> <code>U+2014 —</code> <code>U+2026 …</code> <code>U+2212 −</code></span></span><span class="uh-rule-does">Replaced with ASCII: ' " - -- ... -</span></label>
+                                </div>
+                            </details>
+                            <div class="split-pane">
+                                <div class="pane">
+                                    <label for="cl-input">Input</label>
+                                    <textarea id="cl-input" class="uh-input" spellcheck="false" placeholder="Paste text to clean…"></textarea>
+                                </div>
+                                <div class="pane">
+                                    <label for="cl-output">Cleaned</label>
+                                    <textarea id="cl-output" class="uh-output" spellcheck="false" readonly></textarea>
+                                    <div class="uh-row">
+                                        <button class="btn btn-small copy-btn" data-clipboard-target="#cl-output">Copy</button>
+                                        <button class="btn btn-small" id="cl-download">Download</button>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="card" id="cl-summary-card" hidden>
+                                <div class="card-title" id="cl-summary-title"></div>
+                                <div class="uh-summary-chips" id="cl-summary-chips"></div>
+                                <div class="card-subtitle" style="margin:12px 0 6px;">Click a line to select that spot in the input.</div>
+                                <ul class="uh-edits" id="cl-edits"></ul>
+                            </div>
+                        </div>
+
+                        <!-- Mark -->
+                        <div class="uh-tab" id="tab-mark">
+                            <div class="card uh-form">
+                                <div class="segmented" id="mk-mode" role="tablist" style="align-self:flex-start;">
+                                    <button type="button" data-mode="message" class="active">Hidden message</button>
+                                    <button type="button" data-mode="watermark">Recipient watermark</button>
+                                </div>
+                                <div class="field-hint" id="mk-mode-hint"></div>
+                                <div class="field-group">
+                                    <label for="mk-input">Your text</label>
+                                    <textarea id="mk-input" class="uh-input" spellcheck="false" placeholder="The text to send…"></textarea>
+                                    <div class="uh-note warn" id="mk-existing" hidden>This text already carries hidden payloads. They will stay in every copy — clean it first if they are not yours.</div>
+                                </div>
+
+                                <div id="mk-message-fields" class="uh-form">
+                                    <div class="field-group">
+                                        <label for="mk-message">Message to hide</label>
+                                        <textarea id="mk-message" spellcheck="false" style="min-height:70px;height:70px;" placeholder="Meeting moved to 3 pm"></textarea>
+                                    </div>
+                                    <div class="form-grid">
+                                        <div class="field-group">
+                                            <div class="option-item"><input type="checkbox" id="mk-encrypt"><label for="mk-encrypt">Encrypt with a passphrase</label></div>
+                                            <input type="password" id="mk-pass" placeholder="Passphrase" autocomplete="new-password" disabled>
+                                            <div class="field-hint">AES-256-GCM, key from PBKDF2-SHA256. Without a passphrase, anyone who scans the text reads the message.</div>
+                                        </div>
+                                        <div class="field-group">
+                                            <label>Method</label>
+                                            <div class="option-item"><input type="radio" name="mk-carrier" id="mk-carrier-vs" value="vs" checked><label for="mk-carrier-vs">Variation selectors — one per byte, after a letter</label></div>
+                                            <div class="option-item"><input type="radio" name="mk-carrier" id="mk-carrier-zw" value="zw"><label for="mk-carrier-zw">Zero-width binary — readable by other tools, no encryption</label></div>
+                                        </div>
+                                        <div class="field-group">
+                                            <label>Copies in the text</label>
+                                            <div class="option-item"><input type="radio" name="mk-repeat" id="mk-repeat-once" value="once" checked><label for="mk-repeat-once">Once</label></div>
+                                            <div class="option-item"><input type="radio" name="mk-repeat" id="mk-repeat-spread" value="spread"><label for="mk-repeat-spread">Spread through the text, so an excerpt still has one</label></div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div id="mk-watermark-fields" class="uh-form" hidden>
+                                    <div class="form-grid">
+                                        <div class="field-group">
+                                            <label for="mk-key">Key</label>
+                                            <div class="input-group">
+                                                <input type="text" id="mk-key" class="mono" spellcheck="false" autocomplete="off">
+                                                <button class="btn" id="mk-key-new">New</button>
+                                                <button class="btn" id="mk-key-copy">Copy</button>
+                                            </div>
+                                            <div class="field-hint">Keep it: without the key a leaked copy cannot be traced. It is not stored anywhere.</div>
+                                        </div>
+                                        <div class="field-group">
+                                            <label for="mk-recipients">Recipients, one per line</label>
+                                            <textarea id="mk-recipients" spellcheck="false" style="min-height:96px;height:96px;font-family:inherit;" placeholder="Alice&#10;Bob"></textarea>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="field-group" id="mk-every-group">
+                                    <label for="mk-every">Repeat about every</label>
+                                    <div class="uh-row"><input type="number" id="mk-every" value="300" min="20" step="10" style="width:120px;"> <span class="uh-note">characters</span></div>
+                                </div>
+
+                                <div class="uh-row">
+                                    <button class="btn btn-primary" id="mk-run">Make</button>
+                                    <span class="error-text" id="mk-error"></span>
+                                </div>
+                                <div class="uh-limits field-hint">A mark, not protection. Anyone can find it with a scan like this one, and it is gone after Clean, a paste sanitizer, retyping, OCR or a screenshot. Two recipients who compare their copies can see that they differ.</div>
+                            </div>
+
+                            <div class="pane" id="mk-result" hidden>
+                                <label for="mk-output">Result — looks the same as your text</label>
+                                <textarea id="mk-output" class="uh-output" spellcheck="false" readonly></textarea>
+                                <div class="uh-check" id="mk-check"></div>
+                                <div class="uh-row">
+                                    <button class="btn btn-small copy-btn" data-clipboard-target="#mk-output">Copy</button>
+                                    <button class="btn btn-small" id="mk-download">Download</button>
+                                    <button class="btn btn-small" id="mk-scan">Scan the result</button>
+                                </div>
+                            </div>
+
+                            <div class="card" id="mk-copies-card" hidden>
+                                <div class="card-title">Copies</div>
+                                <div class="card-subtitle">Give each recipient their own copy. Scan a leaked copy with the same key and list to see whose it was.</div>
+                                <div class="uh-copies" id="mk-copies"></div>
+                                <div class="uh-row" style="margin-top:12px;">
+                                    <button class="btn" id="mk-ledger">Save key and recipients (.json)</button>
+                                    <span class="field-hint">The file holds the key — keep it private.</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </div>
+
+    <div id="toast" class="toast">Copied to clipboard!</div>
+
+    <script src="app.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const U = window.LocalUtilUnicode;
+            const $ = id => document.getElementById(id);
+
+            const el = (tag, attrs, children) => {
+                const e = document.createElement(tag);
+                for (const [k, v] of Object.entries(attrs || {})) {
+                    if (k === 'class') e.className = v;
+                    else if (k === 'text') e.textContent = v;
+                    else if (k.startsWith('on')) e.addEventListener(k.slice(2), v);
+                    else e.setAttribute(k, v);
+                }
+                for (const c of [].concat(children ?? [])) if (c != null && c !== false) e.append(c);
+                return e;
+            };
+            // "<b>12</b> label" — the label stays its own text node so it translates
+            const count = (n, label) => [el('b', { text: String(n) }), ' ', label];
+
+            function download(text, name) {
+                const url = URL.createObjectURL(new Blob([text], { type: 'text/plain;charset=utf-8' }));
+                const a = el('a', { href: url, download: name });
+                a.click();
+                setTimeout(() => URL.revokeObjectURL(url), 1000);
+            }
+
+            function select(textarea, index, length) {
+                textarea.focus();
+                textarea.setSelectionRange(index, index + Math.max(length, 1));
+                // bring the selection into view, about a third from the top
+                const lineHeight = parseFloat(getComputedStyle(textarea).lineHeight) || 20;
+                const line = textarea.value.slice(0, index).split('\n').length - 1;
+                textarea.scrollTop = Math.max(0, line * lineHeight - textarea.clientHeight / 3);
+            }
+
+            const CAT = {
+                invisible: 'Zero-width / invisible',
+                bidi: 'Direction control',
+                space: 'Unusual space',
+                control: 'Control character',
+                tag: 'Tag character',
+                variation: 'Variation selector',
+                filler: 'Filler',
+            };
+            const DANGER_CPS = new Set([0x202A, 0x202B, 0x202D, 0x202E, 0x2066, 0x2067, 0x2068]);
+            const chipLabel = c => c.abbr || U.hex(c.cp).slice(2);
+            // short labels for the preview, keyed by scheme (plain text) or kind
+            const PAYLOAD_CHIP = { frame: 'message', 'vs-text': 'VS text', tag: 'TAG text', 'zw-binary': 'ZW message', encrypted: 'encrypted', watermark: 'watermark', unknown: 'VS' };
+
+            function payloadLabel(p) {
+                if (p.scheme === 'frame') return p.kind === 'encrypted' ? 'Encrypted message' : p.kind === 'watermark' ? 'Recipient watermark' : 'Hidden message';
+                if (p.scheme === 'vs-text') return 'Text in variation selectors';
+                if (p.scheme === 'tag') return 'Text in tag characters';
+                if (p.scheme === 'zw-binary') return 'Zero-width binary message';
+                return 'Variation selectors that decode to nothing';
+            }
+
+            // --- tabs --------------------------------------------------------
+
+            const TAB_HINT = {
+                scan: 'Check text you received for hidden characters, direction tricks and hidden payloads.',
+                clean: 'Remove hidden characters and see exactly what was removed where.',
+                mark: 'Put a hidden message or a per-recipient watermark into your own text, without changing how it looks.',
+            };
+            function showTab(name) {
+                for (const b of $('uh-tabs').querySelectorAll('button')) b.classList.toggle('active', b.dataset.tab === name);
+                for (const t of document.querySelectorAll('.uh-tab')) t.classList.toggle('active', t.id === 'tab-' + name);
+                $('uh-tab-hint').textContent = TAB_HINT[name];
+                if (location.hash !== '#' + name) history.replaceState(null, '', '#' + name);
+            }
+            $('uh-tabs').addEventListener('click', e => {
+                const b = e.target.closest('button');
+                if (b) showTab(b.dataset.tab);
+            });
+            showTab(TAB_HINT[location.hash.slice(1)] ? location.hash.slice(1) : 'scan');
+
+            // --- scan --------------------------------------------------------
+
+            const scIn = $('sc-input');
+            let lastScan = null;
+
+            function verdict(target, cls, parts) {
+                const v = $(target);
+                v.className = 'uh-verdict ' + cls;
+                v.replaceChildren(el('span', { class: 'dot' }));
+                parts.forEach((p, i) => {
+                    if (i) v.append(el('span', { class: 'sep', text: '·' }));
+                    v.append(p.muted ? el('span', { class: 'muted' }, p.muted) : el('span', null, p));
+                });
+            }
+
+            function renderScan() {
+                const text = scIn.value;
+                const r = lastScan = text ? U.scan(text) : null;
+                const hidden = r ? r.chars.filter(c => !c.legit) : [];
+                const others = r ? r.others : [];
+                $('sc-to-clean').disabled = !hidden.length && !others.length && !(r && (!r.nfc || r.styled.length));
+                renderNotes(r);
+                for (const id of ['sc-preview-card', 'sc-payloads-card', 'sc-others-card', 'sc-chars-card']) $(id).hidden = true;
+                if (!r) return verdict('sc-verdict', '', ['Waiting for input…']);
+                if (!r.chars.length && !others.length && !r.styled.length) return verdict('sc-verdict', 'ok', ['No hidden characters']);
+
+                const parts = [];
+                const bidi = hidden.filter(c => DANGER_CPS.has(c.cp)).length;
+                const loose = hidden.filter(c => c.payload < 0).length;
+                if (r.payloads.length) parts.push(count(r.payloads.length, 'hidden payloads'));
+                if (loose) parts.push(count(loose, 'hidden characters'));
+                if (bidi) parts.push(count(bidi, 'direction overrides'));
+                if (others.length) parts.push(count(others.length, 'letters from other scripts'));
+                if (r.styled.length) parts.push(count(r.styled.length, 'styled letters'));
+                const legit = r.chars.length - hidden.length;
+                if (legit) parts.push({ muted: count(legit, 'in normal use') });
+                verdict('sc-verdict', bidi || r.payloads.some(p => p.scheme === 'tag') ? 'err' : hidden.length || others.length || r.styled.length ? 'warn' : 'ok', parts);
+
+                renderPreview(text, r);
+                renderPayloads(r.payloads);
+                renderOthers(r);
+                renderChars(r.chars);
+            }
+
+            // Things about the text as a whole: normalization, lost characters, styled letters.
+            function renderNotes(r) {
+                const notes = [];
+                if (r && !r.nfc) notes.push(['This text is not in NFC: some letters are stored decomposed, such as Hangul split into jamo. It looks the same, but search and comparison can miss it. Clean can normalize it.']);
+                if (r && r.replacementChars) {
+                    notes.push([...count(r.replacementChars, 'replacement characters (U+FFFD).'), ' ', 'Somewhere this text was decoded with the wrong encoding; the letters there are lost, and cleaning cannot bring them back.']);
+                }
+                if (r && r.styled.length) {
+                    notes.push([...count(r.styled.length, 'styled or fullwidth letters.'), ' ', 'They look like ordinary letters but are different characters, so search and filters miss them. Clean can make them plain.']);
+                }
+                $('sc-notes').replaceChildren(...notes.map(n => el('div', { class: 'uh-note warn' }, n)));
+                $('sc-notes').hidden = !notes.length;
+            }
+
+            // One button per script, then one row per character with what Clean makes of it.
+            function renderOthers(r) {
+                $('sc-scripts').replaceChildren(...r.scripts.map(x => el('button', { class: 'btn btn-small', onclick: () => select(scIn, x.index, x.length) },
+                    [el('span', { 'data-i18n-skip': '', text: x.script }), ' ×' + x.count])));
+                const byCp = new Map();
+                for (const o of r.others) {
+                    const g = byCp.get(o.cp);
+                    if (g) g.n++;
+                    else byCp.set(o.cp, { o, n: 1 });
+                }
+                $('sc-others').replaceChildren(...[...byCp.values()].sort((a, b) => b.n - a.n).slice(0, 300).map(({ o, n }) => el('tr', null, [
+                    el('td', null, el('code', { text: U.hex(o.cp) })),
+                    el('td', { 'data-i18n-skip': '', text: o.script + ' ' + o.char }),
+                    el('td', { class: 'num', text: String(n) }),
+                    el('td', null, o.latin ? ['Latin', ' ', el('code', { text: o.latin })] : 'removed'),
+                    el('td', null, el('button', { class: 'btn btn-small', text: 'Show', onclick: () => select(scIn, o.index, o.length) })),
+                ])));
+                $('sc-others-card').hidden = !r.others.length;
+            }
+
+            function renderPreview(text, r) {
+                const box = $('sc-preview');
+                const frag = document.createDocumentFragment();
+                let pos = 0;
+                const chip = (label, cls, index, length) => el('span', { class: 'uh-chip ' + cls, text: label, onclick: () => select(scIn, index, length) });
+                const marks = [];
+                for (const p of r.payloads) marks.push({ index: p.index, length: p.length, node: () => chip(PAYLOAD_CHIP[p.kind === 'text' ? p.scheme : p.kind] + ' ×' + Array.from(text.slice(p.index, p.index + p.length)).length, 'payload', p.index, p.length) });
+                for (const c of r.chars) {
+                    if (c.payload >= 0) continue;
+                    marks.push({ index: c.index, length: c.length, node: () => chip(chipLabel(c), c.legit ? 'legit' : DANGER_CPS.has(c.cp) || c.cat === 'tag' ? 'danger' : '', c.index, c.length) });
+                }
+                for (const st of r.styled) {
+                    marks.push({ index: st.index, length: st.length, node: () => el('span', { class: 'uh-styled', title: U.hex(st.cp) + ' → ' + st.to, text: st.char, onclick: () => select(scIn, st.index, st.length) }) });
+                }
+                for (const o of r.others) {
+                    marks.push({ index: o.index, length: o.length, node: () => el('span', { class: 'uh-other', title: o.script + ' ' + U.hex(o.cp), text: o.char, onclick: () => select(scIn, o.index, o.length) }) });
+                }
+                marks.sort((a, b) => a.index - b.index);
+                for (const m of marks) {
+                    if (m.index > pos) frag.append(text.slice(pos, m.index));
+                    frag.append(m.node());
+                    // a line separator or NEL still breaks the line in the preview
+                    if (/[\u2028\u2029\u0085]/.test(text.slice(m.index, m.index + m.length))) frag.append('\n');
+                    pos = m.index + m.length;
+                }
+                frag.append(text.slice(pos));
+                box.replaceChildren(frag);
+                $('sc-preview-card').hidden = false;
+            }
+
+            function renderPayloads(payloads) {
+                const box = $('sc-payloads');
+                box.replaceChildren();
+                $('sc-payloads-card').hidden = !payloads.length;
+                payloads.forEach(p => box.append(payloadCard(p)));
+            }
+
+            function payloadCard(p) {
+                const where = el('span', { class: 'where' }, ['Line', ' ', String(p.line), ', ', 'col', ' ', String(p.col)]);
+                const card = el('div', { class: 'uh-payload' }, el('div', { class: 'uh-payload-head' }, [el('span', { text: payloadLabel(p) }), where]));
+                if (p.kind === 'text') {
+                    card.append(el('pre', { 'data-i18n-skip': '', text: p.text }));
+                    if (p.scheme === 'tag') card.append(el('div', { class: 'uh-note danger', text: 'Text spelled in tag characters is invisible to readers but read by AI tools — a known way to slip in instructions.' }));
+                } else if (p.kind === 'encrypted') {
+                    const pass = el('input', { type: 'password', placeholder: 'Passphrase', autocomplete: 'off' });
+                    const out = el('div');
+                    const open = async () => {
+                        out.replaceChildren(el('span', { class: 'uh-note', text: 'Opening…' }));
+                        try { out.replaceChildren(el('pre', { 'data-i18n-skip': '', text: await U.decrypt(p, pass.value) })); }
+                        catch (e) { out.replaceChildren(el('span', { class: 'error-text', text: e.message })); }
+                    };
+                    pass.addEventListener('keydown', e => { if (e.key === 'Enter') open(); });
+                    card.append(el('div', { class: 'input-group' }, [pass, el('button', { class: 'btn', text: 'Open', onclick: open })]), out);
+                } else if (p.kind === 'watermark') {
+                    card.append(el('div', { class: 'uh-note' }, ['Code', ' ', el('code', { text: p.code })]));
+                    card.append(identifyBox());
+                } else {
+                    card.append(el('div', { class: 'uh-note' }, count(p.size, 'variation selectors in a row')));
+                }
+                return card;
+            }
+
+            // one identify box serves every watermark payload in the text
+            let idBox = null;
+            function identifyBox() {
+                if (idBox && document.contains(idBox)) return el('div', { class: 'field-hint', text: 'See the first watermark above to identify the recipient.' });
+                const key = el('input', { type: 'text', class: 'mono', placeholder: 'Key', spellcheck: 'false', autocomplete: 'off' });
+                const names = el('textarea', { spellcheck: 'false', placeholder: 'Recipients, one per line', style: 'min-height:80px;height:80px;font-family:inherit;' });
+                const file = el('input', { type: 'file', accept: '.json,application/json', hidden: '' });
+                const out = el('div');
+                file.addEventListener('change', async () => {
+                    try {
+                        const j = JSON.parse(await file.files[0].text());
+                        if (typeof j.key !== 'string' || !Array.isArray(j.recipients)) throw new Error();
+                        key.value = j.key;
+                        names.value = j.recipients.join('\n');
+                    } catch (e) { showToast(t('Not a key and recipients file'), true); }
+                    file.value = '';
+                });
+                const run = async () => {
+                    const r = await U.identify(lastScan.payloads, key.value, names.value.split('\n'));
+                    const best = r.results[0];
+                    out.replaceChildren(best && best.hits
+                        ? el('div', { class: 'uh-found' }, [el('span', { 'data-i18n-skip': '', text: best.name }), ' — ', ...count(best.hits + ' / ' + r.total, 'watermarks match')])
+                        : el('div', { class: 'error-text', text: 'No recipient matches — a different key, or someone not on the list.' }));
+                };
+                idBox = el('div', { class: 'uh-form' }, [
+                    el('div', { class: 'input-group' }, [key, el('button', { class: 'btn', text: 'Open file', onclick: () => file.click() }), file]),
+                    names,
+                    el('div', { class: 'uh-row' }, el('button', { class: 'btn btn-primary', text: 'Identify', onclick: run })),
+                    out,
+                ]);
+                return idBox;
+            }
+
+            function renderChars(chars) {
+                const groups = new Map();
+                for (const c of chars) {
+                    const g = groups.get(c.cp) || { c, n: 0, legit: 0, first: c };
+                    g.n++;
+                    if (c.legit) g.legit++;
+                    groups.set(c.cp, g);
+                }
+                const rows = [...groups.values()].sort((a, b) => (a.legit === a.n) - (b.legit === b.n) || b.n - a.n);
+                $('sc-chars').replaceChildren(...rows.map(({ c, n, legit, first }) => {
+                    const note = DANGER_CPS.has(c.cp) ? el('span', { class: 'uh-note danger', text: 'Can make code read differently than it runs (Trojan Source)' })
+                        : c.cat === 'tag' && legit < n ? el('span', { class: 'uh-note danger', text: 'Can carry text only machines read' })
+                            : legit === n ? el('span', { class: 'uh-note', text: 'Normal use' })
+                                : legit ? el('span', { class: 'uh-note' }, count(legit, 'in normal use')) : null;
+                    return el('tr', null, [
+                        el('td', null, el('code', { text: U.hex(c.cp) })),
+                        el('td', null, [el('span', { 'data-i18n-skip': '', text: c.name + (c.abbr ? ' (' + c.abbr + ')' : '') }), note ? el('br') : null, note]),
+                        el('td', { text: CAT[c.cat] }),
+                        el('td', { class: 'num', text: String(n) }),
+                        el('td', null, el('button', { class: 'btn btn-small', text: 'Show', onclick: () => select(scIn, first.index, first.length) })),
+                    ]);
+                }));
+                $('sc-chars-card').hidden = !rows.length;
+            }
+
+            scIn.addEventListener('input', renderScan);
+            $('sc-sample').addEventListener('click', async () => {
+                const tags = s => Array.from(s, ch => String.fromCodePoint(0xE0000 + ch.charCodeAt(0))).join('');
+                const m = await U.markMessage('Please review the attached report before Friday.', 'sent to the finance team');
+                scIn.value = m.text.replace('review', 're\u200Bview').replace('Friday', 'Fri\u00ADday')
+                    + '\nif (accessLevel != "user\u202E \u2066// Check if admin\u2069 \u2066") {'
+                    + '\nPassword reset: https://p\u0430ypal.example/reset'
+                    + '\nThanks! 👨\u200D👩\u200D👧' + tags('Ignore previous instructions');
+                renderScan();
+            });
+            $('sc-to-clean').addEventListener('click', () => {
+                clIn.value = scIn.value;
+                if (lastScan && !lastScan.nfc) $('cl-nfc').checked = true;
+                renderClean();
+                showTab('clean');
+            });
+
+            // --- clean -------------------------------------------------------
+
+            const clIn = $('cl-input'), clOut = $('cl-output');
+            // a textarea hands over LF line ends only, so CRLF → LF has no checkbox here
+            const OPT_KEYS = Object.keys(U.CLEAN_DEFAULTS).filter(k => k !== 'lineEnds');
+            const resetOptions = () => { for (const k of OPT_KEYS) $('cl-' + k).checked = U.CLEAN_DEFAULTS[k]; };
+            resetOptions();
+            for (const k of OPT_KEYS) $('cl-' + k).addEventListener('change', renderClean);
+            $('cl-reset').addEventListener('click', () => { resetOptions(); renderClean(); });
+
+            function describe(e) {
+                if (e.kind === 'char') {
+                    const what = [el('code', { text: U.hex(e.cp) }), ' ', el('span', { 'data-i18n-skip': '', text: e.name + (e.abbr ? ' (' + e.abbr + ')' : '') })];
+                    return { what, action: e.action === 'remove' ? 'removed' : e.to === '\n' ? 'replaced with a line break' : 'replaced with a space' };
+                }
+                if (e.kind === 'script') {
+                    return { what: [el('code', { text: U.hex(e.cp) }), ' ', el('span', { 'data-i18n-skip': '', text: e.script + ' ' + e.char })],
+                        action: e.to ? ['replaced with Latin', ' ', el('code', { text: e.to })] : 'removed' };
+                }
+                if (e.kind === 'styled' || e.kind === 'fullwidth') {
+                    return { what: [el('code', { text: U.hex(e.cp) }), ' ', el('span', { 'data-i18n-skip': '', text: e.char })],
+                        action: ['replaced with', ' ', el('code', { text: e.to })] };
+                }
+                if (e.kind === 'ascii') {
+                    return { what: [el('code', { text: U.hex(e.cp) }), ' ', el('span', { 'data-i18n-skip': '', text: e.name })],
+                        action: ['replaced with', ' ', el('code', { text: e.to })] };
+                }
+                if (e.kind === 'payload') return { what: [payloadLabel(e.payload)], action: 'removed', detail: e.payload.text || e.payload.code };
+                if (e.kind === 'trailing') return { what: ['Spaces at the line end'], action: 'removed' };
+                if (e.kind === 'blankLines') return { what: ['Blank lines'], action: 'collapsed to one' };
+                return { what: [el('code', { 'data-i18n-skip': '', text: e.from }), ' → ', el('code', { 'data-i18n-skip': '', text: e.to })], action: 'normalized to NFC' };
+            }
+
+            const EDIT_LIMIT = 1000;
+            function renderClean() {
+                const opts = {};
+                for (const k of OPT_KEYS) opts[k] = $('cl-' + k).checked;
+                const r = U.clean(clIn.value, opts);
+                clOut.value = r.text;
+                const card = $('cl-summary-card');
+                if (!clIn.value) { card.hidden = true; return; }
+                card.hidden = false;
+                $('cl-summary-title').replaceChildren(...(r.edits.length ? count(r.edits.length, 'changes') : ['Nothing to change']));
+                $('cl-summary-chips').replaceChildren(...U.groupEdits(r.edits).map(g => {
+                    // styled and fullwidth letters are many different characters: one row for each kind
+                    const d = g.key === 'styled' ? { what: ['Styled letters'], action: 'made plain' }
+                        : g.key === 'fullwidth' ? { what: ['Fullwidth letters'], action: 'made ASCII' } : describe(g.first);
+                    return el('span', null, [...d.what, ' ', ...[].concat(d.action), ' ', el('b', { text: '×' + g.count })]);
+                }));
+                const items = r.edits.slice(0, EDIT_LIMIT).map(e => {
+                    const d = describe(e);
+                    return el('li', { onclick: () => select(clIn, e.index, e.length) }, [
+                        el('span', { class: 'where' }, ['Line', ' ', String(e.line), ', ', 'col', ' ', String(e.col)]),
+                        el('span', null, [...d.what, ' ', ...[].concat(d.action)]),
+                        d.detail ? el('code', { 'data-i18n-skip': '', text: '“' + d.detail + '”' }) : null,
+                    ]);
+                });
+                if (r.edits.length > EDIT_LIMIT) items.push(el('li', null, count(r.edits.length - EDIT_LIMIT, 'more not listed')));
+                $('cl-edits').replaceChildren(...items);
+            }
+            clIn.addEventListener('input', renderClean);
+            $('cl-download').addEventListener('click', () => clOut.value && download(clOut.value, 'cleaned.txt'));
+
+            // --- mark --------------------------------------------------------
+
+            const mkIn = $('mk-input');
+            let mode = 'message';
+            let copies = [];
+            const MODE_HINT = {
+                message: 'Hide a message for the reader to find with Scan. With a passphrase only they can read it.',
+                watermark: 'Make one copy per recipient, each carrying a code derived from your key and their name, repeated through the text. If a copy leaks, Scan it with the key to see whose it was.',
+            };
+            function setMode(m) {
+                mode = m;
+                for (const b of $('mk-mode').querySelectorAll('button')) b.classList.toggle('active', b.dataset.mode === m);
+                $('mk-mode-hint').textContent = MODE_HINT[m];
+                $('mk-message-fields').hidden = m !== 'message';
+                $('mk-watermark-fields').hidden = m !== 'watermark';
+                $('mk-run').textContent = t(m === 'message' ? 'Make' : 'Make copies');
+                if (m === 'watermark' && !$('mk-key').value) $('mk-key').value = U.generateKey();
+                syncEvery();
+                $('mk-error').textContent = '';
+                $('mk-result').hidden = true;
+                $('mk-copies-card').hidden = true;
+            }
+            const syncEvery = () => { $('mk-every-group').hidden = mode === 'message' && !$('mk-repeat-spread').checked; };
+            $('mk-mode').addEventListener('click', e => { const b = e.target.closest('button'); if (b) setMode(b.dataset.mode); });
+            for (const r of document.querySelectorAll('input[name="mk-repeat"]')) r.addEventListener('change', syncEvery);
+            $('mk-encrypt').addEventListener('change', () => {
+                $('mk-pass').disabled = !$('mk-encrypt').checked;
+                if ($('mk-encrypt').checked) { $('mk-carrier-vs').checked = true; $('mk-pass').focus(); }
+            });
+            $('mk-carrier-zw').addEventListener('change', () => { $('mk-encrypt').checked = false; $('mk-pass').disabled = true; });
+            $('mk-key-new').addEventListener('click', () => { $('mk-key').value = U.generateKey(); });
+            $('mk-key-copy').addEventListener('click', () => {
+                navigator.clipboard.writeText($('mk-key').value).then(() => showToast(t('Copied to clipboard')), () => showToast(t('Copy failed'), true));
+            });
+            mkIn.addEventListener('input', () => { $('mk-existing').hidden = !mkIn.value || !U.scan(mkIn.value).payloads.length; });
+            setMode('message');
+
+            function checkLines(m) {
+                const c = m.check;
+                const line = (ok, parts) => el('div', { class: ok ? 'ok' : 'bad' }, [ok ? '✔ ' : '✘ ', ...parts]);
+                return [
+                    line(c.sameText && c.sameGraphemes, c.sameText && c.sameGraphemes
+                        ? ['Visible text unchanged', ' — ', ...count(c.graphemes, 'characters compared')]
+                        : ['The visible text would change — not safe to send']),
+                    line(c.decoded === m.insertions.length, count(c.decoded + ' / ' + m.insertions.length, 'copies read back')),
+                    el('div', { class: 'uh-note' }, [...count(m.hiddenChars, 'hidden characters'), ' · ', el('b', { text: '+' + m.addedBytes }), ' ', 'bytes (UTF-8)']),
+                ];
+            }
+
+            async function runMark() {
+                const err = $('mk-error');
+                err.textContent = '';
+                $('mk-result').hidden = true;
+                $('mk-copies-card').hidden = true;
+                const text = mkIn.value;
+                if (!text) { err.textContent = t('Enter your text first.'); return; }
+                const every = Math.max(20, parseInt($('mk-every').value, 10) || 300);
+                const btn = $('mk-run');
+                btn.disabled = true;
+                try {
+                    if (mode === 'message') {
+                        if ($('mk-encrypt').checked && !$('mk-pass').value) throw new U.MarkError('Enter a passphrase, or turn encryption off.');
+                        const m = await U.markMessage(text, $('mk-message').value, {
+                            passphrase: $('mk-encrypt').checked ? $('mk-pass').value : '',
+                            carrier: $('mk-carrier-zw').checked ? 'zw' : 'vs',
+                            every: $('mk-repeat-spread').checked ? every : 0,
+                        });
+                        $('mk-output').value = m.text;
+                        $('mk-check').replaceChildren(...checkLines(m));
+                        $('mk-result').hidden = false;
+                    } else {
+                        const names = [...new Set($('mk-recipients').value.split('\n').map(s => s.trim()).filter(Boolean))];
+                        if (!names.length) throw new U.MarkError('Enter at least one recipient.');
+                        const key = $('mk-key').value.trim();
+                        copies = [];
+                        for (const name of names) copies.push({ name, ...await U.markWatermark(text, key, name, { every }) });
+                        $('mk-copies').replaceChildren(...copies.map(c => el('div', { class: 'uh-copy' }, [
+                            el('span', { class: 'name', 'data-i18n-skip': '', text: c.name }),
+                            el('code', { text: c.code }),
+                            el('span', null, count(c.insertions.length, 'places')),
+                            el('span', { class: c.check.ok ? 'uh-found' : 'error-text', text: c.check.ok ? '✔ checked' : '✘ check failed' }),
+                            el('span', { class: 'actions' }, [
+                                el('button', { class: 'btn btn-small', text: 'Copy', onclick: () => navigator.clipboard.writeText(c.text).then(() => showToast(t('Copied to clipboard'))) }),
+                                el('button', { class: 'btn btn-small', text: 'Save', onclick: () => download(c.text, 'copy-' + c.name.replace(/[\\/:*?"<>|\s]+/g, '_') + '.txt') }),
+                            ]),
+                        ])));
+                        $('mk-copies-card').hidden = false;
+                    }
+                } catch (e) {
+                    err.textContent = t(e.message);
+                } finally {
+                    btn.disabled = false;
+                }
+            }
+            $('mk-run').addEventListener('click', runMark);
+            $('mk-download').addEventListener('click', () => download($('mk-output').value, 'marked.txt'));
+            $('mk-scan').addEventListener('click', () => { scIn.value = $('mk-output').value; renderScan(); showTab('scan'); });
+            $('mk-ledger').addEventListener('click', () => {
+                const ledger = { type: 'localutil-watermark', version: 1, key: $('mk-key').value.trim(), recipients: copies.map(c => c.name), created: new Date().toISOString() };
+                download(JSON.stringify(ledger, null, 2) + '\n', 'watermark-key.json');
+            });
+        });
+    </script>
+</body>
+
+</html>
