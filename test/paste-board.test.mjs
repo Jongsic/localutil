@@ -125,7 +125,7 @@ test('copy puts text and images back on the clipboard', async () => {
     });
 });
 
-test('formatted text: copy as pasted, as plain text, or cleaned', async () => {
+test('formatted text: copy as pasted or as plain text', async () => {
     await paste({ text: 'Big\u00A0title  \r\nbo\u200Bdy', html: '<h1 style="color:red">Big&nbsp;title</h1><p>body</p>' });
     const first = env.page.locator('#pb-list .pb-item').first();
     assert.match(await first.locator('.pb-kind.stripped').textContent(), /Has formatting/);
@@ -139,8 +139,7 @@ test('formatted text: copy as pasted, as plain text, or cleaned', async () => {
     await expectClip(['text/html', 'text/plain'], 'Big\u00A0title  \r\nbo\u200Bdy');
     await first.locator('[data-action="copy-plain"]').click();
     await expectClip(['text/plain'], 'Big\u00A0title  \r\nbo\u200Bdy');
-    await first.locator('[data-action="copy-clean"]').click();
-    await expectClip(['text/plain'], 'Big title\nbody');
+    assert.equal(await first.locator('[data-action="copy-clean"]').count(), 0);
     await first.locator('[data-action="delete"]').click();
 });
 

@@ -142,7 +142,7 @@
                             </div>
                             <button id="pb-paste" class="btn btn-primary">Paste from clipboard</button>
                         </div>
-                        <div class="field-hint" style="margin-top:10px;">Copying from a web page puts the same text on the clipboard several times — plain, HTML, sometimes RTF — and the app you paste into picks the richest one. "Copy as plain text" puts back only the plain version, so it pastes without fonts, colors or links; "Copy cleaned" also drops invisible characters (non-breaking and zero-width spaces, soft hyphens, trailing spaces).</div>
+                        <div class="field-hint" style="margin-top:10px;">Copying from a web page puts the same text on the clipboard several times — plain, HTML, sometimes RTF — and the app you paste into picks the richest one. "Copy as plain text" puts back only the plain version, so it pastes without fonts, colors or links.</div>
 
                         <div class="card">
                             <div class="log-header mb-2">
@@ -245,17 +245,6 @@
                 return item;
             }
 
-            // Characters that survive as "plain" text but still trip up pasting:
-            // non-breaking / narrow spaces, zero-width characters, soft hyphens,
-            // CRLF line ends and spaces left at the end of lines.
-            function cleanText(text) {
-                return text
-                    .replace(/\r\n?/g, '\n')
-                    .replace(/[\u00A0\u2007\u202F]/g, ' ')
-                    .replace(/[\u200B-\u200D\u2060\uFEFF\u00AD]/g, '')
-                    .replace(/[ \t]+$/gm, '');
-            }
-
             function addFile(file) {
                 const base = file.name && file.name !== 'image.png' ? file.name : null;
                 if (file.type.startsWith('image/')) {
@@ -344,10 +333,7 @@
 
                     const actions = document.createElement('div');
                     actions.className = 'pb-actions';
-                    if (item.kind === 'text') actions.append(
-                        actionBtn('Copy as plain text', 'copy-plain', () => copyItem(item, 'plain')),
-                        actionBtn('Copy cleaned', 'copy-clean', () => copyItem(item, 'clean')),
-                    );
+                    if (item.kind === 'text') actions.append(actionBtn('Copy as plain text', 'copy-plain', () => copyItem(item, 'plain')));
                     actions.append(
                         actionBtn('Copy', 'copy', () => copyItem(item)),
                         actionBtn('Download', 'download', () => download(item)),
@@ -401,7 +387,7 @@
                 });
             }
 
-            // mode: undefined = as pasted (with its formatting if it had any), 'plain', 'clean'
+            // mode: undefined = as pasted (with its formatting if it had any), 'plain'
             async function copyItem(item, mode) {
                 try {
                     if (item.kind === 'text' && !mode && item.html && window.ClipboardItem) {
@@ -410,12 +396,12 @@
                             'text/html': new Blob([item.html], { type: 'text/html' }),
                         })]);
                     } else if (item.kind === 'text') {
-                        await navigator.clipboard.writeText(mode === 'clean' ? cleanText(item.text) : item.text);
+                        await navigator.clipboard.writeText(item.text);
                     } else {
                         // Hand ClipboardItem the promise so Safari still counts this as part of the click.
                         await navigator.clipboard.write([new ClipboardItem({ 'image/png': asPng(item) })]);
                     }
-                    showToast(t(item.kind !== 'text' ? 'Image copied' : mode === 'clean' ? 'Cleaned plain text copied' : mode === 'plain' || !item.html ? 'Plain text copied' : 'Text copied with its formatting'));
+                    showToast(t(item.kind !== 'text' ? 'Image copied' : mode === 'plain' || !item.html ? 'Plain text copied' : 'Text copied with its formatting'));
                 } catch (e) {
                     showToast(t('Copy failed'), true);
                 }
