@@ -392,6 +392,169 @@ test('keystore mode: a chosen file fills the form and survives a tab round-trip'
     assert.match(await env.page.$eval('#hd-ks-drop-main', e => e.textContent), /Drop a keystore file/);
 });
 
+// --- Keystore export dialog ---------------------------------------------------
+// Every file is opened again with ethers' own decryptKeystoreJson — an
+// independent implementation — so a passing round trip means the KDF, cipher,
+// counter mode and MAC all match what wallets expect.
+
+async function openExport(page) {
+    await page.click('#hd-summary .hd-kx-open');
+    await page.waitForSelector('#hd-kx[open]');
+}
+
+async function exportKeystore(page, { password = '', kdf = 'scrypt', n = '1024', c = null, prf = null, dklen = null } = {}) {
+    await page.fill('#hd-kx-pass', password);
+    await page.fill('#hd-kx-pass2', password);
+    await page.click(`#hd-kx-kdf button[data-kdf="${kdf}"]`);
+    if (kdf === 'scrypt') await page.selectOption('#hd-kx-n', n);
+    if (c) await page.fill('#hd-kx-c', c);
+    if (prf) await page.selectOption('#hd-kx-prf', prf);
+    if (dklen) await page.fill('#hd-kx-dklen', dklen);
+    await page.click('#hd-kx-build');
+    await page.waitForFunction(() => document.getElementById('hd-kx-result').style.display === 'block');
+    return page.$eval('#hd-kx-out', e => e.textContent);
+}
+
+const decryptInPage = (page, json, password) =>
+    page.evaluate(async ({ j, pw }) => (await ethers.decryptKeystoreJson(j, pw)).privateKey, { j: json, pw: password });
+
+test('keystore export: defaults are geth standard scrypt, and the file reopens', async () => {
+    await env.goto('hd-wallet.html');
+    await env.page.click('#hd-mode button[data-mode="hex"]');
+    await env.page.fill('#hd-hex', TEST_PK);
+    await env.page.waitForSelector('#hd-summary .card');
+    await openExport(env.page);
+
+    assert.equal(await env.page.$eval('#hd-kx-address', e => e.textContent), TEST_PK_ADDR);
+    assert.equal(await env.page.inputValue('#hd-kx-n'), '262144');
+    assert.equal(await env.page.inputValue('#hd-kx-r'), '8');
+    assert.equal(await env.page.inputValue('#hd-kx-p'), '1');
+    assert.equal(await env.page.inputValue('#hd-kx-dklen'), '32');
+    assert.match(await env.page.$eval('#hd-kx-presets .active', e => e.textContent), /Standard/);
+    assert.match(await env.page.$eval('#hd-kx-cost', e => e.textContent), /256 MiB/);
+    // Blank password is allowed, with a warning.
+    assert.equal(await env.page.$eval('#hd-kx-nopass', e => e.style.display), 'block');
+
+    const text = await exportKeystore(env.page, { password: KS_PASSWORD });
+    const json = JSON.parse(text);
+    assert.equal(json.version, 3);
+    assert.equal(json.address, TEST_PK_ADDR.slice(2).toLowerCase());
+    assert.match(json.id, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+    assert.deepEqual(Object.keys(json.crypto), ['cipher', 'ciphertext', 'cipherparams', 'kdf', 'kdfparams', 'mac']);
+    assert.equal(json.crypto.cipher, 'aes-128-ctr');
+    assert.equal(json.crypto.kdf, 'scrypt');
+    assert.deepEqual({ ...json.crypto.kdfparams, salt: undefined }, { dklen: 32, n: 1024, p: 1, r: 8, salt: undefined });
+    assert.match(json.crypto.kdfparams.salt, /^[0-9a-f]{64}$/);
+    assert.match(json.crypto.cipherparams.iv, /^[0-9a-f]{32}$/);
+    assert.equal(await decryptInPage(env.page, text, KS_PASSWORD), '0x' + TEST_PK);
+
+    // Pretty-print only changes whitespace.
+    await env.page.click('label.switch:has(#hd-kx-pretty)');
+    const compact = await env.page.$eval('#hd-kx-out', e => e.textContent);
+    assert.ok(!compact.includes('\n'));
+    assert.deepEqual(JSON.parse(compact), json);
+
+    // The download is exactly the shown text, under a geth-style name.
+    const [download] = await Promise.all([
+        env.page.waitForEvent('download'),
+        env.page.click('#hd-kx-download'),
+    ]);
+    assert.match(download.suggestedFilename(), new RegExp('^UTC--\\d{4}-\\d\\d-\\d\\dT\\d\\d-\\d\\d-\\d\\d\\.\\d{3}Z--' + json.address + '\\.json$'));
+    const chunks = [];
+    for await (const chunk of await download.createReadStream()) chunks.push(chunk);
+    assert.equal(Buffer.concat(chunks).toString(), compact);
+
+    // Changing an option drops the stale file; closing forgets the password.
+    await env.page.fill('#hd-kx-r', '4');
+    assert.equal(await env.page.$eval('#hd-kx-result', e => e.style.display), 'none');
+    await env.page.click('#hd-kx-close');
+    assert.equal(await env.page.$eval('#hd-kx', e => e.open), false);
+    await openExport(env.page);
+    assert.equal(await env.page.inputValue('#hd-kx-pass'), '');
+});
+
+test('keystore export: PBKDF2 and an empty password round-trip through the keystore tab', async () => {
+    await env.goto('hd-wallet.html');
+    await env.page.click('#hd-mode button[data-mode="hex"]');
+    await env.page.fill('#hd-hex', TEST_PK);
+    await env.page.waitForSelector('#hd-summary .card');
+    await openExport(env.page);
+
+    // hmac-sha512 is readable by ethers but not geth — the dialog says so.
+    const text512 = await exportKeystore(env.page, { kdf: 'pbkdf2', c: '1000', prf: 'hmac-sha512', password: KS_PASSWORD });
+    assert.match(await env.page.$eval('#hd-kx-compat', e => e.textContent), /geth only reads hmac-sha256/);
+    const j512 = JSON.parse(text512);
+    assert.deepEqual(Object.keys(j512.crypto.kdfparams), ['c', 'dklen', 'prf', 'salt']);
+    assert.equal(j512.crypto.kdfparams.prf, 'hmac-sha512');
+    assert.equal(await decryptInPage(env.page, text512, KS_PASSWORD), '0x' + TEST_PK);
+
+    const text = await exportKeystore(env.page, { kdf: 'pbkdf2', c: '1000', prf: 'hmac-sha256', password: '' });
+    assert.equal(await env.page.$eval('#hd-kx-compat', e => e.style.display), 'none');
+    assert.equal(JSON.parse(text).crypto.kdfparams.c, 1000);
+    await env.page.click('#hd-kx-close');
+
+    // Open it in the keystore tab with the password field left blank.
+    await openKeystoreTab(env.page);
+    await env.page.fill('#hd-ks-json', text);
+    await env.page.click('#btn-hd-ks-unlock');
+    await env.page.waitForSelector('#hd-summary .card');
+    assert.equal(await summaryValue(env.page, 'ETH Address'), TEST_PK_ADDR);
+
+    // A real password left blank still explains itself.
+    await env.page.fill('#hd-ks-json', await makeKeystore(env.page, { privateKey: TEST_PK }));
+    await env.page.click('#btn-hd-ks-unlock');
+    await env.page.waitForFunction(() => document.getElementById('hd-error').style.display === 'block');
+    assert.match(await env.page.$eval('#hd-error', e => e.textContent), /enter its password/);
+});
+
+test('keystore export: the seed root key, custom dklen and input checks', async () => {
+    await env.goto('hd-wallet.html');
+    await env.page.fill('#hd-mnemonic', TEST_MNEMONIC);
+    await env.page.click('#btn-hd-generate');
+    await env.page.waitForSelector('#hd-summary .card');
+    await openExport(env.page);
+
+    // Mismatched passwords never encrypt.
+    await env.page.fill('#hd-kx-pass', 'one');
+    await env.page.fill('#hd-kx-pass2', 'two');
+    await env.page.click('#hd-kx-build');
+    assert.match(await env.page.$eval('#hd-kx-error', e => e.textContent), /do not match/);
+    assert.equal(await env.page.$eval('#hd-kx-result', e => e.style.display), 'none');
+
+    // Out-of-range parameters are refused with the reason.
+    await env.page.fill('#hd-kx-pass2', 'one');
+    await env.page.fill('#hd-kx-r', '0');
+    await env.page.click('#hd-kx-build');
+    assert.match(await env.page.$eval('#hd-kx-error', e => e.textContent), /r must be a whole number from 1 to 32/);
+    await env.page.selectOption('#hd-kx-n', String(2 ** 20));
+    await env.page.fill('#hd-kx-r', '16');
+    await env.page.click('#hd-kx-build');
+    assert.match(await env.page.$eval('#hd-kx-error', e => e.textContent), /2 GiB of memory/);
+    await env.page.click('#hd-kx-presets [data-preset="light"]');
+    assert.deepEqual(
+        [await env.page.inputValue('#hd-kx-n'), await env.page.inputValue('#hd-kx-r'), await env.page.inputValue('#hd-kx-p')],
+        ['4096', '8', '6']);
+
+    // dklen 48: ethers refuses it, so check the MAC and the cipher by hand,
+    // the way geth reads the file (derivedKey[0:16] for AES, [16:32] for the MAC).
+    const text = await exportKeystore(env.page, { password: 'one', dklen: '48' });
+    assert.match(await env.page.$eval('#hd-kx-compat', e => e.textContent), /accept only dklen = 32/);
+    const opened = await env.page.evaluate(async (j) => {
+        const c = JSON.parse(j).crypto, kp = c.kdfparams;
+        const dk = ethers.getBytes(await ethers.scrypt(ethers.toUtf8Bytes('one'), '0x' + kp.salt, kp.n, kp.r, kp.p, kp.dklen));
+        const ct = ethers.getBytes('0x' + c.ciphertext);
+        const macOk = ethers.keccak256(ethers.concat([dk.slice(16, 32), ct])) === '0x' + c.mac;
+        const key = await crypto.subtle.importKey('raw', dk.slice(0, 16), 'AES-CTR', false, ['decrypt']);
+        const pt = await crypto.subtle.decrypt({ name: 'AES-CTR', counter: ethers.getBytes('0x' + c.cipherparams.iv), length: 128 }, key, ct);
+        return { macOk, dklen: kp.dklen, privateKey: ethers.hexlify(new Uint8Array(pt)) };
+    }, text);
+    const rootKey = await env.page.evaluate((m) => {
+        const seed = ethers.pbkdf2(ethers.toUtf8Bytes(m), ethers.toUtf8Bytes('mnemonic'), 2048, 64, 'sha512');
+        return ethers.HDNodeWallet.fromSeed(seed).privateKey;
+    }, TEST_MNEMONIC);
+    assert.deepEqual(opened, { macOk: true, dklen: 48, privateKey: rootKey });
+});
+
 test('no page errors', () => {
     assert.deepEqual(env.errors, []);
 });

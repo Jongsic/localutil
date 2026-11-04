@@ -229,9 +229,45 @@
         }
         #hd-steps-card[open] .hd-steps-chevron { transform: rotate(90deg); }
 
+        /* Card header with an action on the right (Root key & addresses) */
+        .hd-card-head {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 8px 16px;
+            flex-wrap: wrap;
+        }
+        .hd-card-head > div { flex: 1 1 260px; min-width: 0; }
+
+        /* Keystore export dialog */
+        dialog.hd-dialog {
+            width: min(760px, calc(100vw - 32px)); max-width: none;
+            max-height: calc(100vh - 32px); max-height: calc(100dvh - 32px);
+            margin: auto; padding: 0; border: 1px solid var(--border-strong); border-radius: var(--r-lg);
+            background: var(--bg-content); color: var(--text-main); box-shadow: var(--shadow-lg);
+        }
+        dialog.hd-dialog[open] { display: flex; flex-direction: column; }
+        dialog.hd-dialog::backdrop { background: rgba(4, 8, 16, 0.6); }
+        .hd-dialog-head {
+            flex: none; display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
+            padding: 16px 18px 12px; border-bottom: 1px solid var(--border-color);
+        }
+        .hd-dialog-head .card-subtitle { margin: 0; }
+        .hd-dialog-body { flex: 0 1 auto; min-height: 0; overflow: auto; padding: 16px 18px 18px; }
+        .hd-kx-params { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+        .hd-kx-out {
+            margin: 0; padding: 12px 14px; max-height: 320px; overflow: auto;
+            border: 1px solid var(--border-color); border-radius: var(--r-sm); background: var(--bg-subtle);
+            font-family: var(--font-mono); font-size: 1rem; line-height: 1.5;
+            white-space: pre-wrap; word-break: break-all;
+        }
+        .hd-kx-file { font-family: var(--font-mono); color: var(--text-muted); word-break: break-all; flex: 1 1 200px; min-width: 0; }
+
         @media (max-width: 640px) {
             .hd-kv { flex-direction: column; gap: 4px; }
             .hd-kv-key { flex: none; }
+            .hd-kx-params { grid-template-columns: 1fr 1fr; }
+            .hd-kx-params > :first-child { grid-column: 1 / -1; }
         }
         @media (max-width: 560px) {
             /* Inline grid-template-columns on the form grids wins over the shared
@@ -427,6 +463,105 @@
         </main>
     </div>
 
+    <!-- Keystore export dialog (opened from the Root key & addresses card) -->
+    <dialog id="hd-kx" class="hd-dialog" aria-labelledby="hd-kx-title">
+        <div class="hd-dialog-head">
+            <div>
+                <div class="card-title" id="hd-kx-title">Export as a keystore file</div>
+                <div class="card-subtitle">Web3 Secret Storage v3 — the encrypted JSON that geth, MyEtherWallet, MetaMask and ethers import.</div>
+            </div>
+            <button id="hd-kx-close" class="btn btn-small btn-ghost" type="button">Close</button>
+        </div>
+        <div class="hd-dialog-body">
+            <div class="hd-kv">
+                <div class="hd-kv-key">Key to encrypt</div>
+                <div class="hd-kv-val"><span id="hd-kx-address" data-i18n-skip></span></div>
+            </div>
+            <div class="field-hint mb-2">The file holds this one 32-byte key — no chain code and no seed phrase, so it reopens as a single account, not the HD tree.</div>
+
+            <div class="form-grid">
+                <div class="field-group">
+                    <label for="hd-kx-pass">Password</label>
+                    <input type="password" id="hd-kx-pass" autocomplete="new-password" placeholder="Leave blank for no password">
+                </div>
+                <div class="field-group">
+                    <label for="hd-kx-pass2">Repeat password</label>
+                    <input type="password" id="hd-kx-pass2" autocomplete="new-password" placeholder="Type it again">
+                </div>
+            </div>
+            <div id="hd-kx-nopass" class="hd-callout warn mt-1">No password: the file is still in keystore format, but anyone who has it can open it — it protects the key no better than plain text.</div>
+
+            <div class="section-title mt-2">Key derivation</div>
+            <div class="flex-row items-center wrap mb-2" style="gap:10px 16px;">
+                <div class="segmented" id="hd-kx-kdf">
+                    <button type="button" data-kdf="scrypt" class="active">scrypt</button>
+                    <button type="button" data-kdf="pbkdf2">PBKDF2</button>
+                </div>
+                <div class="hd-preset-row" id="hd-kx-presets">
+                    <a href="#" class="hd-preset active" data-preset="standard" title="geth's StandardScryptN — also what MyEtherWallet writes">Standard (geth)</a>
+                    <a href="#" class="hd-preset" data-preset="ethers" title="ethers v6 encryptKeystoreJson default">ethers default</a>
+                    <a href="#" class="hd-preset" data-preset="light" title="geth --lightkdf: fast to open, cheap to brute-force">Light (geth)</a>
+                </div>
+            </div>
+
+            <div class="form-grid hd-kx-params">
+                <div class="field-group" data-kdf-only="scrypt">
+                    <label for="hd-kx-n">N (cost)</label>
+                    <select id="hd-kx-n"></select>
+                </div>
+                <div class="field-group" data-kdf-only="scrypt">
+                    <label for="hd-kx-r">r (block size)</label>
+                    <input type="number" id="hd-kx-r" min="1" max="32" step="1" value="8">
+                </div>
+                <div class="field-group" data-kdf-only="scrypt">
+                    <label for="hd-kx-p">p (parallelism)</label>
+                    <input type="number" id="hd-kx-p" min="1" max="16" step="1" value="1">
+                </div>
+                <div class="field-group" data-kdf-only="pbkdf2" style="display:none;">
+                    <label for="hd-kx-c">c (iterations)</label>
+                    <input type="number" id="hd-kx-c" min="1" max="10000000" step="1" value="262144">
+                </div>
+                <div class="field-group" data-kdf-only="pbkdf2" style="display:none;">
+                    <label for="hd-kx-prf">PRF</label>
+                    <select id="hd-kx-prf">
+                        <option value="hmac-sha256" selected>hmac-sha256</option>
+                        <option value="hmac-sha512">hmac-sha512</option>
+                    </select>
+                </div>
+                <div class="field-group">
+                    <label for="hd-kx-dklen">dklen (bytes)</label>
+                    <input type="number" id="hd-kx-dklen" min="32" max="64" step="1" value="32">
+                </div>
+            </div>
+            <div id="hd-kx-cost" class="field-hint mt-1" data-i18n-skip></div>
+            <div class="field-hint mt-1">Cipher: <code>aes-128-ctr</code> — the only cipher version 3 defines. A fresh random salt, IV and UUID are drawn for every file.</div>
+            <div id="hd-kx-compat" class="hd-callout warn mt-1" style="display:none;"></div>
+
+            <div class="field-row mt-2">
+                <div class="field-label">
+                    <label for="hd-kx-pretty">Pretty-print</label>
+                    <span class="field-hint">Indent the JSON for reading. Wallets accept either form; geth writes it on one line.</span>
+                </div>
+                <label class="switch"><input type="checkbox" id="hd-kx-pretty" checked><span></span></label>
+            </div>
+
+            <div id="hd-kx-error" class="hd-callout error mt-2" style="display:none;"></div>
+
+            <div class="flex-row items-center mt-2" style="gap:12px;">
+                <button id="hd-kx-build" class="btn btn-primary" type="button">Encrypt</button>
+            </div>
+
+            <div id="hd-kx-result" class="mt-2" style="display:none;">
+                <pre id="hd-kx-out" class="hd-kx-out"></pre>
+                <div class="flex-row items-center wrap mt-1" style="gap:8px 12px;">
+                    <span id="hd-kx-file" class="hd-kx-file" data-i18n-skip></span>
+                    <button id="hd-kx-copy" class="btn btn-small" type="button">Copy</button>
+                    <button id="hd-kx-download" class="btn btn-small btn-primary" type="button">Download</button>
+                </div>
+            </div>
+        </div>
+    </dialog>
+
     <!-- Toast Notification -->
     <div id="toast" class="toast">Copied to clipboard!</div>
 
@@ -464,6 +599,7 @@
             const filterCount = document.getElementById('hd-filter-count');
 
             let rootNode = null; // ethers HDNodeWallet used for the Derive accounts table
+            let shownHexKey = null; // the raw hex key the output currently shows, if any
 
             function showWarn(msg) { warnEl.textContent = msg; warnEl.style.display = msg ? 'block' : 'none'; }
             function showErr(msg) { errEl.textContent = msg; errEl.style.display = msg ? 'block' : 'none'; }
@@ -833,11 +969,271 @@
                         rows.push(['TON Address (v3r2, non-bounceable)', ton.v3r2.nonBounceable]);
                     }
                 } catch (e) { /* keep the other rows */ }
-                return summaryCard('Root key & addresses', rows,
+                const card = summaryCard('Root key & addresses', rows,
                     'Solana and TON values use the 32 key bytes as an Ed25519 seed (TON: wallet v4r2 / v3r2, workchain 0).');
+
+                const exportBtn = document.createElement('button');
+                exportBtn.type = 'button';
+                exportBtn.className = 'btn btn-small hd-kx-open';
+                exportBtn.textContent = 'Keystore file…';
+                exportBtn.title = 'Encrypt this key into a Web3 Secret Storage v3 keystore — view, copy or download it';
+                exportBtn.addEventListener('click', () => openKeystoreExport(privKeyHex));
+                const head = document.createElement('div');
+                head.className = 'hd-card-head';
+                const text = document.createElement('div');
+                text.append(card.querySelector('.card-title'), card.querySelector('.card-subtitle'));
+                head.append(text, exportBtn);
+                card.prepend(head);
+                return card;
             }
 
+            // --- Keystore export -------------------------------------------------
+            // Writes Web3 Secret Storage v3 the way geth does: the KDF stretches
+            // the password, derivedKey[0:16] is the AES-128-CTR key over the
+            // private key, and keccak256(derivedKey[16:32] ‖ ciphertext) is the
+            // MAC. Field order follows geth's own files.
+            const kx = {
+                dlg: document.getElementById('hd-kx'),
+                address: document.getElementById('hd-kx-address'),
+                pass: document.getElementById('hd-kx-pass'),
+                pass2: document.getElementById('hd-kx-pass2'),
+                noPass: document.getElementById('hd-kx-nopass'),
+                kdfButtons: document.querySelectorAll('#hd-kx-kdf button'),
+                presetRow: document.getElementById('hd-kx-presets'),
+                presets: document.querySelectorAll('#hd-kx-presets .hd-preset'),
+                n: document.getElementById('hd-kx-n'),
+                r: document.getElementById('hd-kx-r'),
+                p: document.getElementById('hd-kx-p'),
+                c: document.getElementById('hd-kx-c'),
+                prf: document.getElementById('hd-kx-prf'),
+                dklen: document.getElementById('hd-kx-dklen'),
+                cost: document.getElementById('hd-kx-cost'),
+                compat: document.getElementById('hd-kx-compat'),
+                pretty: document.getElementById('hd-kx-pretty'),
+                error: document.getElementById('hd-kx-error'),
+                build: document.getElementById('hd-kx-build'),
+                result: document.getElementById('hd-kx-result'),
+                out: document.getElementById('hd-kx-out'),
+                file: document.getElementById('hd-kx-file'),
+            };
+            let kxKey = null;     // private key the dialog was opened for
+            let kxKdf = 'scrypt';
+            let kxJson = null;    // the built keystore object, null when stale
+            let kxFileName = '';
+            let kxBusy = false;
+
+            const SCRYPT_PRESETS = {
+                standard: { n: 18, r: 8, p: 1 }, // geth StandardScryptN / StandardScryptP
+                ethers: { n: 17, r: 8, p: 1 },   // ethers v6 encryptKeystoreJson
+                light: { n: 12, r: 8, p: 6 },    // geth LightScryptN / LightScryptP
+            };
+            const SCRYPT_MAX_MEMORY = 1024 * 1024 * 1024; // 128·r·N bytes; keep a browser tab alive
+            for (let e = 10; e <= 20; e++) {
+                const o = document.createElement('option');
+                o.value = String(2 ** e);
+                o.textContent = '2^' + e + ' = ' + (2 ** e).toLocaleString('en-US');
+                kx.n.appendChild(o);
+            }
+            kx.n.value = String(2 ** SCRYPT_PRESETS.standard.n);
+
+            const tf = (s, vars) => (window.t ? window.t(s) : s).replace(/\{(\w+)\}/g, (m, k) => vars[k]);
+            const fmtBytes = b => b >= 1024 ** 3 ? (b / 1024 ** 3) + ' GiB' : b >= 1024 ** 2 ? (b / 1024 ** 2) + ' MiB' : (b / 1024) + ' KiB';
+
+            function kxInt(input, name, min, max) {
+                const v = Number(input.value);
+                if (!Number.isInteger(v) || v < min || v > max) {
+                    throw new Error(tf('{name} must be a whole number from {min} to {max}.', { name, min: min.toLocaleString('en-US'), max: max.toLocaleString('en-US') }));
+                }
+                return v;
+            }
+
+            // Read and validate the options; throws with a readable reason.
+            function kxOptions() {
+                const dklen = kxInt(kx.dklen, 'dklen', 32, 64);
+                if (kxKdf === 'scrypt') {
+                    const n = Number(kx.n.value);
+                    const r = kxInt(kx.r, 'r', 1, 32);
+                    const p = kxInt(kx.p, 'p', 1, 16);
+                    if (128 * r * n > SCRYPT_MAX_MEMORY) {
+                        throw new Error(tf('N × r needs {mem} of memory — more than a browser tab can be trusted with. Lower N or r (1 GiB at most).', { mem: fmtBytes(128 * r * n) }));
+                    }
+                    return { kdf: 'scrypt', n, r, p, dklen };
+                }
+                return { kdf: 'pbkdf2', c: kxInt(kx.c, 'c', 1, 10000000), prf: kx.prf.value, dklen };
+            }
+
+            async function buildKeystore(privateKey, password, o, onProgress) {
+                const pw = ethers.toUtf8Bytes(password, 'NFKC'); // the normalization ethers applies when it opens the file
+                const salt = ethers.randomBytes(32);
+                const iv = ethers.randomBytes(16);
+                let derived, kdfparams;
+                if (o.kdf === 'scrypt') {
+                    derived = ethers.getBytes(await ethers.scrypt(pw, salt, o.n, o.r, o.p, o.dklen, onProgress));
+                    kdfparams = { dklen: o.dklen, n: o.n, p: o.p, r: o.r, salt: ethers.hexlify(salt).slice(2) };
+                } else {
+                    const base = await crypto.subtle.importKey('raw', pw, 'PBKDF2', false, ['deriveBits']);
+                    derived = new Uint8Array(await crypto.subtle.deriveBits({
+                        name: 'PBKDF2', hash: o.prf === 'hmac-sha512' ? 'SHA-512' : 'SHA-256', salt, iterations: o.c,
+                    }, base, o.dklen * 8));
+                    kdfparams = { c: o.c, dklen: o.dklen, prf: o.prf, salt: ethers.hexlify(salt).slice(2) };
+                }
+                const aesKey = await crypto.subtle.importKey('raw', derived.slice(0, 16), 'AES-CTR', false, ['encrypt']);
+                // length 128: the whole IV block is the counter, as geth and aes-js count it.
+                const ciphertext = new Uint8Array(await crypto.subtle.encrypt(
+                    { name: 'AES-CTR', counter: iv, length: 128 }, aesKey, ethers.getBytes(privateKey)));
+                const mac = ethers.keccak256(ethers.concat([derived.slice(16, 32), ciphertext]));
+                return {
+                    address: ethers.computeAddress(privateKey).slice(2).toLowerCase(),
+                    crypto: {
+                        cipher: 'aes-128-ctr',
+                        ciphertext: ethers.hexlify(ciphertext).slice(2),
+                        cipherparams: { iv: ethers.hexlify(iv).slice(2) },
+                        kdf: o.kdf,
+                        kdfparams,
+                        mac: mac.slice(2),
+                    },
+                    id: ethers.uuidV4(ethers.randomBytes(16)),
+                    version: 3,
+                };
+            }
+
+            function kxShowError(msg) { kx.error.textContent = msg; kx.error.style.display = msg ? 'block' : 'none'; }
+
+            // Any change to the inputs makes a built file stale: drop it rather
+            // than leave a file on screen that no longer matches the form.
+            function kxInvalidate() {
+                kxJson = null;
+                kx.result.style.display = 'none';
+                kx.out.textContent = '';
+                kxShowError('');
+                kxRefresh();
+            }
+
+            // Live hints: the empty-password warning, the KDF cost, and what
+            // the chosen options mean for the wallets that will read the file.
+            function kxRefresh() {
+                kx.noPass.style.display = kx.pass.value || kx.pass2.value ? 'none' : 'block';
+                kx.dlg.querySelectorAll('[data-kdf-only]').forEach(el => {
+                    el.style.display = el.dataset.kdfOnly === kxKdf ? '' : 'none';
+                });
+                kx.presetRow.style.display = kxKdf === 'scrypt' ? '' : 'none';
+                const r = Number(kx.r.value), p = Number(kx.p.value), n = Number(kx.n.value);
+                kx.presets.forEach(a => {
+                    const ps = SCRYPT_PRESETS[a.dataset.preset];
+                    a.classList.toggle('active', n === 2 ** ps.n && r === ps.r && p === ps.p);
+                });
+
+                if (kxKdf === 'scrypt') {
+                    kx.cost.textContent = Number.isInteger(r) && r > 0 && Number.isInteger(p) && p > 0
+                        ? tf('Each unlock takes {mem} of memory and N·r·p = {work} block mixes.', { mem: fmtBytes(128 * r * n), work: (n * r * p).toLocaleString('en-US') })
+                        : '';
+                } else {
+                    kx.cost.textContent = tf('Each unlock runs {c} rounds of {prf}. PBKDF2 needs no memory, so GPUs guess it far faster than scrypt.', { c: Number(kx.c.value).toLocaleString('en-US'), prf: kx.prf.value.toUpperCase() });
+                }
+
+                const notes = [];
+                if (Number(kx.dklen.value) !== 32) notes.push(tf('dklen {d}: only the first 32 bytes are ever used. geth reads it, but ethers-based wallets — and this page\'s keystore tab — accept only dklen = 32.', { d: kx.dklen.value }));
+                if (kxKdf === 'pbkdf2' && kx.prf.value !== 'hmac-sha256') notes.push(tf('hmac-sha512: ethers reads it, but geth only reads hmac-sha256.', {}));
+                kx.compat.textContent = notes.join(' ');
+                kx.compat.style.display = notes.length ? 'block' : 'none';
+            }
+
+            function openKeystoreExport(privateKey) {
+                kxKey = privateKey;
+                kx.address.textContent = ethers.computeAddress(privateKey);
+                kx.pass.value = '';
+                kx.pass2.value = '';
+                kxInvalidate();
+                kx.dlg.showModal();
+                kx.pass.focus();
+            }
+
+            async function kxEncrypt() {
+                if (kxBusy || !kxKey) return;
+                kxInvalidate();
+                if (kx.pass.value !== kx.pass2.value) {
+                    kxShowError(t('The two passwords do not match.'));
+                    return;
+                }
+                let o;
+                try { o = kxOptions(); } catch (e) { kxShowError(e.message); return; }
+
+                kxBusy = true;
+                kx.build.disabled = true;
+                kx.build.textContent = t('Encrypting…');
+                try {
+                    const json = await buildKeystore(kxKey, kx.pass.value, o, pct => {
+                        kx.build.textContent = t('Encrypting…') + ' ' + Math.round(pct * 100) + '%';
+                    });
+                    kxJson = json;
+                    kxFileName = 'UTC--' + new Date().toISOString().replace(/:/g, '-') + '--' + json.address + '.json';
+                    kxRender();
+                } catch (e) {
+                    kxShowError(t('Could not encrypt:') + ' ' + ((e && e.message) || String(e)));
+                } finally {
+                    kxBusy = false;
+                    kx.build.disabled = false;
+                    kx.build.textContent = t('Encrypt');
+                }
+            }
+
+            function kxText() { return JSON.stringify(kxJson, null, kx.pretty.checked ? 2 : 0); }
+
+            function kxRender() {
+                if (!kxJson) return;
+                kx.out.textContent = kxText();
+                kx.file.textContent = kxFileName;
+                kx.result.style.display = 'block';
+            }
+
+            kx.kdfButtons.forEach(b => b.addEventListener('click', () => {
+                kxKdf = b.dataset.kdf;
+                kx.kdfButtons.forEach(x => x.classList.toggle('active', x === b));
+                kxInvalidate();
+            }));
+            kx.presets.forEach(a => a.addEventListener('click', (e) => {
+                e.preventDefault();
+                const ps = SCRYPT_PRESETS[a.dataset.preset];
+                kx.n.value = String(2 ** ps.n);
+                kx.r.value = String(ps.r);
+                kx.p.value = String(ps.p);
+                kx.dklen.value = '32';
+                kxInvalidate();
+            }));
+            [kx.pass, kx.pass2, kx.n, kx.r, kx.p, kx.c, kx.prf, kx.dklen].forEach(el => el.addEventListener('input', kxInvalidate));
+            [kx.pass, kx.pass2].forEach(el => el.addEventListener('keydown', (e) => { if (e.key === 'Enter') kxEncrypt(); }));
+            kx.pretty.addEventListener('change', kxRender); // same file, different whitespace
+            kx.build.addEventListener('click', kxEncrypt);
+            document.getElementById('hd-kx-copy').addEventListener('click', async () => {
+                try {
+                    await navigator.clipboard.writeText(kxText());
+                    if (window.showToast) window.showToast('Copied to clipboard');
+                } catch (e) {
+                    if (window.showToast) window.showToast('Copy failed', true);
+                }
+            });
+            document.getElementById('hd-kx-download').addEventListener('click', () => {
+                const url = URL.createObjectURL(new Blob([kxText()], { type: 'application/json' }));
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = kxFileName;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                setTimeout(() => URL.revokeObjectURL(url), 1000);
+            });
+            document.getElementById('hd-kx-close').addEventListener('click', () => kx.dlg.close());
+            // A click on the backdrop lands on the <dialog> itself.
+            kx.dlg.addEventListener('click', e => { if (e.target === kx.dlg) kx.dlg.close(); });
+            // Closing forgets the password and the encrypted file.
+            kx.dlg.addEventListener('close', () => {
+                kx.pass.value = '';
+                kx.pass2.value = '';
+                kxInvalidate();
+            });
+
             function resetOutput() {
+                shownHexKey = null;
                 showErr(''); showWarn('');
                 stepsCard.style.display = 'none';
                 summaryEl.style.display = 'none';
@@ -957,6 +1353,7 @@
                 // Show the parsed, 0x-prefixed form — but not mid-edit, or the
                 // rewrite would yank the cursor to the end of the field.
                 if (document.activeElement !== hexInput) hexInput.value = pk;
+                shownHexKey = pk;
 
                 renderSteps('Raw 32-byte hex → root private key.', [
                     {
@@ -990,7 +1387,17 @@
                 const raw = hexInput.value;
                 const s = raw.replace(/\s+/g, '').toLowerCase().replace(/^0x/, '');
                 if (!s) { resetOutput(); return; }
-                if (/^[0-9a-f]{64}$/.test(s)) { generateFromHex(); return; }
+                if (/^[0-9a-f]{64}$/.test(s)) {
+                    // The key on screen is unchanged (e.g. the blur after typing
+                    // it): tidy the field but keep the output, so a click that
+                    // caused the blur still lands on what it was aimed at.
+                    if ('0x' + s === shownHexKey) {
+                        if (document.activeElement !== hexInput) hexInput.value = shownHexKey;
+                        return;
+                    }
+                    generateFromHex();
+                    return;
+                }
                 resetOutput();
                 if (commit || /[^0-9a-f]/.test(s) || s.length > 64) {
                     try { parseHexKey(raw); } catch (e) { showErr(e.message); }
@@ -1195,12 +1602,9 @@
                     return;
                 }
                 if (!info.needsPassword) { handleKeystoreInput(true); return; }
-                if (!ksPass.value) {
-                    resetOutput();
-                    showErr('This keystore is encrypted — enter its password to unlock it.');
-                    return;
-                }
 
+                // A blank field is still tried: a keystore can be written with
+                // an empty password.
                 resetOutput();
                 ksUnlockBtn.disabled = true;
                 ksUnlockBtn.textContent = 'Unlocking…';
@@ -1220,9 +1624,9 @@
                     const msg = (e && (e.shortMessage || e.message)) || String(e);
                     ksUnlocked = null;
                     resetOutput();
-                    showErr(/incorrect password/i.test(msg)
-                        ? 'Incorrect password — the MAC check failed, so nothing was decrypted.'
-                        : 'Could not unlock the keystore: ' + msg);
+                    showErr(!/incorrect password/i.test(msg) ? 'Could not unlock the keystore: ' + msg
+                        : ksPass.value ? 'Incorrect password — the MAC check failed, so nothing was decrypted.'
+                            : 'This keystore is encrypted — enter its password to unlock it.');
                     return;
                 } finally {
                     ksUnlockBtn.disabled = false;
