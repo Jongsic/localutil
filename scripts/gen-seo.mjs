@@ -34,7 +34,7 @@ const SEO = {
     },
     'base64.html': {
         title: 'Base64 Encode / Decode Online',
-        desc: `Encode text to Base64 and decode Base64 back to text. ${LOCAL}`,
+        desc: `Encode text or files to Base64 and decode Base64 back, with the SHA-256 of the original. ${LOCAL}`,
     },
     'url-encode.html': {
         title: 'URL Encode / Decode Online',

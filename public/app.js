@@ -78,7 +78,7 @@ function svg(name, size) {
 const CATEGORIES = ['Encoding', 'Text & Data', 'Crypto & Auth', 'Web3', 'QR Codes', 'Images', 'PDF', 'Utilities'];
 
 const TOOLS = [
-    { file: 'base64.html', name: 'Base64', desc: 'Encode & decode Base64 text', icon: 'base64', cat: 'Encoding' },
+    { file: 'base64.html', name: 'Base64', desc: 'Encode & decode Base64 text and files, with SHA-256', icon: 'base64', cat: 'Encoding' },
     { file: 'url-encode.html', name: 'URL Encode / Decode', desc: 'Percent-encode & decode URLs and components', icon: 'url', cat: 'Encoding' },
     { file: 'hex-ascii.html', name: 'Hex / ASCII', desc: 'Convert between hexadecimal and ASCII text', icon: 'hex', cat: 'Encoding' },
     { file: 'js-minify.html', name: 'JS Beautify / Minify', desc: 'Beautify, minify & validate JavaScript / JSON', icon: 'beautify', cat: 'Text & Data' },
