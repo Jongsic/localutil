@@ -536,6 +536,39 @@ function initTheme() {
 // ------------------------------------------------------------
 // Search (filters nav; hides empty groups)
 // ------------------------------------------------------------
+
+// Hangul typed with the Korean 2-set (두벌식) layout still on → the Latin keys that were
+// pressed, so "ㅠㅁㄴㄷ" or "ㅓ내ㅜ" find Base64 / JSON. Syllables are split back into jamo
+// and compound jamo into their keystrokes; everything else passes through unchanged.
+const KO_KEYS = {
+    'ㅂ': 'q', 'ㅈ': 'w', 'ㄷ': 'e', 'ㄱ': 'r', 'ㅅ': 't', 'ㅛ': 'y', 'ㅕ': 'u', 'ㅑ': 'i', 'ㅐ': 'o', 'ㅔ': 'p',
+    'ㅁ': 'a', 'ㄴ': 's', 'ㅇ': 'd', 'ㄹ': 'f', 'ㅎ': 'g', 'ㅗ': 'h', 'ㅓ': 'j', 'ㅏ': 'k', 'ㅣ': 'l',
+    'ㅋ': 'z', 'ㅌ': 'x', 'ㅊ': 'c', 'ㅍ': 'v', 'ㅠ': 'b', 'ㅜ': 'n', 'ㅡ': 'm',
+    'ㅃ': 'q', 'ㅉ': 'w', 'ㄸ': 'e', 'ㄲ': 'r', 'ㅆ': 't', 'ㅒ': 'o', 'ㅖ': 'p',
+    'ㅘ': 'hk', 'ㅙ': 'ho', 'ㅚ': 'hl', 'ㅝ': 'nj', 'ㅞ': 'np', 'ㅟ': 'nl', 'ㅢ': 'ml',
+    'ㄳ': 'rt', 'ㄵ': 'sw', 'ㄶ': 'sg', 'ㄺ': 'fr', 'ㄻ': 'fa', 'ㄼ': 'fq', 'ㄽ': 'ft', 'ㄾ': 'fx',
+    'ㄿ': 'fv', 'ㅀ': 'fg', 'ㅄ': 'qt',
+};
+const KO_LEAD = 'ㄱㄲㄴㄷㄸㄹㅁㅂㅃㅅㅆㅇㅈㅉㅊㅋㅌㅍㅎ';
+const KO_VOWEL = 'ㅏㅐㅑㅒㅓㅔㅕㅖㅗㅘㅙㅚㅛㅜㅝㅞㅟㅠㅡㅢㅣ';
+const KO_TAIL = ['', 'ㄱ', 'ㄲ', 'ㄳ', 'ㄴ', 'ㄵ', 'ㄶ', 'ㄷ', 'ㄹ', 'ㄺ', 'ㄻ', 'ㄼ', 'ㄽ', 'ㄾ', 'ㄿ', 'ㅀ',
+    'ㅁ', 'ㅂ', 'ㅄ', 'ㅅ', 'ㅆ', 'ㅇ', 'ㅈ', 'ㅊ', 'ㅋ', 'ㅌ', 'ㅍ', 'ㅎ'];
+
+function hangulToKeys(str) {
+    let out = '';
+    for (const ch of str) {
+        const code = ch.charCodeAt(0) - 0xac00;
+        if (code >= 0 && code < 11172) {
+            out += KO_KEYS[KO_LEAD[Math.floor(code / 588)]]
+                + KO_KEYS[KO_VOWEL[Math.floor(code % 588 / 28)]]
+                + (KO_KEYS[KO_TAIL[code % 28]] || '');
+        } else {
+            out += KO_KEYS[ch] || ch;
+        }
+    }
+    return out;
+}
+
 function initSearch() {
     const searchInput = document.getElementById('tool-search');
 
@@ -556,15 +589,39 @@ function initSearch() {
     });
 
     if (!searchInput) return;
-    searchInput.addEventListener('input', (e) => filter(e.target.value.toLowerCase().trim()));
+    const current = () => searchInput.value.toLowerCase().trim();
+    searchInput.addEventListener('input', () => filter(current()));
+
+    // Korean tool names come from the Korean dictionary, so "뷰어" finds CSV Viewer in
+    // any UI language. Outside the Korean UI it is fetched once, the first time the query
+    // holds a Hangul syllable — bare jamo are keystrokes and need no dictionary.
+    const koDict = () => (window.LOCALUTIL_I18N || {}).ko;
+    let koLoading = false;
+    function needKoDict(val) {
+        if (koDict() || koLoading || !/[\uac00-\ud7a3]/.test(val)) return;
+        koLoading = true;
+        const s = document.createElement('script');
+        s.src = 'i18n/ko.js';
+        s.onload = () => filter(current());
+        document.head.appendChild(s);
+    }
+
+    function haystack(item) {
+        const tool = TOOLS.find(t => t.file === item.getAttribute('href'));
+        const ko = tool && koDict() ? koDict()[tool.name] || '' : '';
+        return (item.getAttribute('data-name') + ' ' + item.textContent + ' ' + ko).toLowerCase();
+    }
 
     function filter(val) {
         let anyVisible = false;
+        needKoDict(val);
+        // Every word must match, either as typed or as the keys it was typed with.
+        const words = val.split(/\s+/).filter(Boolean).map(w => [w, hangulToKeys(w)]);
         document.querySelectorAll('.nav-group').forEach(group => {
             let groupVisible = false;
             group.querySelectorAll('.nav-item').forEach(item => {
-                const match = !val || item.getAttribute('data-name').includes(val) ||
-                    item.textContent.toLowerCase().includes(val);
+                const text = haystack(item);
+                const match = words.every(([w, keys]) => text.includes(w) || text.includes(keys));
                 item.style.display = match ? '' : 'none';
                 if (match) groupVisible = true;
             });
